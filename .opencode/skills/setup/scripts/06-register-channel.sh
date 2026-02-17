@@ -64,12 +64,12 @@ log "Wrote registration to SQLite"
 mkdir -p "$PROJECT_ROOT/groups/$FOLDER/logs"
 log "Created groups/$FOLDER/logs/"
 
-# Update assistant name in CLAUDE.md files if different from default
+# Update assistant name in AGENTS.md files if different from default
 NAME_UPDATED="false"
 if [ "$ASSISTANT_NAME" != "Andy" ]; then
   log "Updating assistant name from Andy to $ASSISTANT_NAME"
 
-  for md_file in groups/global/CLAUDE.md groups/main/CLAUDE.md; do
+  for md_file in groups/global/AGENTS.md groups/main/AGENTS.md; do
     if [ -f "$PROJECT_ROOT/$md_file" ]; then
       sed -i '' "s/^# Andy$/# $ASSISTANT_NAME/" "$PROJECT_ROOT/$md_file"
       sed -i '' "s/You are Andy/You are $ASSISTANT_NAME/g" "$PROJECT_ROOT/$md_file"

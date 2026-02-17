@@ -57,8 +57,8 @@ db.exec(`
 const groupDir = path.join(process.cwd(), 'groups', groupFolder);
 fs.mkdirSync(path.join(groupDir, 'logs'), { recursive: true });
 
-// Créer le fichier CLAUDE.md
-const claudeMdPath = path.join(groupDir, 'CLAUDE.md');
+// Créer le fichier AGENTS.md
+const claudeMdPath = path.join(groupDir, 'AGENTS.md');
 if (!fs.existsSync(claudeMdPath)) {
   fs.writeFileSync(claudeMdPath, `# Memory for ${chatName}
 

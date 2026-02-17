@@ -48,7 +48,7 @@ claude
 ## 功能支持
 
 - **WhatsApp 输入/输出** - 通过手机给 Claude 发消息
-- **隔离的群组上下文** - 每个群组都有其独立的 `CLAUDE.md` 记忆、隔离的文件系统，并在其自己的容器沙箱中运行，只挂载该文件系统
+- **隔离的群组上下文** - 每个群组都有其独立的 `AGENTS.md` 记忆、隔离的文件系统，并在其自己的容器沙箱中运行，只挂载该文件系统
 - **主频道** - 你的私有频道（self-chat），用于管理控制；其他所有群组都完全隔离
 - **计划任务** - 运行 Claude 的周期性作业，并可以给你回发消息
 - **网络访问** - 搜索和抓取网页内容
@@ -133,7 +133,7 @@ WhatsApp (baileys) --> SQLite --> 轮询循环 --> 容器 (Claude Agent SDK) -->
 - `src/container-runner.ts` - 生成流式智能体容器
 - `src/task-scheduler.ts` - 运行计划任务
 - `src/db.ts` - SQLite 操作（消息、群组、会话、状态）
-- `groups/*/CLAUDE.md` - 各群组的记忆
+- `groups/*/AGENTS.md` - 各群组的记忆
 
 ## FAQ
 

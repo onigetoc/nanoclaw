@@ -1,10 +1,10 @@
-# Agent Instructions (Kiro)
+# NanoClaw
 
-This file contains instructions specific to Kiro AI agent working on the NanoClaw project.
+Personal AI assistant. See [README.md](README.md) for philosophy and setup. See [docs/REQUIREMENTS.md](docs/REQUIREMENTS.md) for architecture decisions.
 
 ## Quick Context
 
-NanoClaw is a personal Claude assistant that runs securely in containers. Single Node.js process connecting to messaging platforms (WhatsApp, Telegram), routing messages to Claude Agent SDK in isolated containers.
+NanoClaw is a personal Opencode assistant that runs securely in containers. Single Node.js process connecting to messaging platforms (WhatsApp, Telegram), routing messages to Opencode SDK in isolated containers.
 
 ## Key Files
 
@@ -19,7 +19,7 @@ NanoClaw is a personal Claude assistant that runs securely in containers. Single
 | `src/container-runner.ts` | Spawns agent containers with mounts |
 | `src/task-scheduler.ts` | Runs scheduled tasks |
 | `src/db.ts` | SQLite operations |
-| `groups/{name}/CLAUDE.md` | Per-group memory (isolated) |
+| `groups/{name}/AGENTS.md` | Per-group memory (isolated) |
 
 ## Development Commands
 

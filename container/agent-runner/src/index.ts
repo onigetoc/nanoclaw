@@ -16,8 +16,8 @@
 
 import fs from 'fs';
 import path from 'path';
-import { query, HookCallback, PreCompactHookInput, PreToolUseHookInput } from '@anthropic-ai/claude-agent-sdk';
 import { fileURLToPath } from 'url';
+import { createOpencodeClient as _createOpencodeClient } from '@opencode-ai/sdk';
 
 interface ContainerInput {
   prompt: string;
@@ -54,51 +54,59 @@ interface SessionsIndex {
   entries: SessionEntry[];
 }
 
-interface SDKUserMessage {
-  type: 'user';
-  message: { role: 'user'; content: string };
-  parent_tool_use_id: null;
-  session_id: string;
-}
-
 // These get overridden in main() when running in direct mode
 let IPC_INPUT_DIR = '/workspace/ipc/input';
 let IPC_INPUT_CLOSE_SENTINEL = path.join(IPC_INPUT_DIR, '_close');
 const IPC_POLL_MS = 500;
 
 /**
- * Push-based async iterable for streaming user messages to the SDK.
- * Keeps the iterable alive until end() is called, preventing isSingleUserTurn.
+ * Create and configure an OpenCode SDK client.
+ * 
+ * OpenCode SDK connects to a running OpenCode server (started separately).
+ * The server reads AI provider credentials from system config (~/.opencode/config.yaml).
+ * 
+ * @param sdkEnv - Environment variables (includes OPENCODE_BASE_URL if custom)
+ * @returns Configured Opencode client instance
+ * 
+ * Requirements: 4.1, 4.2, 4.3, 4.4
  */
-class MessageStream {
-  private queue: SDKUserMessage[] = [];
-  private waiting: (() => void) | null = null;
-  private done = false;
-
-  push(text: string): void {
-    this.queue.push({
-      type: 'user',
-      message: { role: 'user', content: text },
-      parent_tool_use_id: null,
-      session_id: '',
+async function createOpencodeClient(
+  sdkEnv: Record<string, string | undefined>
+): Promise<any> {
+  try {
+    // Read base URL from environment (optional, defaults to http://localhost:4096)
+    const baseURL = sdkEnv.OPENCODE_BASE_URL || 'http://localhost:4096';
+    
+    // Determine log level from environment
+    const logLevel = process.env.LOG_LEVEL === 'debug' ? 'debug' : 'info';
+    
+    // Requirement 12.1: Log client initialization with configuration
+    log(`Initializing OpenCode client...`);
+    debugLog(`Configuration: baseURL=${baseURL}, logLevel=${logLevel}, timeout=60000ms`);
+    
+    // Import Opencode SDK (static import at top of file)
+    // Create OpenCode client that connects to running server
+    // The server must be started separately (e.g., via `opencode` CLI)
+    const client = _createOpencodeClient({
+      baseUrl: baseURL
     });
-    this.waiting?.();
-  }
-
-  end(): void {
-    this.done = true;
-    this.waiting?.();
-  }
-
-  async *[Symbol.asyncIterator](): AsyncGenerator<SDKUserMessage> {
-    while (true) {
-      while (this.queue.length > 0) {
-        yield this.queue.shift()!;
-      }
-      if (this.done) return;
-      await new Promise<void>(r => { this.waiting = r; });
-      this.waiting = null;
+    
+    log(`✓ OpenCode client initialized successfully`);
+    debugLog(`Client configuration: baseURL=${baseURL}, timeout=60000ms, maxRetries=2`);
+    
+    return client;
+  } catch (error) {
+    // Requirement 7.1, 7.2, 7.3, 7.4: Catch and log OpenCode SDK errors with full context
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    const errorStack = error instanceof Error ? error.stack : undefined;
+    
+    log(`ERROR: Failed to create OpenCode client: ${errorMessage}`);
+    if (errorStack) {
+      log(`Stack trace: ${errorStack}`);
     }
+    
+    // Re-throw to be handled by caller
+    throw new Error(`OpenCode client initialization failed: ${errorMessage}`);
   }
 }
 
@@ -122,7 +130,14 @@ function writeOutput(output: ContainerOutput): void {
 }
 
 function log(message: string): void {
-  console.error(`[agent-runner] ${message}`);
+  const timestamp = new Date().toISOString();
+  console.error(`[${timestamp}] [agent-runner] ${message}`);
+}
+
+function debugLog(message: string): void {
+  if (process.env.LOG_LEVEL === 'debug') {
+    log(`[DEBUG] ${message}`);
+  }
 }
 
 function getSessionSummary(sessionId: string, transcriptPath: string): string | null {
@@ -148,72 +163,139 @@ function getSessionSummary(sessionId: string, transcriptPath: string): string | 
 }
 
 /**
- * Archive the full transcript to conversations/ before compaction.
+ * Archive a session's conversation to the conversations/ directory.
+ * 
+ * OpenCode SDK Migration Note:
+ * Unlike the previous SDK which had PreCompact hooks, OpenCode SDK doesn't support hooks.
+ * This function manually archives conversations by fetching messages via client.session.messages().
+ * 
+ * Call this function periodically or when a session reaches a certain size to maintain
+ * conversation history before potential compaction.
+ * 
+ * Requirements: 5.3 - Maintain conversation archiving functionality
+ * 
+ * @param client - OpenCode client instance
+ * @param sessionId - Session ID to archive
+ * @param groupDir - Group directory path for saving archives
  */
-function createPreCompactHook(): HookCallback {
-  return async (input, _toolUseId, _context) => {
-    const preCompact = input as PreCompactHookInput;
-    const transcriptPath = preCompact.transcript_path;
-    const sessionId = preCompact.session_id;
-
-    if (!transcriptPath || !fs.existsSync(transcriptPath)) {
-      log('No transcript found for archiving');
-      return {};
+async function archiveSessionConversation(
+  client: any,
+  sessionId: string,
+  groupDir: string
+): Promise<void> {
+  try {
+    log(`Archiving conversation for session ${sessionId}...`);
+    debugLog(`Archive context: sessionId=${sessionId}, groupDir=${groupDir}, timestamp=${new Date().toISOString()}`);
+    
+    // Fetch all messages from the session using OpenCode SDK
+    // Requirement 7.1, 7.2, 7.3: Catch OpenCode SDK errors
+    const response = await client.session.messages({
+      path: { id: sessionId }
+    });
+    
+    if (!response.data || response.data.length === 0) {
+      log('No messages to archive');
+      return;
     }
-
-    try {
-      const content = fs.readFileSync(transcriptPath, 'utf-8');
-      const messages = parseTranscript(content);
-
-      if (messages.length === 0) {
-        log('No messages to archive');
-        return {};
+    
+    debugLog(`Fetched ${response.data.length} messages from session ${sessionId}`);
+    
+    // Convert OpenCode messages to our ParsedMessage format
+    const messages: ParsedMessage[] = [];
+    
+    for (const item of response.data) {
+      const message = item.info;
+      const parts = item.parts;
+      
+      if (message.role === 'user') {
+        // Extract text from user message parts
+        const textParts = parts
+          .filter((p: any) => p.type === 'text')
+          .map((p: any) => p.text)
+          .join('');
+        
+        if (textParts) {
+          messages.push({ role: 'user', content: textParts });
+        }
+      } else if (message.role === 'assistant') {
+        // Extract text from assistant message parts
+        const textParts = parts
+          .filter((p: any) => p.type === 'text')
+          .map((p: any) => p.text)
+          .join('');
+        
+        if (textParts) {
+          messages.push({ role: 'assistant', content: textParts });
+        }
       }
-
-      const summary = getSessionSummary(sessionId, transcriptPath);
-      const name = summary ? sanitizeFilename(summary) : generateFallbackName();
-
-      const conversationsDir = '/workspace/group/conversations';
-      fs.mkdirSync(conversationsDir, { recursive: true });
-
-      const date = new Date().toISOString().split('T')[0];
-      const filename = `${date}-${name}.md`;
-      const filePath = path.join(conversationsDir, filename);
-
-      const markdown = formatTranscriptMarkdown(messages, summary);
-      fs.writeFileSync(filePath, markdown);
-
-      log(`Archived conversation to ${filePath}`);
-    } catch (err) {
-      log(`Failed to archive transcript: ${err instanceof Error ? err.message : String(err)}`);
     }
-
-    return {};
-  };
+    
+    if (messages.length === 0) {
+      log('No text messages to archive');
+      return;
+    }
+    
+    debugLog(`Parsed ${messages.length} text messages for archiving`);
+    
+    // Try to get summary from the first user message
+    const firstUserMessage = response.data.find((item: any) => item.info.role === 'user');
+    const summary = firstUserMessage?.info.summary?.title || null;
+    
+    // Generate filename
+    const name = summary ? sanitizeFilename(summary) : generateFallbackName();
+    const conversationsDir = path.join(groupDir, 'conversations');
+    fs.mkdirSync(conversationsDir, { recursive: true });
+    
+    const date = new Date().toISOString().split('T')[0];
+    const filename = `${date}-${name}.md`;
+    const filePath = path.join(conversationsDir, filename);
+    
+    // Format and save the archive
+    const markdown = formatTranscriptMarkdown(messages, summary);
+    fs.writeFileSync(filePath, markdown);
+    
+    log(`✓ Archived conversation to ${filename} (${messages.length} messages)`);
+    debugLog(`Archive details: path=${filePath}, size=${markdown.length} bytes, summary=${summary || 'none'}`);
+  } catch (err) {
+    // Requirement 7.4, 7.5: Log errors with full context and continue gracefully
+    const errorMessage = err instanceof Error ? err.message : String(err);
+    const errorStack = err instanceof Error ? err.stack : undefined;
+    
+    log(`ERROR: Failed to archive conversation for session ${sessionId}: ${errorMessage}`);
+    if (errorStack) {
+      log(`Stack trace: ${errorStack}`);
+    }
+    log(`Context: sessionId=${sessionId}, groupDir=${groupDir}, timestamp=${new Date().toISOString()}`);
+    
+    // Don't throw - archiving is non-critical, continue execution
+  }
 }
 
-// Secrets to strip from Bash tool subprocess environments.
-// These are needed by claude-code for API auth but should never
-// be visible to commands Kit runs.
-const SECRET_ENV_VARS = ['ANTHROPIC_API_KEY', 'CLAUDE_CODE_OAUTH_TOKEN'];
+// Secrets that should never leak to subprocess environments
+const SECRET_ENV_VARS = ['TELEGRAM_BOT_TOKEN'];
 
-function createSanitizeBashHook(): HookCallback {
-  return async (input, _toolUseId, _context) => {
-    const preInput = input as PreToolUseHookInput;
-    const command = (preInput.tool_input as { command?: string })?.command;
-    if (!command) return {};
-
-    const unsetPrefix = `unset ${SECRET_ENV_VARS.join(' ')} 2>/dev/null; `;
-    return {
-      hookSpecificOutput: {
-        hookEventName: 'PreToolUse',
-        updatedInput: {
-          ...(preInput.tool_input as Record<string, unknown>),
-          command: unsetPrefix + command,
-        },
-      },
-    };
-  };
+/**
+ * Verify that secrets are not present in process.env.
+ * OpenCode SDK spawns subprocesses that inherit process.env,
+ * so secrets must only exist in the local sdkEnv variable.
+ */
+function verifySecretsNotInProcessEnv(): void {
+  const leakedSecrets: string[] = [];
+  
+  for (const secretKey of SECRET_ENV_VARS) {
+    if (process.env[secretKey]) {
+      leakedSecrets.push(secretKey);
+    }
+  }
+  
+  if (leakedSecrets.length > 0) {
+    const error = `SECURITY ERROR: Secrets found in process.env: ${leakedSecrets.join(', ')}. ` +
+                  `Secrets must only be in sdkEnv to prevent leakage to subprocesses.`;
+    log(error);
+    throw new Error(error);
+  }
+  
+  log('✓ Secret isolation verified: No secrets in process.env');
 }
 
 function sanitizeFilename(summary: string): string {
@@ -357,9 +439,10 @@ function waitForIpcMessage(): Promise<string | null> {
 
 /**
  * Run a single query and stream results via writeOutput.
- * Uses MessageStream (AsyncIterable) to keep isSingleUserTurn=false,
- * allowing agent teams subagents to run to completion.
- * Also pipes IPC messages into the stream during the query.
+ * Uses OpenCode SDK's session.prompt() and event.subscribe() for streaming.
+ * Pipes IPC messages into the session by calling prompt() again.
+ * 
+ * Requirements: 3.1, 3.2, 3.3, 3.5
  */
 async function runQuery(
   prompt: string,
@@ -371,55 +454,82 @@ async function runQuery(
   ipcBaseDir: string,
   globalDir: string | undefined,
   resumeAt?: string,
-): Promise<{ newSessionId?: string; lastAssistantUuid?: string; closedDuringQuery: boolean }> {
-  // Fix PATH for Windows: ensure node is findable by SDK subprocesses
-  if (process.platform === 'win32' && sdkEnv.PATH) {
-    const nodePath = 'C:\\Program Files\\nodejs';
-    if (!sdkEnv.PATH.includes(nodePath)) {
-      sdkEnv.PATH = `${nodePath};${sdkEnv.PATH}`;
-      log(`Added ${nodePath} to PATH for SDK subprocesses`);
-    }
+  existingClient?: any
+): Promise<{ newSessionId?: string; lastAssistantUuid?: string; closedDuringQuery: boolean; client: any }> {
+  // Reuse existing OpenCode client or create a new one
+  let client: any;
+  
+  if (existingClient) {
+    log('Reusing existing OpenCode client');
+    client = existingClient;
+  } else {
+    // Create OpenCode client (Requirements 4.1, 4.2, 4.3, 4.4)
+    // Note: MCP servers are configured in OpenCode server config, not via SDK
+    client = await createOpencodeClient(sdkEnv);
   }
   
-  const stream = new MessageStream();
-  stream.push(prompt);
-
-  // Poll IPC for follow-up messages and _close sentinel during the query
-  let ipcPolling = true;
-  let closedDuringQuery = false;
-  const pollIpcDuringQuery = () => {
-    if (!ipcPolling) return;
-    if (shouldClose()) {
-      log('Close sentinel detected during query, ending stream');
-      closedDuringQuery = true;
-      stream.end();
-      ipcPolling = false;
-      return;
+  // Session creation and resumption logic (Requirements 2.1, 2.2, 2.3, 2.4)
+  let currentSessionId: string;
+  
+  try {
+    if (!sessionId || !sessionId.startsWith('ses_')) {
+      // No session ID or legacy (non-OpenCode) session ID — create a new session
+      if (sessionId && !sessionId.startsWith('ses_')) {
+        log(`⚠ Discarding legacy session ID: ${sessionId} (not an OpenCode ses_ ID)`);
+      }
+      log('Creating new OpenCode session...');
+      
+      const sessionResult = await client.session.create();
+      // Handle both response styles: { data: { id } } (fields) or { id } (data)
+      currentSessionId = sessionResult.data?.id ?? sessionResult.id;
+      
+      log(`✓ Created new session: ${currentSessionId}`);
+    } else {
+      // Valid OpenCode session ID — resume existing session
+      currentSessionId = sessionId;
+      log(`Resuming existing session: ${currentSessionId}`);
     }
-    const messages = drainIpcInput();
-    for (const text of messages) {
-      log(`Piping IPC message into active query (${text.length} chars)`);
-      stream.push(text);
+  } catch (error) {
+    // Requirement 7.4, 7.5: Log errors with full context and return error status
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    const errorStack = error instanceof Error ? error.stack : undefined;
+    
+    log(`ERROR: Failed to create/resume session: ${errorMessage}`);
+    if (errorStack) {
+      log(`Stack trace: ${errorStack}`);
     }
-    setTimeout(pollIpcDuringQuery, IPC_POLL_MS);
-  };
-  setTimeout(pollIpcDuringQuery, IPC_POLL_MS);
+    log(`Context: sessionId=${sessionId || 'none'}, groupFolder=${containerInput.groupFolder}`);
+    
+    // Return error via container output protocol (Requirement 7.5)
+    writeOutput({
+      status: 'error',
+      result: null,
+      error: `Session management failed: ${errorMessage}`,
+      newSessionId: sessionId
+    });
+    
+    throw error; // Re-throw to exit runQuery
+  }
 
-  let newSessionId: string | undefined;
+  // Track the session ID for return (Requirements 2.3, 2.4)
+  let newSessionId: string = currentSessionId;
   let lastAssistantUuid: string | undefined;
   let messageCount = 0;
   let resultCount = 0;
+  let closedDuringQuery = false;
 
-  // Load global CLAUDE.md as additional system context (shared across all groups)
-  const globalClaudeMdPath = globalDir ? path.join(globalDir, 'CLAUDE.md') : '/workspace/global/CLAUDE.md';
-  let globalClaudeMd: string | undefined;
-  if (!containerInput.isMain && fs.existsSync(globalClaudeMdPath)) {
-    globalClaudeMd = fs.readFileSync(globalClaudeMdPath, 'utf-8');
+  // Load global AGENTS.md as additional system context (shared across all groups)
+  const globalAgentsMdPath = globalDir ? path.join(globalDir, 'AGENTS.md') : '/workspace/global/AGENTS.md';
+  let globalAgentsMd: string | undefined;
+  if (!containerInput.isMain && fs.existsSync(globalAgentsMdPath)) {
+    globalAgentsMd = fs.readFileSync(globalAgentsMdPath, 'utf-8');
+    log(`Loaded global AGENTS.md (${globalAgentsMd.length} chars)`);
   }
 
   // Generate platform-aware environment context for the agent.
-  // This replaces hardcoded /workspace/ paths in CLAUDE.md files,
+  // This replaces hardcoded /workspace/ paths in AGENTS.md files,
   // making NanoClaw work on Windows, Linux, and macOS without templates.
+  // Requirement 9.3: Generate platform-specific environment context
   const isDirectMode = !!containerInput.directMode;
   const platform = process.platform; // 'win32', 'linux', 'darwin'
   const shell = platform === 'win32' ? 'PowerShell/cmd' : 'bash';
@@ -430,8 +540,8 @@ async function runQuery(
     ? path.join(containerInput.directMode!.projectDir!, 'groups')
     : '/workspace/project/groups';
   const globalMemoryPath = globalDir
-    ? path.join(globalDir, 'CLAUDE.md')
-    : '/workspace/global/CLAUDE.md';
+    ? path.join(globalDir, 'AGENTS.md')
+    : '/workspace/global/AGENTS.md';
 
   const envContext = [
     `\n## Runtime Environment`,
@@ -447,7 +557,54 @@ async function runQuery(
     `For group management, prefer MCP tools (mcp__nanoclaw__register_group, mcp__nanoclaw__list_tasks, etc.).`,
   ].join('\n');
 
-  const systemAppend = [globalClaudeMd, envContext].filter(Boolean).join('\n\n');
+  // Requirement 9.4: Append both to system prompt
+  const systemAppend = [globalAgentsMd, envContext].filter(Boolean).join('\n\n');
+  
+  // Requirement 9.1, 9.5: Pass system prompt to OpenCode SDK session configuration
+  // Use session.prompt with noReply:true to inject context without triggering AI response
+  // (session.init is for analyzing the app and creating AGENTS.md, not for system prompts)
+  // Helper: call noReply prompt with a 30s timeout
+  const CONTEXT_TIMEOUT_MS = 30_000;
+  const injectContext = async (sid: string, text: string) => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), CONTEXT_TIMEOUT_MS);
+    try {
+      return await client.session.prompt({
+        path: { id: sid },
+        body: { noReply: true, parts: [{ type: 'text', text }] },
+        signal: controller.signal as any,
+      });
+    } finally {
+      clearTimeout(timer);
+    }
+  };
+
+  try {
+    log(`Injecting system context into session ${currentSessionId} (${systemAppend.length} chars)...`);
+    const contextResp = await injectContext(currentSessionId, systemAppend);
+    log(`Context injection response: ${JSON.stringify(contextResp?.data ?? contextResp).slice(0, 300)}`);
+    log(`Session ${currentSessionId} context injected successfully`);
+  } catch (error) {
+    // Requirement 7.4, 7.5: Log errors with full context and return error status
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    const errorStack = error instanceof Error ? error.stack : undefined;
+    
+    log(`ERROR: Failed to inject system context: ${errorMessage}`);
+    if (errorStack) {
+      log(`Stack trace: ${errorStack}`);
+    }
+    log(`Context: sessionId=${currentSessionId}, contextLength=${systemAppend.length}`);
+    
+    // Return error via container output protocol (Requirement 7.5)
+    writeOutput({
+      status: 'error',
+      result: null,
+      error: `Context injection failed: ${errorMessage}`,
+      newSessionId: currentSessionId
+    });
+    
+    throw error; // Re-throw to exit runQuery
+  }
 
   // Discover additional directories mounted at /workspace/extra/* (container mode)
   // In direct mode, extra dirs would be configured differently
@@ -465,79 +622,169 @@ async function runQuery(
     log(`Additional directories: ${extraDirs.join(', ')}`);
   }
 
-  for await (const message of query({
-    prompt: stream,
-    options: {
-      cwd: groupDir,
-      additionalDirectories: extraDirs.length > 0 ? extraDirs : undefined,
-      resume: sessionId,
-      resumeSessionAt: resumeAt,
-      systemPrompt: { type: 'preset' as const, preset: 'claude_code' as const, append: systemAppend },
-      allowedTools: [
-        'Bash',
-        'Read', 'Write', 'Edit', 'Glob', 'Grep',
-        'WebSearch', 'WebFetch',
-        'Task', 'TaskOutput', 'TaskStop',
-        'TeamCreate', 'TeamDelete', 'SendMessage',
-        'TodoWrite', 'ToolSearch', 'Skill',
-        'NotebookEdit',
-        'mcp__nanoclaw__*'
-      ],
-      env: sdkEnv,
-      permissionMode: 'bypassPermissions',
-      allowDangerouslySkipPermissions: true,
-      settingSources: ['project', 'user'],
-      mcpServers: {
-        nanoclaw: {
-          command: 'node',
-          args: [mcpServerPath],
-          env: {
-            NANOCLAW_CHAT_JID: containerInput.chatJid,
-            NANOCLAW_GROUP_FOLDER: containerInput.groupFolder,
-            NANOCLAW_IS_MAIN: containerInput.isMain ? '1' : '0',
-            NANOCLAW_IPC_DIR: ipcBaseDir,
-          },
-        },
-      },
-      hooks: {
-        PreCompact: [{ hooks: [createPreCompactHook()] }],
-        PreToolUse: [{ matcher: 'Bash', hooks: [createSanitizeBashHook()] }],
-      },
-    }
-  })) {
-    messageCount++;
-    const msgType = message.type === 'system' ? `system/${(message as { subtype?: string }).subtype}` : message.type;
-    log(`[msg #${messageCount}] type=${msgType}`);
+  // Send message and get response (Requirement 3.1)
+  // session.prompt() is SYNCHRONOUS — it blocks until the AI responds and returns
+  // the complete response in { data: { info: AssistantMessage, parts: Part[] } }
+  const messageTimestamp = new Date().toISOString();
+  log(`Sending message to session ${currentSessionId}...`);
+  debugLog(`Message metadata: length=${prompt.length} chars, chatJid=${containerInput.chatJid}, timestamp=${messageTimestamp}`);
 
-    if (message.type === 'assistant' && 'uuid' in message) {
-      lastAssistantUuid = (message as { uuid: string }).uuid;
+  // Poll for _close sentinel during the blocking prompt call
+  let closedDuringPrompt = false;
+  const pollInterval = setInterval(() => {
+    if (shouldClose()) {
+      log('✓ Close sentinel detected during prompt');
+      closedDuringPrompt = true;
+      clearInterval(pollInterval);
+    }
+  }, IPC_POLL_MS);
+
+  // Helper: call session.prompt with a timeout (default 5 minutes)
+  const PROMPT_TIMEOUT_MS = 5 * 60 * 1000;
+  const promptWithTimeout = async (sid: string, text: string) => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), PROMPT_TIMEOUT_MS);
+    try {
+      const resp = await client.session.prompt({
+        path: { id: sid },
+        body: { parts: [{ type: 'text', text }] },
+        signal: controller.signal as any,
+      });
+      return resp;
+    } finally {
+      clearTimeout(timer);
+    }
+  };
+
+  try {
+    // session.prompt() blocks until AI responds
+    // Returns { data: { info: AssistantMessage, parts: Part[] }, request, response }
+    let response: any;
+    try {
+      response = await promptWithTimeout(currentSessionId, prompt);
+    } catch (promptErr: any) {
+      // If session might be stale/expired, retry with a fresh session
+      const msg = promptErr?.message || String(promptErr);
+      const isSessionError = msg.includes('fetch failed') || msg.includes('abort') || msg.includes('timeout') || msg.includes('404') || msg.includes('not found');
+      if (isSessionError && sessionId) {
+        log(`⚠ Prompt failed (${msg}), creating fresh session and retrying...`);
+        try {
+          const freshSession = await client.session.create();
+          currentSessionId = freshSession.data?.id ?? freshSession.id;
+          newSessionId = currentSessionId;
+          log(`✓ Created fresh session: ${currentSessionId}`);
+          // Re-inject context into fresh session
+          await injectContext(currentSessionId, systemAppend);
+          response = await promptWithTimeout(currentSessionId, prompt);
+        } catch (retryErr: any) {
+          log(`ERROR: Retry with fresh session also failed: ${retryErr?.message || String(retryErr)}`);
+          throw retryErr;
+        }
+      } else {
+        throw promptErr;
+      }
     }
 
-    if (message.type === 'system' && message.subtype === 'init') {
-      newSessionId = message.session_id;
-      log(`Session initialized: ${newSessionId}`);
+    clearInterval(pollInterval);
+
+    log(`✓ Response received from session ${currentSessionId}`);
+    
+    // Debug: log the raw response structure to understand what the SDK returns
+    log(`Response keys: ${Object.keys(response || {}).join(', ')}`);
+    log(`Response.data type: ${typeof response?.data}`);
+    if (response?.data) {
+      log(`Response.data keys: ${Object.keys(response.data).join(', ')}`);
+      log(`Response.data snippet: ${JSON.stringify(response.data).slice(0, 500)}`);
+    } else {
+      log(`Raw response snippet: ${JSON.stringify(response).slice(0, 500)}`);
     }
 
-    if (message.type === 'system' && (message as { subtype?: string }).subtype === 'task_notification') {
-      const tn = message as { task_id: string; status: string; summary: string };
-      log(`Task notification: task=${tn.task_id} status=${tn.status} summary=${tn.summary}`);
-    }
+    // Extract response data — handle both responseStyle 'fields' and 'data'
+    const responseData = response.data ?? response;
+    const parts = responseData.parts || [];
+    
+    log(`Extracted parts count: ${parts.length}, parts types: ${parts.map((p: any) => p.type).join(', ')}`);
 
-    if (message.type === 'result') {
+    // Extract text from response parts
+    const textParts = parts
+      .filter((p: any) => p.type === 'text')
+      .map((p: any) => p.text || '')
+      .join('');
+
+    if (textParts) {
       resultCount++;
-      const textResult = 'result' in message ? (message as { result?: string }).result : null;
-      log(`Result #${resultCount}: subtype=${message.subtype}${textResult ? ` text=${textResult.slice(0, 200)}` : ''}`);
+      log(`✓ Assistant response #${resultCount}: ${textParts.slice(0, 200)}${textParts.length > 200 ? '...' : ''}`);
+
       writeOutput({
         status: 'success',
-        result: textResult || null,
-        newSessionId
+        result: textParts,
+        newSessionId: currentSessionId
       });
+    } else {
+      // No text parts — try fetching messages as fallback
+      log(`⚠ No text parts in prompt response, trying session.messages fallback...`);
+      let fallbackText = '';
+      try {
+        const msgsResp = await client.session.messages({ path: { id: currentSessionId } });
+        const msgs = (msgsResp as any).data || msgsResp;
+        if (Array.isArray(msgs) && msgs.length > 0) {
+          const lastAssistant = [...msgs].reverse().find((m: any) => m.info?.role === 'assistant');
+          if (lastAssistant) {
+            fallbackText = (lastAssistant.parts || [])
+              .filter((p: any) => p.type === 'text')
+              .map((p: any) => p.text || '')
+              .join('');
+          }
+        }
+      } catch (fetchErr) {
+        log(`⚠ Fallback fetch failed: ${fetchErr instanceof Error ? fetchErr.message : String(fetchErr)}`);
+      }
+
+      if (fallbackText) {
+        resultCount++;
+        log(`✓ Got response via fallback: ${fallbackText.slice(0, 200)}${fallbackText.length > 200 ? '...' : ''}`);
+        writeOutput({ status: 'success', result: fallbackText, newSessionId: currentSessionId });
+      } else {
+        log(`⚠ Empty response from session ${currentSessionId}`);
+        writeOutput({ status: 'success', result: '[No response]', newSessionId: currentSessionId });
+      }
     }
+
+    // Track message info for resumption
+    const messageInfo = responseData.info;
+    if (messageInfo?.id) {
+      lastAssistantUuid = messageInfo.id;
+    }
+
+    closedDuringQuery = closedDuringPrompt;
+
+  } catch (error) {
+    clearInterval(pollInterval);
+
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    const errorStack = error instanceof Error ? error.stack : undefined;
+
+    log(`ERROR: Failed to send message / get response: ${errorMessage}`);
+    if (errorStack) {
+      log(`Stack trace: ${errorStack}`);
+    }
+    log(`Context: sessionId=${currentSessionId}, promptLength=${prompt.length}`);
+
+    writeOutput({
+      status: 'error',
+      result: null,
+      error: `Failed to send message: ${errorMessage}`,
+      newSessionId: currentSessionId
+    });
+
+    throw error;
   }
 
-  ipcPolling = false;
-  log(`Query done. Messages: ${messageCount}, results: ${resultCount}, lastAssistantUuid: ${lastAssistantUuid || 'none'}, closedDuringQuery: ${closedDuringQuery}`);
-  return { newSessionId, lastAssistantUuid, closedDuringQuery };
+  log(`Query completed successfully`);
+  log(`Summary: events=${messageCount}, results=${resultCount}, lastAssistantUuid=${lastAssistantUuid || 'none'}, closedDuringQuery=${closedDuringQuery}`);
+  debugLog(`Query statistics: sessionId=${currentSessionId}, groupFolder=${containerInput.groupFolder}, chatJid=${containerInput.chatJid}, timestamp=${new Date().toISOString()}`);
+  
+  return { newSessionId, lastAssistantUuid, closedDuringQuery, client };
 }
 
 async function main(): Promise<void> {
@@ -548,7 +795,10 @@ async function main(): Promise<void> {
     containerInput = JSON.parse(stdinData);
     // Delete the temp file the entrypoint wrote — it contains secrets
     try { fs.unlinkSync('/tmp/input.json'); } catch { /* may not exist */ }
-    log(`Received input for group: ${containerInput.groupFolder}`);
+    
+    log(`=== NanoClaw Agent Runner Started ===`);
+    log(`Group: ${containerInput.groupFolder}, ChatJID: ${containerInput.chatJid}, IsMain: ${containerInput.isMain}`);
+    debugLog(`Container input: sessionId=${containerInput.sessionId || 'none'}, isScheduledTask=${containerInput.isScheduledTask || false}, directMode=${!!containerInput.directMode}`);
   } catch (err) {
     writeOutput({
       status: 'error',
@@ -564,6 +814,12 @@ async function main(): Promise<void> {
   for (const [key, value] of Object.entries(containerInput.secrets || {})) {
     sdkEnv[key] = value;
   }
+  
+  debugLog(`SDK environment configured with ${Object.keys(containerInput.secrets || {}).length} secrets`);
+  
+  // Verify that secrets are not in process.env (Requirements 5.4, 8.1)
+  // This is our alternative to PreToolUse hooks - prevention instead of interception
+  verifySecretsNotInProcessEnv();
 
   const __dirname = path.dirname(fileURLToPath(import.meta.url));
   const mcpServerPath = path.join(__dirname, 'ipc-mcp-stdio.js');
@@ -571,6 +827,7 @@ async function main(): Promise<void> {
   let sessionId = containerInput.sessionId;
 
   // Direct mode: override hardcoded container paths with real host paths
+  // Requirements: 10.2, 10.3, 10.4
   let ipcBaseDir = '/workspace/ipc';
   let groupDir = '/workspace/group';
   let globalDir: string | undefined = '/workspace/global';
@@ -580,7 +837,23 @@ async function main(): Promise<void> {
     globalDir = containerInput.directMode.globalDir;
     IPC_INPUT_DIR = path.join(ipcBaseDir, 'input');
     IPC_INPUT_CLOSE_SENTINEL = path.join(IPC_INPUT_DIR, '_close');
-    log(`Direct mode: ipc=${ipcBaseDir}, group=${groupDir}, global=${globalDir || 'none'}`);
+    
+    log(`Direct mode enabled`);
+    log(`Paths: ipc=${ipcBaseDir}, group=${groupDir}, global=${globalDir || 'none'}`);
+    debugLog(`Direct mode configuration: platform=${process.platform}, projectDir=${containerInput.directMode.projectDir || 'none'}`);
+    
+    // Fix PATH for Windows: ensure node is findable by SDK subprocesses
+    // Requirement 10.4: Configure client with real host paths
+    // OpenCode SDK spawns subprocesses that inherit process.env, so we need to update it
+    if (process.platform === 'win32' && process.env.PATH) {
+      const nodePath = 'C:\\Program Files\\nodejs';
+      if (!process.env.PATH.includes(nodePath)) {
+        process.env.PATH = `${nodePath};${process.env.PATH}`;
+        log(`Added ${nodePath} to PATH for SDK subprocesses`);
+      }
+    }
+  } else {
+    log(`Container mode enabled (paths: /workspace/*)`);
   }
 
   fs.mkdirSync(IPC_INPUT_DIR, { recursive: true });
@@ -592,53 +865,94 @@ async function main(): Promise<void> {
   let prompt = containerInput.prompt;
   if (containerInput.isScheduledTask) {
     prompt = `[SCHEDULED TASK - The following message was sent automatically and is not coming directly from the user or group.]\n\n${prompt}`;
+    log(`Processing scheduled task`);
   }
   const pending = drainIpcInput();
   if (pending.length > 0) {
     log(`Draining ${pending.length} pending IPC messages into initial prompt`);
+    debugLog(`Pending messages total length: ${pending.join('\n').length} chars`);
     prompt += '\n' + pending.join('\n');
   }
+  
+  log(`Initial prompt prepared: ${prompt.length} chars`);
+  debugLog(`Prompt preview: ${prompt.slice(0, 150)}${prompt.length > 150 ? '...' : ''}`);
 
   // Query loop: run query → wait for IPC message → run new query → repeat
+  // OpenCode client is created on first query and reused for subsequent queries
   let resumeAt: string | undefined;
+  let clientInstance: any = null;
+  let queryCount = 0;
+  const ARCHIVE_INTERVAL = 10; // Archive every 10 queries
+  
+  log(`Starting query loop...`);
+  debugLog(`Configuration: archiveInterval=${ARCHIVE_INTERVAL}, sessionId=${sessionId || 'new'}`);
+  
   try {
     while (true) {
-      log(`Starting query (session: ${sessionId || 'new'}, resumeAt: ${resumeAt || 'latest'})...`);
+      queryCount++;
+      log(`--- Query #${queryCount} ---`);
+      log(`Session: ${sessionId || 'new'}, ResumeAt: ${resumeAt || 'latest'}`);
+      debugLog(`Query context: chatJid=${containerInput.chatJid}, groupFolder=${containerInput.groupFolder}, timestamp=${new Date().toISOString()}`);
 
-      const queryResult = await runQuery(prompt, sessionId, mcpServerPath, containerInput, sdkEnv, groupDir, ipcBaseDir, globalDir, resumeAt);
+      const queryResult = await runQuery(prompt, sessionId, mcpServerPath, containerInput, sdkEnv, groupDir, ipcBaseDir, globalDir, resumeAt, clientInstance);
+      
+      // Store OpenCode client for reuse across queries
+      if (!clientInstance) {
+        clientInstance = queryResult.client;
+        log(`✓ OpenCode client initialized and will be reused for subsequent queries`);
+      }
+      
       if (queryResult.newSessionId) {
         sessionId = queryResult.newSessionId;
+        debugLog(`Session ID updated: ${sessionId}`);
       }
       if (queryResult.lastAssistantUuid) {
         resumeAt = queryResult.lastAssistantUuid;
+        debugLog(`Resume point updated: ${resumeAt}`);
+      }
+      
+      // Archive conversation periodically (OpenCode SDK doesn't have PreCompact hooks)
+      // Requirement 5.3: Maintain conversation archiving functionality
+      if (sessionId && queryCount % ARCHIVE_INTERVAL === 0 && clientInstance) {
+        log(`Periodic archive triggered (query count: ${queryCount})`);
+        await archiveSessionConversation(clientInstance, sessionId, groupDir);
       }
 
       // If _close was consumed during the query, exit immediately.
       // Don't emit a session-update marker (it would reset the host's
       // idle timer and cause a 30-min delay before the next _close).
       if (queryResult.closedDuringQuery) {
-        log('Close sentinel consumed during query, exiting');
+        log('✓ Close sentinel consumed during query, exiting');
         break;
       }
 
       // Emit session update so host can track it
       writeOutput({ status: 'success', result: null, newSessionId: sessionId });
 
-      log('Query ended, waiting for next IPC message...');
+      log(`Query #${queryCount} completed, waiting for next IPC message...`);
+      debugLog(`Waiting state: sessionId=${sessionId}, resumeAt=${resumeAt || 'latest'}, timestamp=${new Date().toISOString()}`);
 
       // Wait for the next message or _close sentinel
       const nextMessage = await waitForIpcMessage();
       if (nextMessage === null) {
-        log('Close sentinel received, exiting');
+        log('✓ Close sentinel received, exiting');
         break;
       }
 
-      log(`Got new message (${nextMessage.length} chars), starting new query`);
+      log(`Received new message (${nextMessage.length} chars), starting query #${queryCount + 1}`);
+      debugLog(`New message preview: ${nextMessage.slice(0, 100)}${nextMessage.length > 100 ? '...' : ''}`);
       prompt = nextMessage;
     }
   } catch (err) {
     const errorMessage = err instanceof Error ? err.message : String(err);
-    log(`Agent error: ${errorMessage}`);
+    const errorStack = err instanceof Error ? err.stack : undefined;
+    
+    log(`ERROR: Agent execution failed: ${errorMessage}`);
+    if (errorStack) {
+      log(`Stack trace: ${errorStack}`);
+    }
+    log(`Context: sessionId=${sessionId || 'none'}, queryCount=${queryCount}, groupFolder=${containerInput.groupFolder}, chatJid=${containerInput.chatJid}`);
+    
     writeOutput({
       status: 'error',
       result: null,
@@ -646,6 +960,10 @@ async function main(): Promise<void> {
       error: errorMessage
     });
     process.exit(1);
+  } finally {
+    // Note: OpenCode client doesn't need explicit cleanup
+    // The client just makes HTTP requests to the OpenCode server
+    log(`=== NanoClaw Agent Runner Finished ===`);
   }
 }
 

@@ -107,7 +107,7 @@ sqlite3 <DB_PATH> "DELETE FROM registered_groups WHERE jid = 'THE_JID_HERE';"
 
 ## Global Memory
 
-Your Runtime Environment provides the global memory path. Read and write to the CLAUDE.md there for facts that should apply to all groups. Only update global memory when explicitly asked to "remember this globally" or similar.
+Your Runtime Environment provides the global memory path. Read and write to the AGENTS.md there for facts that should apply to all groups. Only update global memory when explicitly asked to "remember this globally" or similar.
 
 ---
 

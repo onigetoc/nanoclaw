@@ -44,17 +44,17 @@ Then run `/setup`. Claude Code handles everything: dependencies, authentication,
 
 **Skills over features.** Contributors shouldn't add features (e.g. support for Telegram) to the codebase. Instead, they contribute [claude code skills](https://code.claude.com/docs/en/skills) like `/add-telegram` that transform your fork. You end up with clean code that does exactly what you need.
 
-**Best harness, best model.** This runs on Claude Agent SDK, which means you're running Claude Code directly. The harness matters. A bad harness makes even smart models seem dumb, a good harness gives them superpowers. Claude Code is (IMO) the best harness available.
+**Best harness, best model.** This runs on OpenCode SDK, which provides a powerful agent execution environment. The harness matters. A bad harness makes even smart models seem dumb, a good harness gives them superpowers. OpenCode SDK is designed to give agents the tools and context they need to be effective.
 
 ## What It Supports
 
 - **WhatsApp I/O** - Message Claude from your phone
-- **Isolated group context** - Each group has its own `CLAUDE.md` memory, isolated filesystem, and runs in its own container sandbox with only that filesystem mounted
+- **Isolated group context** - Each group has its own `AGENTS.md` memory, isolated filesystem, and runs in its own container sandbox with only that filesystem mounted
 - **Main channel** - Your private channel (self-chat) for admin control; every other group is completely isolated
 - **Scheduled tasks** - Recurring jobs that run Claude and can message you back
 - **Web access** - Search and fetch content
 - **Container isolation** - Agents sandboxed in Apple Container (macOS) or Docker (macOS/Linux)
-- **Agent Swarms** - Spin up teams of specialized agents that collaborate on complex tasks (first personal AI assistant to support this)
+- **Agent Swarms** - Spin up teams of specialized agents that collaborate on complex tasks
 - **Optional integrations** - Add Gmail (`/add-gmail`) and more via skills
 
 ## Usage
@@ -120,7 +120,7 @@ Skills we'd love to see:
 ## Architecture
 
 ```
-WhatsApp (baileys) --> SQLite --> Polling loop --> Container (Claude Agent SDK) --> Response
+WhatsApp (baileys) --> SQLite --> Polling loop --> Container (OpenCode SDK) --> Response
 ```
 
 Single Node.js process. Agents execute in isolated Linux containers with mounted directories. Per-group message queue with concurrency control. IPC via filesystem.
@@ -134,7 +134,57 @@ Key files:
 - `src/container-runner.ts` - Spawns streaming agent containers
 - `src/task-scheduler.ts` - Runs scheduled tasks
 - `src/db.ts` - SQLite operations (messages, groups, sessions, state)
-- `groups/*/CLAUDE.md` - Per-group memory
+- `groups/*/AGENTS.md` - Per-group memory
+
+## Environment Variables
+
+NanoClaw supports the following environment variables:
+
+- `ASSISTANT_NAME` - Name of your assistant (default: Andy)
+- `TELEGRAM_ONLY` - Set to `true` to use Telegram only (disable WhatsApp)
+- `TELEGRAM_BOT_TOKEN` - Telegram bot token (get from @BotFather)
+- `OPENCODE_BASE_URL` - Optional: Custom OpenCode API endpoint (defaults to local instance)
+- `LOG_LEVEL` - Logging verbosity: `debug`, `info`, `warn`, `error` (default: info)
+
+**Note on AI Provider API Keys:**
+NanoClaw uses OpenCode SDK which reads AI provider credentials from your system configuration. You must have OpenCode configured before running NanoClaw:
+
+```bash
+# Configure AI providers (one-time setup)
+opencode auth login
+
+# This will prompt you to add API keys for providers like:
+# - Anthropic (Claude)
+# - Google (Gemini)
+# - OpenAI (GPT)
+# - Groq (Llama)
+```
+
+See `.env.example` for a template configuration file.
+
+## Migration from Claude SDK
+
+If you're upgrading from a previous version that used Claude SDK:
+
+1. **Automatic Migration**: The OpenCode SDK migration is backward compatible. Your existing sessions, groups, and configuration will continue to work without changes.
+
+2. **No Database Changes**: The database schema remains unchanged. All existing session IDs, messages, and tasks are preserved.
+
+3. **Container Rebuild**: After pulling the latest code, rebuild your container:
+   ```bash
+   ./container/build.sh
+   ```
+
+4. **Restart Service**: Restart the NanoClaw service to use the new SDK:
+   ```bash
+   # macOS
+   launchctl kickstart -k gui/$(id -u)/com.nanoclaw
+   
+   # Linux (systemd)
+   systemctl --user restart nanoclaw
+   ```
+
+5. **Verify**: Send a test message to confirm everything works. Your conversation history and context are preserved.
 
 ## FAQ
 

@@ -9,7 +9,6 @@ import os from 'os';
 import path from 'path';
 
 import { CONTAINER_MAX_OUTPUT_SIZE, CONTAINER_TIMEOUT, DATA_DIR, GROUPS_DIR } from './config.js';
-import { readEnvFile } from './env.js';
 import { logger } from './logger.js';
 import { RegisteredGroup } from './types.js';
 import { ContainerInput, ContainerOutput } from './container-runner.js';
@@ -30,21 +29,6 @@ export async function runDirectAgent(
 
   const groupDir = path.join(GROUPS_DIR, group.folder);
   fs.mkdirSync(groupDir, { recursive: true});
-
-  // Setup directories
-  const groupSessionsDir = path.join(DATA_DIR, 'sessions', group.folder, '.claude');
-  fs.mkdirSync(groupSessionsDir, { recursive: true });
-
-  const settingsFile = path.join(groupSessionsDir, 'settings.json');
-  if (!fs.existsSync(settingsFile)) {
-    fs.writeFileSync(settingsFile, JSON.stringify({
-      env: {
-        CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: '1',
-        CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD: '1',
-        CLAUDE_CODE_DISABLE_AUTO_MEMORY: '0',
-      },
-    }, null, 2) + '\n');
-  }
 
   // Setup IPC directory
   const groupIpcDir = path.join(DATA_DIR, 'ipc', group.folder);
@@ -78,8 +62,9 @@ export async function runDirectAgent(
     let stdoutTruncated = false;
     let stderrTruncated = false;
 
-    // Pass input via stdin
-    input.secrets = readEnvFile(['CLAUDE_CODE_OAUTH_TOKEN', 'ANTHROPIC_API_KEY']);
+    // Pass input via stdin (OpenCode SDK reads API keys from system config,
+    // so no secrets need to be passed. Keep the field for future use.)
+    input.secrets = {};
     // Direct mode: pass real host paths so agent-runner doesn't use container paths
     (input as any).directMode = {
       ipcDir: groupIpcDir,

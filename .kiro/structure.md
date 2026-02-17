@@ -50,6 +50,6 @@ All messaging platforms implement the `Channel` interface:
 ### Group Isolation
 Each group has:
 - Isolated filesystem mount
-- Separate CLAUDE.md memory
+- Separate AGENTS.md memory
 - Independent message queue
 - Own container instance
