@@ -42,6 +42,13 @@ export interface ContainerInput {
   isMain: boolean;
   isScheduledTask?: boolean;
   secrets?: Record<string, string>;
+  // Direct mode (Windows/Linux): real paths instead of container mount points
+  directMode?: {
+    ipcDir: string;
+    groupDir: string;
+    globalDir?: string;
+    projectDir?: string;
+  };
 }
 
 export interface ContainerOutput {
@@ -49,6 +56,13 @@ export interface ContainerOutput {
   result: string | null;
   newSessionId?: string;
   error?: string;
+}
+
+/**
+ * Check if we should use direct mode (no containers)
+ */
+export function shouldUseDirectMode(): boolean {
+  return os.platform() !== 'darwin';
 }
 
 interface VolumeMount {

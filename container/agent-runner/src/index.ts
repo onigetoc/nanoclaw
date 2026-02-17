@@ -27,6 +27,13 @@ interface ContainerInput {
   isMain: boolean;
   isScheduledTask?: boolean;
   secrets?: Record<string, string>;
+  // Direct mode (Windows/Linux): real paths instead of container mount points
+  directMode?: {
+    ipcDir: string;       // replaces /workspace/ipc
+    groupDir: string;     // replaces /workspace/group
+    globalDir?: string;   // replaces /workspace/global
+    projectDir?: string;  // replaces /workspace/project
+  };
 }
 
 interface ContainerOutput {
@@ -54,8 +61,9 @@ interface SDKUserMessage {
   session_id: string;
 }
 
-const IPC_INPUT_DIR = '/workspace/ipc/input';
-const IPC_INPUT_CLOSE_SENTINEL = path.join(IPC_INPUT_DIR, '_close');
+// These get overridden in main() when running in direct mode
+let IPC_INPUT_DIR = '/workspace/ipc/input';
+let IPC_INPUT_CLOSE_SENTINEL = path.join(IPC_INPUT_DIR, '_close');
 const IPC_POLL_MS = 500;
 
 /**
@@ -359,8 +367,20 @@ async function runQuery(
   mcpServerPath: string,
   containerInput: ContainerInput,
   sdkEnv: Record<string, string | undefined>,
+  groupDir: string,
+  ipcBaseDir: string,
+  globalDir: string | undefined,
   resumeAt?: string,
 ): Promise<{ newSessionId?: string; lastAssistantUuid?: string; closedDuringQuery: boolean }> {
+  // Fix PATH for Windows: ensure node is findable by SDK subprocesses
+  if (process.platform === 'win32' && sdkEnv.PATH) {
+    const nodePath = 'C:\\Program Files\\nodejs';
+    if (!sdkEnv.PATH.includes(nodePath)) {
+      sdkEnv.PATH = `${nodePath};${sdkEnv.PATH}`;
+      log(`Added ${nodePath} to PATH for SDK subprocesses`);
+    }
+  }
+  
   const stream = new MessageStream();
   stream.push(prompt);
 
@@ -391,14 +411,14 @@ async function runQuery(
   let resultCount = 0;
 
   // Load global CLAUDE.md as additional system context (shared across all groups)
-  const globalClaudeMdPath = '/workspace/global/CLAUDE.md';
+  const globalClaudeMdPath = globalDir ? path.join(globalDir, 'CLAUDE.md') : '/workspace/global/CLAUDE.md';
   let globalClaudeMd: string | undefined;
   if (!containerInput.isMain && fs.existsSync(globalClaudeMdPath)) {
     globalClaudeMd = fs.readFileSync(globalClaudeMdPath, 'utf-8');
   }
 
-  // Discover additional directories mounted at /workspace/extra/*
-  // These are passed to the SDK so their CLAUDE.md files are loaded automatically
+  // Discover additional directories mounted at /workspace/extra/* (container mode)
+  // In direct mode, extra dirs would be configured differently
   const extraDirs: string[] = [];
   const extraBase = '/workspace/extra';
   if (fs.existsSync(extraBase)) {
@@ -416,7 +436,7 @@ async function runQuery(
   for await (const message of query({
     prompt: stream,
     options: {
-      cwd: '/workspace/group',
+      cwd: groupDir,
       additionalDirectories: extraDirs.length > 0 ? extraDirs : undefined,
       resume: sessionId,
       resumeSessionAt: resumeAt,
@@ -445,6 +465,7 @@ async function runQuery(
             NANOCLAW_CHAT_JID: containerInput.chatJid,
             NANOCLAW_GROUP_FOLDER: containerInput.groupFolder,
             NANOCLAW_IS_MAIN: containerInput.isMain ? '1' : '0',
+            NANOCLAW_IPC_DIR: ipcBaseDir,
           },
         },
       },
@@ -518,6 +539,20 @@ async function main(): Promise<void> {
   const mcpServerPath = path.join(__dirname, 'ipc-mcp-stdio.js');
 
   let sessionId = containerInput.sessionId;
+
+  // Direct mode: override hardcoded container paths with real host paths
+  let ipcBaseDir = '/workspace/ipc';
+  let groupDir = '/workspace/group';
+  let globalDir: string | undefined = '/workspace/global';
+  if (containerInput.directMode) {
+    ipcBaseDir = containerInput.directMode.ipcDir;
+    groupDir = containerInput.directMode.groupDir;
+    globalDir = containerInput.directMode.globalDir;
+    IPC_INPUT_DIR = path.join(ipcBaseDir, 'input');
+    IPC_INPUT_CLOSE_SENTINEL = path.join(IPC_INPUT_DIR, '_close');
+    log(`Direct mode: ipc=${ipcBaseDir}, group=${groupDir}, global=${globalDir || 'none'}`);
+  }
+
   fs.mkdirSync(IPC_INPUT_DIR, { recursive: true });
 
   // Clean up stale _close sentinel from previous container runs
@@ -540,7 +575,7 @@ async function main(): Promise<void> {
     while (true) {
       log(`Starting query (session: ${sessionId || 'new'}, resumeAt: ${resumeAt || 'latest'})...`);
 
-      const queryResult = await runQuery(prompt, sessionId, mcpServerPath, containerInput, sdkEnv, resumeAt);
+      const queryResult = await runQuery(prompt, sessionId, mcpServerPath, containerInput, sdkEnv, groupDir, ipcBaseDir, globalDir, resumeAt);
       if (queryResult.newSessionId) {
         sessionId = queryResult.newSessionId;
       }

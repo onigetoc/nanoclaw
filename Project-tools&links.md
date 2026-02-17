@@ -1,0 +1,6 @@
+#Project Tools & Links
+
+### Gemini Conversation for Dockers and links Windows Version and WSL2 (Command line)
+https://www.google.com/search?q=a+quel+version+de+Windows+Docker+ne+fonctionne+pas%3F&rlz=1C1YTUH_frCA1038CA1038&gs_lcrp=EgZjaHJvbWUyBggAEEUYOTIHCAEQIRigATIHCAIQIRigATIHCAMQIRigATIHCAQQIRigAdIBCjE2NDQzajBqMTWoAgiwAgHxBeeDzIeVKXdj&sourceid=chrome&ie=UTF-8&udm=50&fbs=ADc_l-bpk8W4E-qsVlOvbGJcDwpnJ2THAsoMRIbf2DPrFtjZUmeVdYjme_lU_a5QfvpPryaRiuajVa5aXPAH7F_ry1TW90oDzEvWWbsPeNKo_z5p2CIfnPJ7AVMyZ5x7C08LQjp6xrUq222ImrSl2p5QvS0hdI_vZp9dsn8Z1mIpaB0SW5dHXuDIx_F885sdMtnOlOnKzBMqKjnU2qrFcO-_fVGjVVOBacFsjb4Wr1f_k9wccGpvnmk&ved=2ahUKEwi0vaDfgd-SAxX4jIkEHZl3DkkQ0NsOegQIAxAB&aep=10&ntc=1&mstk=AUtExfDMdlXg5346Bb7EZpBV5z-lcna4O_NAJ-RLAi9Mj2w_-aqUmC2HH-OewsM9eo1hJCq18Iqu7Uogo5bJ05ztd706ftWEddNPQnkaOBXB_J2v99w1y_9S78V-FBE9o2KZ7Gkc4f9wIH6Td6rqPPA0xRqVfdesN3kuHG8_qgZTs3dn1YysbAfgFL8I-cVtfZqUM2Ok7Kc4xA2GPt0Yu_2OrKHvb8XfmoyBTL22Yt5s67tcEN9X527_-gGHHOluIyPEM1ymlr--gegXsIiWSu7iEVMamufDt3R4r2CiJ6AvpUVaKgP2AANq07K8CWqXGXXB2msBeIvLqrEdcQ&csuir=1&mtid=_JOTaZDaOPuHw8cP0rLCmQc
+
+----------------------------------------------

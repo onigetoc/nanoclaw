@@ -1,0 +1,26 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Local data & auth
+store/
+data/
+logs/
+
+# Secrets
+*.keys.json
+
+# OS
+.DS_Store
+
+# IDE
+.idea/
+.vscode/
+
+# Documentation (already in context)
+agents-sdk-docs
+
+# Git
+.git/
