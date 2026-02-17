@@ -417,11 +417,43 @@ async function runQuery(
     globalClaudeMd = fs.readFileSync(globalClaudeMdPath, 'utf-8');
   }
 
+  // Generate platform-aware environment context for the agent.
+  // This replaces hardcoded /workspace/ paths in CLAUDE.md files,
+  // making NanoClaw work on Windows, Linux, and macOS without templates.
+  const isDirectMode = !!containerInput.directMode;
+  const platform = process.platform; // 'win32', 'linux', 'darwin'
+  const shell = platform === 'win32' ? 'PowerShell/cmd' : 'bash';
+  const dbPath = isDirectMode
+    ? path.join(containerInput.directMode!.projectDir!, 'store', 'messages.db')
+    : '/workspace/project/store/messages.db';
+  const groupsBasePath = isDirectMode
+    ? path.join(containerInput.directMode!.projectDir!, 'groups')
+    : '/workspace/project/groups';
+  const globalMemoryPath = globalDir
+    ? path.join(globalDir, 'CLAUDE.md')
+    : '/workspace/global/CLAUDE.md';
+
+  const envContext = [
+    `\n## Runtime Environment`,
+    `- Platform: ${platform} (${isDirectMode ? 'direct mode' : 'container mode'})`,
+    `- Shell: ${shell}`,
+    `- Working directory: ${groupDir}`,
+    `- SQLite database: ${dbPath}`,
+    `- Groups base directory: ${groupsBasePath}`,
+    `- Global memory: ${globalMemoryPath}`,
+    `- IPC directory: ${ipcBaseDir}`,
+    ``,
+    `Use these paths for file operations and database queries.`,
+    `For group management, prefer MCP tools (mcp__nanoclaw__register_group, mcp__nanoclaw__list_tasks, etc.).`,
+  ].join('\n');
+
+  const systemAppend = [globalClaudeMd, envContext].filter(Boolean).join('\n\n');
+
   // Discover additional directories mounted at /workspace/extra/* (container mode)
   // In direct mode, extra dirs would be configured differently
   const extraDirs: string[] = [];
-  const extraBase = '/workspace/extra';
-  if (fs.existsSync(extraBase)) {
+  const extraBase = isDirectMode ? '' : '/workspace/extra';
+  if (extraBase && fs.existsSync(extraBase)) {
     for (const entry of fs.readdirSync(extraBase)) {
       const fullPath = path.join(extraBase, entry);
       if (fs.statSync(fullPath).isDirectory()) {
@@ -440,9 +472,7 @@ async function runQuery(
       additionalDirectories: extraDirs.length > 0 ? extraDirs : undefined,
       resume: sessionId,
       resumeSessionAt: resumeAt,
-      systemPrompt: globalClaudeMd
-        ? { type: 'preset' as const, preset: 'claude_code' as const, append: globalClaudeMd }
-        : undefined,
+      systemPrompt: { type: 'preset' as const, preset: 'claude_code' as const, append: systemAppend },
       allowedTools: [
         'Bash',
         'Read', 'Write', 'Edit', 'Glob', 'Grep',
