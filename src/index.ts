@@ -37,6 +37,7 @@ import {
   setSession,
   storeChatMetadata,
   storeMessage,
+  storeMessageDirect,
 } from './db.js';
 import { GroupQueue } from './group-queue.js';
 import { startIpcWatcher } from './ipc.js';
@@ -45,12 +46,6 @@ import { startSchedulerLoop } from './task-scheduler.js';
 import { NewMessage, RegisteredGroup, Channel } from './types.js';
 import { logger } from './logger.js';
 import { attemptAutoRegistration } from './auto-registration.js';
-import {
-  ensureServerHealthy,
-  startServer,
-  startHealthChecks,
-  stopServer,
-} from './opencode-server.js';
 import {
   ensureServerHealthy,
   startServer,
@@ -223,6 +218,18 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
       if (text) {
         await sendDeduped(channel, chatJid, text);
         outputSentToUser = true;
+        
+        // Store bot response in SQLite for conversation history
+        storeMessageDirect({
+          id: `bot_${Date.now()}_${Math.random().toString(36).substring(7)}`,
+          chat_jid: chatJid,
+          sender: 'bot',
+          sender_name: ASSISTANT_NAME,
+          content: text,
+          timestamp: new Date().toISOString(),
+          is_from_me: true,
+          is_bot_message: true,
+        });
       }
       // Only reset idle timer on actual results, not session-update markers (result: null)
       resetIdleTimer();
@@ -609,14 +616,40 @@ async function main(): Promise<void> {
       const channel = findChannel(channels, jid);
       if (!channel) return;
       const text = formatOutbound(rawText);
-      if (text) await channel.sendMessage(jid, text);
+      if (text) {
+        await channel.sendMessage(jid, text);
+        
+        // Store bot response in SQLite for conversation history
+        storeMessageDirect({
+          id: `bot_${Date.now()}_${Math.random().toString(36).substring(7)}`,
+          chat_jid: jid,
+          sender: 'bot',
+          sender_name: ASSISTANT_NAME,
+          content: text,
+          timestamp: new Date().toISOString(),
+          is_from_me: true,
+          is_bot_message: true,
+        });
+      }
     },
   });
   startIpcWatcher({
-    sendMessage: (jid, text) => {
+    sendMessage: async (jid, text) => {
       const channel = findChannel(channels, jid);
       if (!channel) throw new Error(`No channel for JID: ${jid}`);
-      return sendDeduped(channel, jid, text);
+      await sendDeduped(channel, jid, text);
+      
+      // Store bot response in SQLite for conversation history
+      storeMessageDirect({
+        id: `bot_${Date.now()}_${Math.random().toString(36).substring(7)}`,
+        chat_jid: jid,
+        sender: 'bot',
+        sender_name: ASSISTANT_NAME,
+        content: text,
+        timestamp: new Date().toISOString(),
+        is_from_me: true,
+        is_bot_message: true,
+      });
     },
     registeredGroups: () => registeredGroups,
     registerGroup,
