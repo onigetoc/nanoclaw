@@ -1,4 +1,4 @@
-# Andy - Main Channel Configuration
+# {{ASSISTANT_NAME}} - Main Channel Configuration
 
 ## Context Files
 
@@ -71,14 +71,14 @@ sqlite3 <DB_PATH> "SELECT jid, name, folder, requires_trigger FROM registered_gr
 
 - *Main group*: No trigger needed — all messages are processed automatically
 - *Groups with requires_trigger = 0*: No trigger needed (use for 1-on-1 or solo chats)
-- *Other groups* (default): Messages must start with @Andy to be processed
+- *Other groups* (default): Messages must start with @{{ASSISTANT_NAME}} to be processed
 
 ### Adding a Group
 
 Insert into the database directly:
 
 ```
-sqlite3 <DB_PATH> "INSERT INTO registered_groups (jid, name, folder, trigger_pattern, added_at, requires_trigger) VALUES ('THE_JID', 'Group Name', 'folder-name', '^@Andy\b', datetime('now'), 1);"
+sqlite3 <DB_PATH> "INSERT INTO registered_groups (jid, name, folder, trigger_pattern, added_at, requires_trigger) VALUES ('THE_JID', 'Group Name', 'folder-name', '^@{{ASSISTANT_NAME}}\b', datetime('now'), 1);"
 ```
 
 Then create the group folder under the groups base directory (see Runtime Environment for the path).

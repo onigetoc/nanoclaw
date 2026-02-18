@@ -95,6 +95,21 @@ export class TelegramChannel implements Channel {
       // Only deliver full message for registered groups
       const group = this.opts.registeredGroups()[chatJid];
       if (!group) {
+        // Check if this is the first private chat and no main group exists
+        if (ctx.chat.type === "private") {
+          const allGroups = this.opts.registeredGroups();
+          const hasMainGroup = Object.values(allGroups).some(g => g.folder === "main");
+          
+          if (!hasMainGroup) {
+            // First private chat - send instructions for auto-setup
+            await ctx.reply(
+              `👋 Welcome! I'm ${ASSISTANT_NAME}.\n\n` +
+              `To get started, I need to register this chat.\n` +
+              `Please send me any message and I'll set everything up automatically!`
+            );
+          }
+        }
+        
         logger.debug(
           { chatJid, chatName },
           "Message from unregistered Telegram chat",

@@ -1,4 +1,4 @@
-# Andy - Global Configuration
+# {{ASSISTANT_NAME}} - Global Configuration
 
 ## Context Files
 

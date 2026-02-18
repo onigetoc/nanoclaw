@@ -18,6 +18,16 @@ groups/global/*
 !groups/main/AGENTS.md
 !groups/global/AGENTS.md
 
+# Generated context files (from templates)
+groups/**/SOUL.md
+groups/**/IDENTITY.md
+groups/**/AGENTS.md
+# Keep templates and TOOLS.md
+!groups/**/*.template.md
+!groups/**/TOOLS.md
+!groups/**/README.md
+!groups/**/TEMPLATES-README.md
+
 # Secrets
 *.keys.json
 .env
