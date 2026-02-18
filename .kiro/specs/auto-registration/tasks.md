@@ -6,7 +6,7 @@ This plan implements automatic registration of the first chat as the 'main' grou
 
 ## Tasks
 
-- [~] 1. Create auto-registration module with core logic
+- [-] 1. Create auto-registration module with core logic
   - Create `src/auto-registration.ts` with `attemptAutoRegistration()`, `hasMainGroup()`, and `initializeGroupFolders()` functions
   - Implement logic to check if main group exists using database query
   - Implement folder structure creation (groups/main/, logs/, conversations/)
@@ -63,7 +63,7 @@ This plan implements automatic registration of the first chat as the 'main' grou
   - Test with 'main' folder specifically
   - _Requirements: 3.1_
 
-- [ ] 3. Integrate auto-registration into orchestrator
+- [~] 3. Integrate auto-registration into orchestrator
   - Modify `main()` function in `src/index.ts` to wrap `onMessage` callback
   - Add auto-registration check before storing messages for unregistered chats
   - Reload `registeredGroups` from database after successful auto-registration
@@ -85,7 +85,7 @@ This plan implements automatic registration of the first chat as the 'main' grou
   - Test existing manual registration still works
   - _Requirements: 1.3, 1.4, 1.5, 2.1, 3.4_
 
-- [ ] 4. Update channel implementations for private chat detection
+- [~] 4. Update channel implementations for private chat detection
   - Modify `src/channels/telegram.ts` to pass chat type information
   - Modify `src/channels/whatsapp.ts` to pass chat type information (if needed)
   - Ensure `onMessage` callback receives sufficient context to determine if chat is private
@@ -98,23 +98,23 @@ This plan implements automatic registration of the first chat as the 'main' grou
   - Test WhatsApp group chat detection
   - _Requirements: 4.1, 4.2_
 
-- [ ] 5. Add logging for auto-registration events
+- [~] 5. Add logging for auto-registration events
   - Log successful auto-registration with chat JID, name, and type
   - Log failed auto-registration attempts with reason
   - Log when auto-registration is skipped (main already exists)
   - _Requirements: 1.4, 3.1, 3.2_
 
-- [ ] 6. Checkpoint - Ensure all tests pass
+- [~] 6. Checkpoint - Ensure all tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 7. Update documentation
+- [~] 7. Update documentation
   - Update README.md with simplified setup instructions
   - Add note about auto-registration to setup section
   - Document that first message auto-registers as 'main'
   - Keep existing manual registration docs for reference
   - _Requirements: 1.1, 1.2, 1.3, 1.4_
 
-- [ ] 8. Final checkpoint - Ensure all tests pass
+- [~] 8. Final checkpoint - Ensure all tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
 ## Notes
