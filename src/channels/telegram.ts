@@ -26,6 +26,10 @@ export class TelegramChannel implements Channel {
   private bot: Bot | null = null;
   private opts: TelegramChannelOpts;
   private botToken: string;
+  private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private keepAliveTimer: ReturnType<typeof setInterval> | null = null;
+  private lastActivity: number = Date.now();
+  private isShuttingDown: boolean = false;
 
   constructor(botToken: string, opts: TelegramChannelOpts) {
     this.botToken = botToken;
@@ -33,10 +37,13 @@ export class TelegramChannel implements Channel {
   }
 
   async connect(): Promise<void> {
+    if (this.isShuttingDown) return;
+    
     this.bot = new Bot(this.botToken);
 
     // Command to get chat ID (useful for registration)
     this.bot.command('chatid', (ctx) => {
+      this.lastActivity = Date.now();
       const chatId = ctx.chat.id;
       const chatType = ctx.chat.type;
       const chatName =
@@ -52,10 +59,12 @@ export class TelegramChannel implements Channel {
 
     // Command to check bot status
     this.bot.command('ping', (ctx) => {
+      this.lastActivity = Date.now();
       ctx.reply(`${ASSISTANT_NAME} is online.`);
     });
 
     this.bot.on('message:text', async (ctx) => {
+      this.lastActivity = Date.now();
       // Skip commands
       if (ctx.message.text.startsWith('/')) return;
 
@@ -293,15 +302,28 @@ export class TelegramChannel implements Channel {
     this.bot.on('message:location', (ctx) => storeNonText(ctx, '[Location]'));
     this.bot.on('message:contact', (ctx) => storeNonText(ctx, '[Contact]'));
 
-    // Handle errors gracefully
+    // Handle errors gracefully with reconnection
     this.bot.catch((err) => {
       logger.error({ err: err.message }, 'Telegram bot error');
+      // Schedule reconnection on critical errors
+      if (!this.isShuttingDown && !this.reconnectTimer) {
+        logger.warn('Scheduling Telegram reconnection in 10 seconds...');
+        this.reconnectTimer = setTimeout(() => {
+          this.reconnectTimer = null;
+          this.reconnect();
+        }, 10000);
+      }
     });
 
     // Start polling — returns a Promise that resolves when started
-    return new Promise<void>((resolve) => {
+    return new Promise<void>((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        reject(new Error('Telegram bot connection timeout'));
+      }, 30000);
+
       this.bot!.start({
         onStart: (botInfo) => {
+          clearTimeout(timeout);
           logger.info(
             { username: botInfo.username, id: botInfo.id },
             'Telegram bot connected',
@@ -310,10 +332,77 @@ export class TelegramChannel implements Channel {
           console.log(
             `  Send /chatid to the bot to get a chat's registration ID\n`,
           );
+          
+          // Start keep-alive mechanism
+          this.startKeepAlive();
+          
           resolve();
         },
+      }).catch((err) => {
+        clearTimeout(timeout);
+        logger.error({ err }, 'Failed to start Telegram bot');
+        reject(err);
       });
     });
+  }
+
+  /**
+   * Keep-alive mechanism to prevent session timeouts.
+   * Sends a getMe() request every 5 minutes to keep the connection alive.
+   */
+  private startKeepAlive(): void {
+    if (this.keepAliveTimer) return;
+
+    this.keepAliveTimer = setInterval(async () => {
+      if (!this.bot || this.isShuttingDown) return;
+
+      try {
+        await this.bot.api.getMe();
+        logger.debug('Telegram keep-alive ping successful');
+      } catch (err) {
+        logger.warn({ err }, 'Telegram keep-alive ping failed, reconnecting...');
+        this.reconnect();
+      }
+    }, 5 * 60 * 1000); // Every 5 minutes
+  }
+
+  /**
+   * Reconnect the Telegram bot after a failure.
+   */
+  private async reconnect(): Promise<void> {
+    if (this.isShuttingDown) return;
+
+    logger.info('Reconnecting Telegram bot...');
+
+    // Stop existing bot
+    if (this.bot) {
+      try {
+        this.bot.stop();
+      } catch (err) {
+        logger.debug({ err }, 'Error stopping bot during reconnect');
+      }
+      this.bot = null;
+    }
+
+    // Clear timers
+    if (this.keepAliveTimer) {
+      clearInterval(this.keepAliveTimer);
+      this.keepAliveTimer = null;
+    }
+
+    // Wait a bit before reconnecting
+    await new Promise((r) => setTimeout(r, 2000));
+
+    // Reconnect
+    try {
+      await this.connect();
+      logger.info('Telegram bot reconnected successfully');
+    } catch (err) {
+      logger.error({ err }, 'Failed to reconnect Telegram bot, will retry in 30s');
+      if (!this.isShuttingDown) {
+        setTimeout(() => this.reconnect(), 30000);
+      }
+    }
   }
 
   async sendMessage(jid: string, text: string): Promise<void> {
@@ -352,6 +441,18 @@ export class TelegramChannel implements Channel {
   }
 
   async disconnect(): Promise<void> {
+    this.isShuttingDown = true;
+
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+
+    if (this.keepAliveTimer) {
+      clearInterval(this.keepAliveTimer);
+      this.keepAliveTimer = null;
+    }
+
     if (this.bot) {
       this.bot.stop();
       this.bot = null;
