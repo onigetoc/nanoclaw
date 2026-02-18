@@ -1,4 +1,8 @@
-# {{ASSISTANT_NAME}} - Global Configuration
+# Global Configuration
+
+## First Run
+
+If `BOOTSTRAP.md` exists, that's your birth certificate. Follow it, figure out who you are, then delete it. You won't need it again.
 
 ## Context Files
 

@@ -2,7 +2,7 @@
 
 ## Introduction
 
-NanoClaw is a personal AI assistant that runs securely in containers, connecting to messaging platforms (WhatsApp, Telegram) and routing messages to AI agents. This document specifies the requirements for migrating from the Claude SDK (@anthropic-ai/claude-agent-sdk) to the OpenCode SDK (@opencode-ai/sdk) while maintaining all existing functionality.
+NanoClaw is a personal AI assistant that runs securely in containers, connecting to messaging platforms (WhatsApp, Telegram) and routing messages to AI agents. This document specifies the requirements for migrating from the Claude SDK (@anthropic-ai/opencode-sdk) to the OpenCode SDK (@opencode-ai/sdk) while maintaining all existing functionality.
 
 ## Glossary
 
@@ -24,8 +24,8 @@ NanoClaw is a personal AI assistant that runs securely in containers, connecting
 
 #### Acceptance Criteria
 
-1. THE System SHALL use @opencode-ai/sdk package instead of @anthropic-ai/claude-agent-sdk
-2. THE System SHALL remove all dependencies on @anthropic-ai/claude-agent-sdk from package.json
+1. THE System SHALL use @opencode-ai/sdk package instead of @anthropic-ai/opencode-sdk
+2. THE System SHALL remove all dependencies on @anthropic-ai/opencode-sdk from package.json
 3. THE System SHALL update all import statements to reference @opencode-ai/sdk
 4. THE System SHALL maintain compatibility with existing Node.js runtime requirements
 
@@ -168,7 +168,7 @@ NanoClaw is a personal AI assistant that runs securely in containers, connecting
 #### Acceptance Criteria
 
 1. WHEN building the container, THE System SHALL install @opencode-ai/sdk
-2. WHEN building the container, THE System SHALL remove @anthropic-ai/claude-agent-sdk
+2. WHEN building the container, THE System SHALL remove @anthropic-ai/opencode-sdk
 3. THE Container SHALL include all required dependencies for OpenCode SDK
 4. THE Container SHALL maintain existing entrypoint and startup scripts
 5. THE Container SHALL preserve all existing security constraints and isolation

@@ -40,10 +40,23 @@ import {
 } from './db.js';
 import { GroupQueue } from './group-queue.js';
 import { startIpcWatcher } from './ipc.js';
-import { formatMessages, formatOutbound, findChannel } from './router.js';
+import { formatMessages, formatOutbound, findChannel, sendDeduped } from './router.js';
 import { startSchedulerLoop } from './task-scheduler.js';
 import { NewMessage, RegisteredGroup, Channel } from './types.js';
 import { logger } from './logger.js';
+import { attemptAutoRegistration } from './auto-registration.js';
+import {
+  ensureServerHealthy,
+  startServer,
+  startHealthChecks,
+  stopServer,
+} from './opencode-server.js';
+import {
+  ensureServerHealthy,
+  startServer,
+  startHealthChecks,
+  stopServer,
+} from './opencode-server.js';
 
 // Re-export for backwards compatibility during refactor
 export { escapeXml, formatMessages } from './router.js';
@@ -121,6 +134,30 @@ export function _setRegisteredGroups(groups: Record<string, RegisteredGroup>): v
 }
 
 /**
+ * Determine if a JID represents a private/DM chat.
+ * 
+ * @param jid - The chat JID
+ * @returns true if private chat, false if group chat
+ */
+function isPrivateChat(jid: string): boolean {
+  // WhatsApp private: ends with @s.whatsapp.net
+  if (jid.endsWith('@s.whatsapp.net')) return true;
+  
+  // WhatsApp group: ends with @g.us
+  if (jid.endsWith('@g.us')) return false;
+  
+  // Telegram private: tg:positive_number
+  // Telegram group: tg:negative_number (e.g., tg:-1001234567890)
+  if (jid.startsWith('tg:')) {
+    const numericId = jid.replace(/^tg:/, '');
+    return !numericId.startsWith('-');
+  }
+  
+  // Unknown format, assume group for safety
+  return false;
+}
+
+/**
  * Process all pending messages for a group.
  * Called by the GroupQueue when it's this group's turn.
  */
@@ -184,7 +221,7 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
       const text = raw.replace(/<internal>[\s\S]*?<\/internal>/g, '').trim();
       logger.info({ group: group.name }, `Agent output: ${raw.slice(0, 200)}`);
       if (text) {
-        await channel.sendMessage(chatJid, text);
+        await sendDeduped(channel, chatJid, text);
         outputSentToUser = true;
       }
       // Only reset idle timer on actual results, not session-update markers (result: null)
@@ -224,6 +261,13 @@ async function runAgent(
 ): Promise<'success' | 'error'> {
   const isMain = group.folder === MAIN_GROUP_FOLDER;
   const sessionId = sessions[group.folder];
+
+  // Ensure OpenCode server is alive before spawning a container
+  const serverOk = await ensureServerHealthy();
+  if (!serverOk) {
+    logger.error({ group: group.name }, 'OpenCode server unreachable, skipping agent run');
+    return 'error';
+  }
 
   // Update tasks snapshot for container to read (filtered by group)
   const tasks = getAllTasks();
@@ -472,6 +516,11 @@ function ensureContainerSystemRunning(): void {
 
 async function main(): Promise<void> {
   ensureContainerSystemRunning();
+
+  // Start and supervise the OpenCode server
+  await startServer();
+  startHealthChecks();
+
   initDatabase();
   logger.info('Database initialized');
   loadState();
@@ -479,6 +528,7 @@ async function main(): Promise<void> {
   // Graceful shutdown handlers
   const shutdown = async (signal: string) => {
     logger.info({ signal }, 'Shutdown signal received');
+    await stopServer();
     await queue.shutdown(10000);
     for (const ch of channels) await ch.disconnect();
     process.exit(0);
@@ -488,7 +538,48 @@ async function main(): Promise<void> {
 
   // Channel callbacks (shared by all channels)
   const channelOpts = {
-    onMessage: (chatJid: string, msg: NewMessage) => storeMessage(msg),
+    onMessage: (chatJid: string, msg: NewMessage) => {
+      // Check if chat is registered
+      let group = registeredGroups[chatJid];
+      
+      if (!group) {
+        // Attempt auto-registration for unregistered chats
+        const chatName = msg.sender_name || chatJid;
+        // Use explicit is_private_chat field from channel, fallback to JID-based detection
+        const isPrivate = msg.is_private_chat ?? isPrivateChat(chatJid);
+        
+        const result = attemptAutoRegistration(chatJid, chatName, isPrivate);
+        
+        if (result.registered) {
+          // Reload registered groups from database
+          registeredGroups = getAllRegisteredGroups();
+          group = registeredGroups[chatJid];
+          
+          logger.info(
+            { 
+              jid: chatJid, 
+              name: chatName, 
+              isPrivate,
+              folder: 'main' 
+            },
+            'Auto-registered chat as main group',
+          );
+        } else if (result.reason === 'already_exists') {
+          logger.debug(
+            { jid: chatJid, reason: result.reason },
+            'Auto-registration skipped: main group already exists',
+          );
+        } else if (result.reason === 'not_eligible') {
+          logger.error(
+            { jid: chatJid, name: chatName, reason: result.reason },
+            'Auto-registration failed',
+          );
+        }
+      }
+      
+      // Store message (existing logic)
+      storeMessage(msg);
+    },
     onChatMetadata: (chatJid: string, timestamp: string, name?: string) =>
       storeChatMetadata(chatJid, timestamp, name),
     registeredGroups: () => registeredGroups,
@@ -525,7 +616,7 @@ async function main(): Promise<void> {
     sendMessage: (jid, text) => {
       const channel = findChannel(channels, jid);
       if (!channel) throw new Error(`No channel for JID: ${jid}`);
-      return channel.sendMessage(jid, text);
+      return sendDeduped(channel, jid, text);
     },
     registeredGroups: () => registeredGroups,
     registerGroup,

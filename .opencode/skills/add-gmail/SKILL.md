@@ -195,7 +195,7 @@ allowedTools: [
 
 Read `src/container-runner.ts` and find the `buildVolumeMounts` function.
 
-Add this mount block (after the `.claude` mount is a good location):
+Add this mount block (after the `.opencode` mount is a good location):
 
 ```typescript
 // Gmail credentials directory
@@ -429,7 +429,7 @@ export async function checkForNewEmails(): Promise<EmailMessage[]> {
 
   // This requires calling Gmail MCP's search_emails tool
   // Implementation depends on how you want to invoke MCP from Node
-  // Option 1: Use @anthropic-ai/claude-agent-sdk with just gmail MCP
+  // Option 1: Use @opencode-ai/sdk with just gmail MCP
   // Option 2: Run npx gmail MCP as subprocess and parse output
   // Option 3: Import gmail-autoauth-mcp directly
 

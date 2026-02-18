@@ -97,7 +97,7 @@ cd container/agent-runner
 npm install
 
 # Verify Claude SDK is installed
-npm list @anthropic-ai/claude-agent-sdk
+npm list @anthropic-ai/opencode-sdk
 ```
 
 ### Step 3: Restore Environment Configuration
@@ -471,7 +471,7 @@ grep -r "OpenCode" ~/nanoclaw/rollback-analysis/$(date +%Y%m%d)/ > opencode-refs
 
 **Symptoms:**
 - Container exits immediately
-- Error: "Cannot find module '@anthropic-ai/claude-agent-sdk'"
+- Error: "Cannot find module '@anthropic-ai/opencode-sdk'"
 
 **Solution:**
 ```bash
@@ -548,7 +548,7 @@ sudo systemctl restart nanoclaw
 git log -1 --oneline
 
 # Verify package.json
-cat container/agent-runner/package.json | grep -E "(opencode|claude-agent-sdk)"
+cat container/agent-runner/package.json | grep -E "(opencode|opencode-sdk)"
 
 # Check running process
 ps aux | grep node | grep nanoclaw

@@ -667,8 +667,10 @@ async function runQuery(
       const msg = promptErr?.message || String(promptErr);
       const isSessionError = msg.includes('fetch failed') || msg.includes('abort') || msg.includes('timeout') || msg.includes('404') || msg.includes('not found');
       if (isSessionError && sessionId) {
-        log(`⚠ Prompt failed (${msg}), creating fresh session and retrying...`);
+        log(`⚠ Prompt failed (${msg}), recreating client and retrying with fresh session...`);
         try {
+          // Recreate the HTTP client — the old one may have a dead connection
+          client = await createOpencodeClient(sdkEnv);
           const freshSession = await client.session.create();
           currentSessionId = freshSession.data?.id ?? freshSession.id;
           newSessionId = currentSessionId;

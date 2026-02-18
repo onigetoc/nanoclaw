@@ -70,7 +70,7 @@ export class WhatsAppChannel implements Channel {
 
       if (qr) {
         const msg =
-          'WhatsApp authentication required. Run /setup in Claude Code.';
+          'WhatsApp authentication required. Run /setup in OpenCode.';
         logger.error(msg);
         exec(
           `osascript -e 'display notification "${msg}" with title "NanoClaw" sound name "Basso"'`,
@@ -190,6 +190,7 @@ export class WhatsAppChannel implements Channel {
             timestamp,
             is_from_me: fromMe,
             is_bot_message: isBotMessage,
+            is_private_chat: chatJid.endsWith('@s.whatsapp.net'),
           });
         }
       }

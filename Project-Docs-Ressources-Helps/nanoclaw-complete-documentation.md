@@ -13,11 +13,12 @@
 3. [Architecture Générale](#architecture-générale)
 4. [Composants Principaux](#composants-principaux)
 5. [Flux de Données](#flux-de-données)
-6. [Structure des Dossiers](#structure-des-dossiers)
-7. [Configuration](#configuration)
-8. [Système de Groupes](#système-de-groupes)
-9. [Sécurité et Isolation](#sécurité-et-isolation)
-10. [Développement et Personnalisation](#développement-et-personnalisation)
+6. [Systèmes de Mémoire](#systèmes-de-mémoire)
+7. [Structure des Dossiers](#structure-des-dossiers)
+8. [Configuration](#configuration)
+9. [Système de Groupes](#système-de-groupes)
+10. [Sécurité et Isolation](#sécurité-et-isolation)
+11. [Développement et Personnalisation](#développement-et-personnalisation)
 
 ---
 
@@ -73,7 +74,7 @@ NanoClaw connecte des plateformes de messagerie (WhatsApp, Telegram) à l'OpenCo
 4. **Natif IA**
    - Pas d'assistants d'installation
    - Pas d'outils de surveillance ou de débogage
-   - Demandez simplement à Claude Code de vous aider
+   - Demandez simplement à OpenCode de vous aider
 
 ### Pourquoi NanoClaw existe
 
@@ -591,6 +592,99 @@ setInterval(async () => {
 
 ---
 
+## Systèmes de Mémoire
+
+NanoClaw utilise plusieurs systèmes de mémoire complémentaires pour stocker différents types d'informations :
+
+### 1. Base de Données SQLite (`data/nanoclaw.db`)
+
+**Objectif :** Données structurées, historique, état système
+
+**Tables :**
+- `messages` - Tous les messages échangés
+- `chats` - Liste des conversations
+- `scheduled_tasks` - Tâches programmées
+- `registered_groups` - Groupes enregistrés
+- `sessions` - Sessions actives
+- `task_run_logs` - Historique d'exécution des tâches
+- `router_state` - État interne du routeur
+
+**Avantages :** Recherche rapide, filtrage, agrégation
+
+**Usage :** Le bot interroge SQLite pour des données structurées comme "trouve tous les messages de la semaine dernière" ou "liste les tâches actives".
+
+### 2. Fichiers Markdown par Groupe (`groups/{nom}/`)
+
+**Objectif :** Contexte conversationnel, notes, mémoire narrative
+
+**Fichiers :**
+- `SOUL.md` - Philosophie et valeurs
+- `IDENTITY.md` - Personnalité et style de communication
+- `TOOLS.md` - Outils et skills disponibles
+- `AGENTS.md` - Instructions techniques
+- `ideas.md` - Notes et TODOs
+- Autres fichiers créés par le bot
+
+**Avantages :** Contexte riche, facile à éditer manuellement, lisible par l'humain
+
+**Usage :** Le bot lit ces fichiers au démarrage pour comprendre sa personnalité et ses capacités.
+
+### 3. Conversations Archivées (`groups/{nom}/conversations/`)
+
+**Objectif :** Historique complet des conversations
+
+**Contenu :**
+- Fichiers Markdown avec horodatages
+- Conversations archivées après X messages
+- Recherchables par le bot
+
+**Avantages :** Rappel du contexte des conversations passées
+
+**Usage :** Le bot peut chercher dans les conversations passées pour se souvenir de ce qui a été discuté.
+
+### 4. Sessions OpenCode (`data/sessions/{nom}/.claude/`)
+
+**Objectif :** État de la session OpenCode en cours
+
+**Contenu :**
+- Géré par le SDK OpenCode
+- Permet de reprendre une conversation
+
+**Avantages :** Continuité dans une même conversation
+
+**Usage :** Le bot reprend la session au lieu de repartir de zéro à chaque fois.
+
+### 5. Logs (`groups/{nom}/logs/*.log`)
+
+**Objectif :** Débogage, audit, dépannage
+
+**Contenu :**
+- Logs d'exécution de chaque invocation
+- Erreurs, avertissements, infos
+- Stdout/stderr du conteneur
+
+**Avantages :** Diagnostiquer les problèmes
+
+**Usage :** Tu lis les logs pour comprendre ce qui s'est passé quand quelque chose plante. Le bot ne les utilise pas directement.
+
+### Comparaison avec OpenClaw
+
+OpenClaw utilise probablement des fichiers markdown journaliers (genre `memory-2026-02-18.md`) pour garder une trace narrative de ce qui s'est passé chaque jour.
+
+NanoClaw utilise **SQLite pour les données + MD pour le contexte narratif**. C'est plus structuré mais peut-être moins "organique" qu'OpenClaw.
+
+### Résumé des Systèmes de Mémoire
+
+| Système | Type | Objectif | Accès Bot |
+|---------|------|----------|-----------|
+| SQLite | Structuré | Données interrogeables | Lecture/Écriture |
+| Fichiers MD | Narratif | Contexte & personnalité | Lecture au démarrage |
+| Conversations | Archive | Discussions passées | Recherchable |
+| Sessions | État | Conversation en cours | Géré par SDK |
+| Logs | Audit | Débogage | Lecture seule (humain) |
+
+---
+
 ## Structure des Dossiers
 
 ```
@@ -663,7 +757,7 @@ nanoclaw/
 | `data/`             | Sessions et IPC         | Monté en R/W                |
 | `docs/`             | Documentation           | Non monté                   |
 | `scripts/`          | Scripts utilitaires     | Non monté                   |
-| `.opencode/skills/` | Skills Claude Code      | Monté en R/O                |
+| `.opencode/skills/` | Skills OpenCode      | Monté en R/O                |
 
 ---
 
@@ -935,7 +1029,7 @@ import { DiscordChannel } from './channels/discord';
 channels.push(new DiscordChannel(config));
 ```
 
-### Skills Claude Code
+### Skills OpenCode
 
 Les skills sont des modules fonctionnels dans `.opencode/skills/` :
 
@@ -993,7 +1087,7 @@ NanoClaw est un assistant IA personnel qui privilégie :
 1. **La simplicité** - Code minimal, compréhensible
 2. **La sécurité** - Isolation par conteneurs OS
 3. **La personnalisation** - Modification par code, pas par configuration
-4. **L'IA-native** - Conçu pour être utilisé avec Claude Code
+4. **L'IA-native** - Conçu pour être utilisé avec OpenCode
 
 Avec environ 30 fichiers source et une architecture claire, il offre les fonctionnalités essentielles d'OpenClaw sans sa complexité, tout en maintenant des garanties de sécurité solides par l'isolation des conteneurs.
 
@@ -1428,7 +1522,7 @@ Inspiré par OpenClaw, NanoClaw a adopté une architecture multi-fichiers pour s
 | **Cible**           | Un seul utilisateur               | Multi-utilisateurs                      |
 | **Approche**        | Fork et personnalise              | Framework à configurer                  |
 | **Complexité**      | Assez petit pour comprendre       | Système complet avec abstractions       |
-| **Maintenance**     | Demande à Claude Code             | Documentation et outils                 |
+| **Maintenance**     | Demande à OpenCode             | Documentation et outils                 |
 
 ---
 
@@ -1501,7 +1595,7 @@ Inspiré par OpenClaw, NanoClaw a adopté une architecture multi-fichiers pour s
 | **Skill**            | Module de fonctionnalité documenté dans .opencode/skills/                  |
 | **Déclencheur**      | Mot-clé (@Andy) qui active l'agent dans un groupe                          |
 | **Apple Container**  | Système de conteneurs natif macOS                                          |
-| **OpenCode SDK**     | SDK pour interagir avec Claude Code                                        |
+| **OpenCode SDK**     | SDK pour interagir avec OpenCode                                        |
 | **Baileys**          | Bibliothèque WhatsApp Web pour Node.js                                     |
 | **Grammy**           | Framework Telegram Bot pour Node.js                                        |
 

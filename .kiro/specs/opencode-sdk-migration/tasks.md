@@ -7,7 +7,7 @@ This plan outlines the step-by-step migration from Claude SDK to OpenCode SDK. T
 ## Tasks
 
 - [x] 1. Update package dependencies and container configuration
-  - Update container/agent-runner/package.json to remove @anthropic-ai/claude-agent-sdk and add @opencode-ai/sdk
+  - Update container/agent-runner/package.json to remove @anthropic-ai/opencode-sdk and add @opencode-ai/sdk
   - Update container/Dockerfile to remove claude-code global install
   - Run npm install in agent-runner directory
   - Verify package-lock.json reflects correct dependencies

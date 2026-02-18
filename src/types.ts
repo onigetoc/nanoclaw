@@ -50,6 +50,7 @@ export interface NewMessage {
   timestamp: string;
   is_from_me?: boolean;
   is_bot_message?: boolean;
+  is_private_chat?: boolean; // Whether this is a private/DM chat (vs group chat)
 }
 
 export interface ScheduledTask {

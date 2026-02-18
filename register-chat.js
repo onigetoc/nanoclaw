@@ -58,9 +58,9 @@ const groupDir = path.join(process.cwd(), 'groups', groupFolder);
 fs.mkdirSync(path.join(groupDir, 'logs'), { recursive: true });
 
 // Créer le fichier AGENTS.md
-const claudeMdPath = path.join(groupDir, 'AGENTS.md');
-if (!fs.existsSync(claudeMdPath)) {
-  fs.writeFileSync(claudeMdPath, `# Memory for ${chatName}
+const agentsMdPath = path.join(groupDir, 'AGENTS.md');
+if (!fs.existsSync(agentsMdPath)) {
+  fs.writeFileSync(agentsMdPath, `# Memory for ${chatName}
 
 This is your personal chat memory. You can store information here that you want to remember across conversations.
 `);
@@ -97,6 +97,6 @@ console.log(`   JID: ${chatJid}`);
 console.log(`   Nom: ${chatName}`);
 console.log(`   Dossier: groups/${groupFolder}`);
 console.log(`\nTu peux maintenant parler au bot sur Telegram !`);
-console.log(`Envoie simplement un message (pas besoin de @Andy pour le chat principal)`);
+console.log(`Envoie simplement un message (pas besoin de trigger pour le chat principal)`);
 
 db.close();

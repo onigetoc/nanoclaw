@@ -6,7 +6,7 @@ import { EventEmitter } from 'events';
 // Mock config
 vi.mock('../config.js', () => ({
   STORE_DIR: '/tmp/nanoclaw-test-store',
-  ASSISTANT_NAME: 'Andy',
+  ASSISTANT_NAME: 'TestBot',
   ASSISTANT_HAS_OWN_NUMBER: false,
 }));
 
@@ -202,7 +202,7 @@ describe('WhatsAppChannel', () => {
       // Group messages get prefixed when flushed
       expect(fakeSocket.sendMessage).toHaveBeenCalledWith(
         'test@g.us',
-        { text: 'Andy: Queued message' },
+        { text: 'TestBot: Queued message' },
       );
     });
 
@@ -311,7 +311,7 @@ describe('WhatsAppChannel', () => {
             participant: '5551234@s.whatsapp.net',
             fromMe: false,
           },
-          message: { conversation: 'Hello Andy' },
+          message: { conversation: 'Hello TestBot' },
           pushName: 'Alice',
           messageTimestamp: Math.floor(Date.now() / 1000),
         },
@@ -325,9 +325,10 @@ describe('WhatsAppChannel', () => {
         'registered@g.us',
         expect.objectContaining({
           id: 'msg-1',
-          content: 'Hello Andy',
+          content: 'Hello TestBot',
           sender_name: 'Alice',
           is_from_me: false,
+          is_private_chat: false,
         }),
       );
     });
@@ -426,7 +427,7 @@ describe('WhatsAppChannel', () => {
 
       expect(opts.onMessage).toHaveBeenCalledWith(
         'registered@g.us',
-        expect.objectContaining({ content: 'A reply message' }),
+        expect.objectContaining({ content: 'A reply message', is_private_chat: false }),
       );
     });
 
@@ -454,7 +455,7 @@ describe('WhatsAppChannel', () => {
 
       expect(opts.onMessage).toHaveBeenCalledWith(
         'registered@g.us',
-        expect.objectContaining({ content: 'Check this photo' }),
+        expect.objectContaining({ content: 'Check this photo', is_private_chat: false }),
       );
     });
 
@@ -482,7 +483,7 @@ describe('WhatsAppChannel', () => {
 
       expect(opts.onMessage).toHaveBeenCalledWith(
         'registered@g.us',
-        expect.objectContaining({ content: 'Watch this' }),
+        expect.objectContaining({ content: 'Watch this', is_private_chat: false }),
       );
     });
 
@@ -511,7 +512,7 @@ describe('WhatsAppChannel', () => {
       // Still delivered but with empty content
       expect(opts.onMessage).toHaveBeenCalledWith(
         'registered@g.us',
-        expect.objectContaining({ content: '' }),
+        expect.objectContaining({ content: '', is_private_chat: false }),
       );
     });
 
@@ -537,7 +538,7 @@ describe('WhatsAppChannel', () => {
 
       expect(opts.onMessage).toHaveBeenCalledWith(
         'registered@g.us',
-        expect.objectContaining({ sender_name: '5551234' }),
+        expect.objectContaining({ sender_name: '5551234', is_private_chat: false }),
       );
     });
   });
@@ -646,7 +647,7 @@ describe('WhatsAppChannel', () => {
 
       await channel.sendMessage('test@g.us', 'Hello');
       // Group messages get prefixed with assistant name
-      expect(fakeSocket.sendMessage).toHaveBeenCalledWith('test@g.us', { text: 'Andy: Hello' });
+      expect(fakeSocket.sendMessage).toHaveBeenCalledWith('test@g.us', { text: 'TestBot: Hello' });
     });
 
     it('prefixes direct chat messages on shared number', async () => {
@@ -657,7 +658,7 @@ describe('WhatsAppChannel', () => {
 
       await channel.sendMessage('123@s.whatsapp.net', 'Hello');
       // Shared number: DMs also get prefixed (needed for self-chat distinction)
-      expect(fakeSocket.sendMessage).toHaveBeenCalledWith('123@s.whatsapp.net', { text: 'Andy: Hello' });
+      expect(fakeSocket.sendMessage).toHaveBeenCalledWith('123@s.whatsapp.net', { text: 'TestBot: Hello' });
     });
 
     it('queues message when disconnected', async () => {
@@ -701,9 +702,9 @@ describe('WhatsAppChannel', () => {
 
       expect(fakeSocket.sendMessage).toHaveBeenCalledTimes(3);
       // Group messages get prefixed
-      expect(fakeSocket.sendMessage).toHaveBeenNthCalledWith(1, 'test@g.us', { text: 'Andy: First' });
-      expect(fakeSocket.sendMessage).toHaveBeenNthCalledWith(2, 'test@g.us', { text: 'Andy: Second' });
-      expect(fakeSocket.sendMessage).toHaveBeenNthCalledWith(3, 'test@g.us', { text: 'Andy: Third' });
+      expect(fakeSocket.sendMessage).toHaveBeenNthCalledWith(1, 'test@g.us', { text: 'TestBot: First' });
+      expect(fakeSocket.sendMessage).toHaveBeenNthCalledWith(2, 'test@g.us', { text: 'TestBot: Second' });
+      expect(fakeSocket.sendMessage).toHaveBeenNthCalledWith(3, 'test@g.us', { text: 'TestBot: Third' });
     });
   });
 

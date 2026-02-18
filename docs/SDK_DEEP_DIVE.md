@@ -1,6 +1,6 @@
-# Claude Agent SDK Deep Dive
+# OpenCode SDK Deep Dive
 
-Findings from reverse-engineering `@anthropic-ai/claude-agent-sdk` v0.2.29–0.2.34 to understand how `query()` works, why agent teams subagents were being killed, and how to fix it. Supplemented with official SDK reference docs.
+Findings from reverse-engineering `@anthropic-ai/opencode-sdk` v0.2.29–0.2.34 to understand how `query()` works, why agent teams subagents were being killed, and how to fix it. Supplemented with official SDK reference docs.
 
 ## Architecture
 
@@ -8,7 +8,7 @@ Findings from reverse-engineering `@anthropic-ai/claude-agent-sdk` v0.2.29–0.2
 Agent Runner (our code)
   └── query() → SDK (sdk.mjs)
         └── spawns CLI subprocess (cli.js)
-              └── Claude API calls, tool execution
+              └── opencode API calls, tool execution
               └── Task tool → spawns subagent subprocesses
 ```
 
@@ -44,7 +44,7 @@ Inside the CLI, the agentic loop is a **recursive async generator called `EZ()`*
 EZ({ messages, systemPrompt, canUseTool, maxTurns, turnCount=1, ... })
 ```
 
-Each invocation = one API call to Claude (one "turn").
+Each invocation = one API call to opencode (one "turn").
 
 ### Flow per turn:
 
@@ -64,7 +64,7 @@ Full `Options` type from the official docs:
 | Property | Type | Default | Description |
 |----------|------|---------|-------------|
 | `abortController` | `AbortController` | `new AbortController()` | Controller for cancelling operations |
-| `additionalDirectories` | `string[]` | `[]` | Additional directories Claude can access |
+| `additionalDirectories` | `string[]` | `[]` | Additional directories opencode can access |
 | `agents` | `Record<string, AgentDefinition>` | `undefined` | Programmatically define subagents (not agent teams — no orchestration) |
 | `allowDangerouslySkipPermissions` | `boolean` | `false` | Required when using `permissionMode: 'bypassPermissions'` |
 | `allowedTools` | `string[]` | All tools | List of allowed tool names |
@@ -84,9 +84,9 @@ Full `Options` type from the official docs:
 | `maxThinkingTokens` | `number` | `undefined` | Maximum tokens for thinking process |
 | `maxTurns` | `number` | `undefined` | Maximum conversation turns |
 | `mcpServers` | `Record<string, McpServerConfig>` | `{}` | MCP server configurations |
-| `model` | `string` | Default from CLI | Claude model to use |
+| `model` | `string` | Default from CLI | opencode model to use |
 | `outputFormat` | `{ type: 'json_schema', schema: JSONSchema }` | `undefined` | Structured output format |
-| `pathToClaudeCodeExecutable` | `string` | Uses built-in | Path to Claude Code executable |
+| `pathToopencodeCodeExecutable` | `string` | Uses built-in | Path to OpenCode executable |
 | `permissionMode` | `PermissionMode` | `'default'` | Permission mode |
 | `plugins` | `SdkPluginConfig[]` | `[]` | Load custom plugins from local paths |
 | `resume` | `string` | `undefined` | Session ID to resume |
@@ -94,8 +94,8 @@ Full `Options` type from the official docs:
 | `sandbox` | `SandboxSettings` | `undefined` | Sandbox behavior configuration |
 | `settingSources` | `SettingSource[]` | `[]` (none) | Which filesystem settings to load. Must include `'project'` to load AGENTS.md |
 | `stderr` | `(data: string) => void` | `undefined` | Callback for stderr output |
-| `systemPrompt` | `string \| { type: 'preset'; preset: 'claude_code'; append?: string }` | `undefined` | System prompt. Use preset to get Claude Code's prompt, with optional `append` |
-| `tools` | `string[] \| { type: 'preset'; preset: 'claude_code' }` | `undefined` | Tool configuration |
+| `systemPrompt` | `string \| { type: 'preset'; preset: 'opencode_code'; append?: string }` | `undefined` | System prompt. Use preset to get OpenCode's prompt, with optional `append` |
+| `tools` | `string[] \| { type: 'preset'; preset: 'opencode_code' }` | `undefined` | Tool configuration |
 
 ### PermissionMode
 
@@ -107,9 +107,9 @@ type PermissionMode = 'default' | 'acceptEdits' | 'bypassPermissions' | 'plan';
 
 ```typescript
 type SettingSource = 'user' | 'project' | 'local';
-// 'user'    → ~/.claude/settings.json
-// 'project' → .claude/settings.json (version controlled)
-// 'local'   → .claude/settings.local.json (gitignored)
+// 'user'    → ~/.opencode/settings.json
+// 'project' → .opencode/settings.json (version controlled)
+// 'local'   → .opencode/settings.local.json (gitignored)
 ```
 
 When omitted, SDK loads NO filesystem settings (isolation by default). Precedence: local > project > user. Programmatic options always override filesystem settings.
@@ -172,7 +172,7 @@ type PermissionResult =
 | `system` | `hook_progress` | Hook progress output |
 | `system` | `hook_response` | Hook completed |
 | `system` | `files_persisted` | Files saved |
-| `assistant` | — | Claude's response (text + tool calls) |
+| `assistant` | — | opencode's response (text + tool calls) |
 | `user` | — | User message (internal) |
 | `user` (replay) | — | Replayed user message on resume |
 | `result` | `success` / `error_*` | Final result of a prompt processing round |
@@ -262,7 +262,7 @@ type SDKSystemMessage = {
 
 **1. No tool_use blocks in response (THE PRIMARY CASE)**
 
-Claude responded with text only — it decided it has completed the task. The API's `stop_reason` will be `"end_turn"`. The SDK does NOT make this decision — it's entirely driven by Claude's model output.
+opencode responded with text only — it decided it has completed the task. The API's `stop_reason` will be `"end_turn"`. The SDK does NOT make this decision — it's entirely driven by opencode's model output.
 
 **2. Max turns exceeded** — Results in `SDKResultError` with `subtype: "error_max_turns"`.
 
@@ -405,7 +405,7 @@ With the async iterable fix (`isSingleUserTurn = false`), stdin stays open so th
 
 ```
 1. system/init          → session initialized
-2. assistant/user       → Claude reasoning, tool calls, tool results
+2. assistant/user       → opencode reasoning, tool calls, tool results
 3. ...                  → more assistant/user turns (spawning subagents, etc.)
 4. result #1            → lead agent's first response (capture)
 5. task_notification(s) → background agents complete/fail/stop

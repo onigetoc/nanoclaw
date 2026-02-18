@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  My personal Claude assistant that runs securely in containers. Lightweight and built to be understood and customized for your own needs.
+  My personal OpenCode assistant that runs securely in containers. Lightweight and built to be understood and customized for your own needs.
 </p>
 
 <p align="center">
@@ -12,7 +12,7 @@
   <a href="repo-tokens"><img src="repo-tokens/badge.svg" alt="34.9k tokens, 17% of context window" valign="middle"></a>
 </p>
 
-**New:** First AI assistant to support [Agent Swarms](https://code.claude.com/docs/en/agent-teams). Spin up teams of agents that collaborate in your chat.
+**New:** First AI assistant to support Agent Swarms. Spin up teams of agents that collaborate in your chat.
 
 ## Why I Built This
 
@@ -25,37 +25,79 @@ NanoClaw gives you the same core functionality in a codebase you can understand 
 ```bash
 git clone https://github.com/gavrielc/nanoclaw.git
 cd nanoclaw
-claude
+opencode
 ```
 
-Then run `/setup`. Claude Code handles everything: dependencies, authentication, container setup, service configuration.
+Then run `/setup`. OpenCode handles everything: dependencies, authentication, container setup, service configuration.
+
+**Auto-Registration**: After setup, just send your first message to the bot on any channel (WhatsApp, Telegram). That chat will automatically be registered as your 'main' group—no manual JID entry or configuration scripts needed. The bot responds immediately.
 
 ## Philosophy
 
-**Small enough to understand.** One process, a few source files. No microservices, no message queues, no abstraction layers. Have Claude Code walk you through it.
+**Small enough to understand.** One process, a few source files. No microservices, no message queues, no abstraction layers. Have OpenCode walk you through it.
 
 **Secure by isolation.** Agents run in Linux containers (Apple Container on macOS, or Docker). They can only see what's explicitly mounted. Bash access is safe because commands run inside the container, not on your host.
 
-**Built for one user.** This isn't a framework. It's working software that fits my exact needs. You fork it and have Claude Code make it match your exact needs.
+**Built for one user.** This isn't a framework. It's working software that fits my exact needs. You fork it and have OpenCode make it match your exact needs.
 
 **Customization = code changes.** No configuration sprawl. Want different behavior? Modify the code. The codebase is small enough that this is safe.
 
-**AI-native.** No installation wizard; Claude Code guides setup. No monitoring dashboard; ask Claude what's happening. No debugging tools; describe the problem, Claude fixes it.
+**AI-native.** No installation wizard; OpenCode guides setup. No monitoring dashboard; ask OpenCode what's happening. No debugging tools; describe the problem, OpenCode fixes it.
 
-**Skills over features.** Contributors shouldn't add features (e.g. support for Telegram) to the codebase. Instead, they contribute [claude code skills](https://code.claude.com/docs/en/skills) like `/add-telegram` that transform your fork. You end up with clean code that does exactly what you need.
+**Skills over features.** Contributors shouldn't add features (e.g. support for Telegram) to the codebase. Instead, they contribute OpenCode skills like `/add-telegram` that transform your fork. You end up with clean code that does exactly what you need.
 
 **Best harness, best model.** This runs on OpenCode SDK, which provides a powerful agent execution environment. The harness matters. A bad harness makes even smart models seem dumb, a good harness gives them superpowers. OpenCode SDK is designed to give agents the tools and context they need to be effective.
 
 ## What It Supports
 
-- **WhatsApp I/O** - Message Claude from your phone
+- **WhatsApp I/O** - Message OpenCode from your phone
 - **Isolated group context** - Each group has its own `AGENTS.md` memory, isolated filesystem, and runs in its own container sandbox with only that filesystem mounted
 - **Main channel** - Your private channel (self-chat) for admin control; every other group is completely isolated
-- **Scheduled tasks** - Recurring jobs that run Claude and can message you back
+- **Scheduled tasks** - Recurring jobs that run OpenCode and can message you back
 - **Web access** - Search and fetch content
 - **Container isolation** - Agents sandboxed in Apple Container (macOS) or Docker (macOS/Linux)
 - **Agent Swarms** - Spin up teams of specialized agents that collaborate on complex tasks
 - **Optional integrations** - Add Gmail (`/add-gmail`) and more via skills
+
+## Setup and Registration
+
+### First-Time Setup
+
+1. Run `/setup` in OpenCode to configure dependencies, authentication, and containers
+2. Add your channel credentials to `.env`:
+   - For WhatsApp: Authentication happens automatically on first run
+   - For Telegram: Add `TELEGRAM_BOT_TOKEN` from @BotFather
+3. Start NanoClaw: `npm start` (automatically checks and installs OpenCode if needed)
+4. Send your first message to the bot on any channel
+
+**That's it.** Your first message automatically registers that chat as your 'main' group. No manual JID entry, no configuration scripts. The bot responds immediately and you're ready to go.
+
+**Note:** The `npm start` command now automatically:
+- Checks if npm is installed
+- Checks if OpenCode is installed (installs via npm if missing)
+- Checks if OpenCode server is running (starts it if not)
+- Runs the auto-setup script
+- Starts NanoClaw
+
+If you prefer to manage OpenCode manually, use `npm run start:simple` instead.
+
+### How Auto-Registration Works
+
+- The first chat to send a message becomes your 'main' group
+- Works with private chats (DMs) or group chats
+- Creates the necessary folder structure (`groups/main/`) automatically
+- Sets up memory files (`AGENTS.md`) for context persistence
+- Main group doesn't require trigger words (messages are processed directly)
+
+### Manual Registration (Optional)
+
+For advanced users who want to register additional groups or have specific setup needs, manual registration is still available:
+
+- Use the `register-chat.js` script with a specific JID
+- Send IPC commands for programmatic registration
+- See existing documentation for manual registration workflows
+
+The auto-registration feature is designed for simplicity, but all manual controls remain available for power users.
 
 ## Usage
 
@@ -76,7 +118,7 @@ From the main channel (your self-chat), you can manage groups and tasks:
 
 ## Customizing
 
-There are no configuration files to learn. Just tell Claude Code what you want:
+There are no configuration files to learn. Just tell OpenCode what you want:
 
 - "Change the trigger word to @Bob"
 - "Remember in the future to make responses shorter and more direct"
@@ -85,13 +127,13 @@ There are no configuration files to learn. Just tell Claude Code what you want:
 
 Or run `/customize` for guided changes.
 
-The codebase is small enough that Claude can safely modify it.
+The codebase is small enough that OpenCode can safely modify it.
 
 ## Contributing
 
 **Don't add features. Add skills.**
 
-If you want to add Telegram support, don't create a PR that adds Telegram alongside WhatsApp. Instead, contribute a skill file (`.claude/skills/add-telegram/SKILL.md`) that teaches Claude Code how to transform a NanoClaw installation to use Telegram.
+If you want to add Telegram support, don't create a PR that adds Telegram alongside WhatsApp. Instead, contribute a skill file (`.opencode/skills/add-telegram/SKILL.md`) that teaches OpenCode how to transform a NanoClaw installation to use Telegram.
 
 Users then run `/add-telegram` on their fork and get clean code that does exactly what they need, not a bloated system trying to support every use case.
 
@@ -108,33 +150,52 @@ Skills we'd love to see:
 - `/setup-windows` - Windows via WSL2 + Docker
 
 **Session Management**
-- `/add-clear` - Add a `/clear` command that compacts the conversation (summarizes context while preserving critical information in the same session). Requires figuring out how to trigger compaction programmatically via the Claude Agent SDK.
+- `/add-clear` - Add a `/clear` command that compacts the conversation (summarizes context while preserving critical information in the same session). Requires figuring out how to trigger compaction programmatically via the OpenCode SDK.
 
 ## Requirements
 
 - macOS or Linux
 - Node.js 20+
-- [Claude Code](https://claude.ai/download)
+- [OpenCode](https://opencode.ai/download)
 - [Apple Container](https://github.com/apple/container) (macOS) or [Docker](https://docker.com/products/docker-desktop) (macOS/Linux)
+
+**Note on OpenCode:** NanoClaw uses the OpenCode SDK for agent execution. The `npm start` command automatically installs and starts OpenCode if it's not already running. You can also install it manually:
+
+```bash
+# Via npm (recommended)
+npm install -g opencode-ai
+
+# Via curl
+curl -fsSL https://opencode.ai/install | bash
+
+# Via Homebrew (macOS/Linux)
+brew install anomalyco/tap/opencode
+```
+
+After installation, configure your AI provider credentials:
+```bash
+opencode auth login
+```
 
 ## Architecture
 
 ```
-WhatsApp (baileys) --> SQLite --> Polling loop --> Container (OpenCode SDK) --> Response
+WhatsApp/Telegram --> SQLite --> Polling loop --> Container (OpenCode SDK) --> Response
 ```
 
-Single Node.js process. Agents execute in isolated Linux containers with mounted directories. Per-group message queue with concurrency control. IPC via filesystem.
+Single Node.js process. Agents execute in isolated Linux containers with mounted directories. Per-group message queue with concurrency control. IPC via filesystem for task scheduling and inter-agent communication.
 
 Key files:
-- `src/index.ts` - Orchestrator: state, message loop, agent invocation
-- `src/channels/whatsapp.ts` - WhatsApp connection, auth, send/receive
+- `src/index.ts` - Main orchestrator: state management, message loop, agent invocation
+- `src/channels/whatsapp.ts` - WhatsApp channel implementation
+- `src/channels/telegram.ts` - Telegram channel implementation (optional)
 - `src/ipc.ts` - IPC watcher and task processing
 - `src/router.ts` - Message formatting and outbound routing
 - `src/group-queue.ts` - Per-group queue with global concurrency limit
-- `src/container-runner.ts` - Spawns streaming agent containers
+- `src/container-runner.ts` - Spawns streaming agent containers with OpenCode SDK
 - `src/task-scheduler.ts` - Runs scheduled tasks
 - `src/db.ts` - SQLite operations (messages, groups, sessions, state)
-- `groups/*/AGENTS.md` - Per-group memory
+- `groups/*/AGENTS.md` - Per-group memory and context
 
 ## Environment Variables
 
@@ -154,37 +215,16 @@ NanoClaw uses OpenCode SDK which reads AI provider credentials from your system 
 opencode auth login
 
 # This will prompt you to add API keys for providers like:
-# - Anthropic (Claude)
+# - Anthropic (Claude/OpenAI/etc)
 # - Google (Gemini)
 # - OpenAI (GPT)
 # - Groq (Llama)
 ```
 
+**Note on Chat Registration:**
+After configuring your environment and starting NanoClaw, simply send your first message to the bot. That chat will automatically be registered as your 'main' group—no manual JID entry required.
+
 See `.env.example` for a template configuration file.
-
-## Migration from Claude SDK
-
-If you're upgrading from a previous version that used Claude SDK:
-
-1. **Automatic Migration**: The OpenCode SDK migration is backward compatible. Your existing sessions, groups, and configuration will continue to work without changes.
-
-2. **No Database Changes**: The database schema remains unchanged. All existing session IDs, messages, and tasks are preserved.
-
-3. **Container Rebuild**: After pulling the latest code, rebuild your container:
-   ```bash
-   ./container/build.sh
-   ```
-
-4. **Restart Service**: Restart the NanoClaw service to use the new SDK:
-   ```bash
-   # macOS
-   launchctl kickstart -k gui/$(id -u)/com.nanoclaw
-   
-   # Linux (systemd)
-   systemctl --user restart nanoclaw
-   ```
-
-5. **Verify**: Send a test message to confirm everything works. Your conversation history and context are preserved.
 
 ## FAQ
 
@@ -206,15 +246,15 @@ Agents run in containers, not behind application-level permission checks. They c
 
 **Why no configuration files?**
 
-We don't want configuration sprawl. Every user should customize it to so that the code matches exactly what they want rather than configuring a generic system. If you like having config files, tell Claude to add them.
+We don't want configuration sprawl. Every user should customize it to so that the code matches exactly what they want rather than configuring a generic system. If you like having config files, tell OpenCode to add them.
 
 **How do I debug issues?**
 
-Ask Claude Code. "Why isn't the scheduler running?" "What's in the recent logs?" "Why did this message not get a response?" That's the AI-native approach.
+Ask OpenCode. "Why isn't the scheduler running?" "What's in the recent logs?" "Why did this message not get a response?" That's the AI-native approach.
 
 **Why isn't the setup working for me?**
 
-I don't know. Run `claude`, then run `/debug`. If claude finds an issue that is likely affecting other users, open a PR to modify the setup SKILL.md.
+I don't know. Run `opencode`, then run `/debug`. If OpenCode finds an issue that is likely affecting other users, open a PR to modify the setup SKILL.md.
 
 **What changes will be accepted into the codebase?**
 

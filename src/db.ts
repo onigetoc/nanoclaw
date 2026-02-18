@@ -549,6 +549,19 @@ export function getAllRegisteredGroups(): Record<string, RegisteredGroup> {
   return result;
 }
 
+/**
+ * Check if a group with the specified folder name exists.
+ * 
+ * @param folder - The folder name to check (e.g., 'main')
+ * @returns true if a group with this folder exists, false otherwise
+ */
+export function hasGroupWithFolder(folder: string): boolean {
+  const row = db
+    .prepare('SELECT 1 FROM registered_groups WHERE folder = ? LIMIT 1')
+    .get(folder) as { 1: number } | undefined;
+  return row !== undefined;
+}
+
 // --- JSON migration ---
 
 function migrateJsonState(): void {

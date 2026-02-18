@@ -1,4 +1,4 @@
-# {{ASSISTANT_NAME}} - Main Channel Configuration
+# Main Channel Configuration
 
 ## Context Files
 

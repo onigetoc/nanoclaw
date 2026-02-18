@@ -157,7 +157,7 @@ case "$METHOD" in
       const qrData = fs.readFileSync('store/qr-data.txt', 'utf8');
       QR.toString(qrData, { type: 'svg' }, (err, svg) => {
         if (err) process.exit(1);
-        const template = fs.readFileSync('.claude/skills/setup/scripts/qr-auth.html', 'utf8');
+        const template = fs.readFileSync('.opencode/skills/setup/scripts/qr-auth.html', 'utf8');
         fs.writeFileSync('store/qr-auth.html', template.replace('{{QR_SVG}}', svg));
       });
     " >> "$LOG_FILE" 2>&1

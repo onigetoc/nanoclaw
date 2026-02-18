@@ -185,7 +185,7 @@ Update references in documentation files:
 
 - macOS or Linux
 - Node.js 20+
-- [Claude Code](https://claude.ai/download)
+- [OpenCode](https://opencode.ai/download)
 - [Docker](https://docker.com/products/docker-desktop)
 ```
 
@@ -205,7 +205,7 @@ Yes. NanoClaw uses Docker, which works on both macOS and Linux. Just install Doc
 
 ## 5. Update Skills
 
-### 5a. Update `.claude/skills/setup/SKILL.md`
+### 5a. Update `.opencode/skills/setup/SKILL.md`
 
 Replace Section 2 "Install Apple Container" with Docker installation:
 
@@ -254,7 +254,7 @@ echo '{}' | docker run -i --entrypoint /bin/echo nanoclaw-agent:latest "Containe
 
 Update troubleshooting section to reference Docker commands.
 
-### 5b. Update `.claude/skills/debug/SKILL.md`
+### 5b. Update `.opencode/skills/debug/SKILL.md`
 
 Replace all `container` commands with `docker` equivalents:
 
@@ -358,5 +358,5 @@ Check directory permissions on the host. The container runs as uid 1000.
 | `README.md` | Requirements, FAQ |
 | `docs/REQUIREMENTS.md` | Architecture references |
 | `docs/SPEC.md` | Architecture diagram, tech stack |
-| `.claude/skills/setup/SKILL.md` | Installation instructions |
-| `.claude/skills/debug/SKILL.md` | Debug commands |
+| `.opencode/skills/setup/SKILL.md` | Installation instructions |
+| `.opencode/skills/debug/SKILL.md` | Debug commands |

@@ -40,3 +40,5 @@ groups/**/AGENTS.md
 .vscode/
 
 agents-sdk-docs
+.transcription.config.json
+.vision.config.json

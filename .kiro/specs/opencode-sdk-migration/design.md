@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document describes the technical design for migrating NanoClaw from the Claude SDK (@anthropic-ai/claude-agent-sdk) to the OpenCode SDK (@opencode-ai/sdk). The migration maintains all existing functionality while adapting to OpenCode's session-based API, streaming event system, and configuration model.
+This document describes the technical design for migrating NanoClaw from the Claude SDK (@anthropic-ai/opencode-sdk) to the OpenCode SDK (@opencode-ai/sdk). The migration maintains all existing functionality while adapting to OpenCode's session-based API, streaming event system, and configuration model.
 
 The migration affects three primary areas:
 1. **Agent Runner** (container/agent-runner/src/index.ts) - Core SDK integration
@@ -26,7 +26,7 @@ The migration affects three primary areas:
 │              Container (agent-runner/)                       │
 │  ┌──────────────────────────────────────────────────────┐  │
 │  │  Agent Runner (index.ts)                             │  │
-│  │  • Uses query() from @anthropic-ai/claude-agent-sdk  │  │
+│  │  • Uses query() from @anthropic-ai/opencode-sdk  │  │
 │  │  • Streams messages via AsyncIterable                │  │
 │  │  • Registers MCP server via mcpServers config        │  │
 │  │  • Handles hooks (PreCompact, PreToolUse)            │  │
@@ -75,7 +75,7 @@ The migration affects three primary areas:
 
 **Current Implementation:**
 ```typescript
-import { query } from '@anthropic-ai/claude-agent-sdk';
+import { query } from '@anthropic-ai/opencode-sdk';
 
 // No explicit client initialization - query() is a standalone function
 ```
@@ -474,7 +474,7 @@ User Message → Container Runner → Agent Runner
 
 ### Phase 1: Package Migration
 1. Update container/agent-runner/package.json
-   - Remove @anthropic-ai/claude-agent-sdk
+   - Remove @anthropic-ai/opencode-sdk
    - Add @opencode-ai/sdk
 2. Update container/Dockerfile
    - Remove claude-code global install
