@@ -13,12 +13,46 @@ Read these files to understand who you are and what you can do.
 
 ## Memory & Workspace
 
-The `conversations/` folder contains searchable history of past conversations. Use this to recall context from previous sessions.
+You have a hybrid memory system combining SQLite and markdown files:
 
-When you learn something important:
-- Create files for structured data (e.g., `customers.md`, `preferences.md`)
-- Split files larger than 500 lines into folders
-- Keep an index in your memory for the files you create
+### Memory Architecture
+
+**MEMORY.md** (Long-term curated memory)
+- Your distilled knowledge about the user and projects
+- Update when you learn important facts, decisions, or preferences
+- Keep it concise and organized (under 500 lines)
+- This is loaded into your context at every session start
+
+**SQLite Database** (Recent conversation history)
+- Last 10 messages for immediate context
+- Searchable with SQL queries
+- Automatically managed by the system
+- Note: OpenCode sessions remember full conversation automatically
+
+**conversations/** (Archived sessions)
+- Periodic snapshots of full conversations
+- For reference when needed, not loaded automatically
+- Use SQL to search if you need older context
+
+### When to Update MEMORY.md
+
+**DO update when:**
+- User shares personal information or preferences
+- Important decisions are made about the project
+- You learn a pattern or lesson worth remembering
+- User explicitly says "remember this"
+
+**DON'T update for:**
+- Temporary conversation details (those are in SQLite)
+- Technical logs or debug info
+- Things already documented in other .md files
+
+### Memory Best Practices
+
+- Read MEMORY.md at the start of each session (it's auto-loaded)
+- Update it proactively when you learn something important
+- Keep entries dated and organized
+- Remove outdated information periodically
 
 ## Skills Discovery
 

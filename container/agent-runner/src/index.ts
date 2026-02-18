@@ -526,6 +526,67 @@ async function runQuery(
     log(`Loaded global AGENTS.md (${globalAgentsMd.length} chars)`);
   }
 
+  // Load MEMORY.md for long-term context (main group only)
+  let memoryContext: string | undefined;
+  if (containerInput.isMain) {
+    const memoryPath = path.join(groupDir, 'MEMORY.md');
+    if (fs.existsSync(memoryPath)) {
+      memoryContext = fs.readFileSync(memoryPath, 'utf-8');
+      log(`Loaded MEMORY.md (${memoryContext.length} chars)`);
+    } else {
+      log('MEMORY.md not found - will be created when needed');
+    }
+  }
+
+  // Load recent conversation history from SQLite (last 10 messages)
+  // Note: OpenCode sessions maintain full conversation memory automatically.
+  // These messages serve as initial context for new sessions or after crashes.
+  let conversationContext: string | undefined;
+  try {
+    // Import better-sqlite3 dynamically to access the database
+    const Database = (await import('better-sqlite3')).default;
+    const dbInstance = new Database(dbPath, { readonly: true });
+    
+    const recentMessages = dbInstance.prepare(`
+      SELECT sender_name, content, timestamp
+      FROM messages
+      WHERE chat_jid = ?
+        AND is_bot_message = 0
+        AND content NOT LIKE 'Andy:%'
+      ORDER BY timestamp DESC
+      LIMIT 10
+    `).all(containerInput.chatJid) as Array<{
+      sender_name: string;
+      content: string;
+      timestamp: string;
+    }>;
+    
+    dbInstance.close();
+    
+    if (recentMessages.length > 0) {
+      // Reverse to get chronological order (oldest first)
+      recentMessages.reverse();
+      
+      const formattedMessages = recentMessages.map(msg => {
+        const date = new Date(msg.timestamp);
+        const timeStr = date.toLocaleString('en-US', {
+          month: 'short',
+          day: 'numeric',
+          hour: 'numeric',
+          minute: '2-digit',
+          hour12: true
+        });
+        return `[${timeStr}] ${msg.sender_name}: ${msg.content}`;
+      }).join('\n');
+      
+      conversationContext = `## Recent Conversation History\n\n${formattedMessages}`;
+      log(`Loaded ${recentMessages.length} recent messages from SQLite`);
+    }
+  } catch (err) {
+    log(`Failed to load conversation history: ${err instanceof Error ? err.message : String(err)}`);
+    // Non-critical - continue without conversation history
+  }
+
   // Generate platform-aware environment context for the agent.
   // This replaces hardcoded /workspace/ paths in AGENTS.md files,
   // making NanoClaw work on Windows, Linux, and macOS without templates.
@@ -558,7 +619,12 @@ async function runQuery(
   ].join('\n');
 
   // Requirement 9.4: Append both to system prompt
-  const systemAppend = [globalAgentsMd, envContext].filter(Boolean).join('\n\n');
+  const systemAppend = [
+    globalAgentsMd,
+    memoryContext,
+    conversationContext,
+    envContext
+  ].filter(Boolean).join('\n\n');
   
   // Requirement 9.1, 9.5: Pass system prompt to OpenCode SDK session configuration
   // Use session.prompt with noReply:true to inject context without triggering AI response

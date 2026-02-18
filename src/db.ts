@@ -297,6 +297,36 @@ export function getMessagesSince(
     .all(chatJid, sinceTimestamp, `${botPrefix}:%`) as NewMessage[];
 }
 
+/**
+ * Get recent messages for context loading.
+ * Returns the last N messages from a chat, excluding bot messages.
+ * Used to provide conversation history context to the agent.
+ * 
+ * Note: Reduced to 10 messages (from 50) because OpenCode sessions
+ * maintain full conversation memory automatically. These messages
+ * serve only as initial context for new sessions or after crashes.
+ */
+export function getRecentMessages(
+  chatJid: string,
+  limit: number,
+  botPrefix: string,
+): NewMessage[] {
+  const sql = `
+    SELECT id, chat_jid, sender, sender_name, content, timestamp
+    FROM messages
+    WHERE chat_jid = ?
+      AND is_bot_message = 0 AND content NOT LIKE ?
+    ORDER BY timestamp DESC
+    LIMIT ?
+  `;
+  const messages = db
+    .prepare(sql)
+    .all(chatJid, `${botPrefix}:%`, limit) as NewMessage[];
+  
+  // Reverse to get chronological order (oldest first)
+  return messages.reverse();
+}
+
 export function createTask(
   task: Omit<ScheduledTask, 'last_run' | 'last_result'>,
 ): void {
