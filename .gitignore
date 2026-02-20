@@ -9,24 +9,12 @@ store/
 data/
 logs/
 
-# Groups - only track base structure and specific AGENTS.md files
-groups/*
-!groups/main/
-!groups/global/
-groups/main/*
-groups/global/*
-!groups/main/AGENTS.md
-!groups/global/AGENTS.md
+# Groups - ignore all runtime groups, keep only templates
+groups/*/
 
-# Generated context files (from templates)
-groups/**/SOUL.md
-groups/**/IDENTITY.md
-groups/**/AGENTS.md
-# Keep templates and TOOLS.md
-!groups/**/*.template.md
-!groups/**/TOOLS.md
-!groups/**/README.md
-!groups/**/TEMPLATES-README.md
+# But keep templates and documentation
+!groups/templates/
+!groups/TEMPLATES-README.md
 
 # Secrets
 *.keys.json

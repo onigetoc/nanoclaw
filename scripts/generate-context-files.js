@@ -38,7 +38,7 @@ function loadEnv() {
   return env;
 }
 
-// Find all .template.md files recursively
+// Find all .template.md and .tpl.md files recursively
 function findTemplateFiles(dir) {
   const templates = [];
   
@@ -53,7 +53,7 @@ function findTemplateFiles(dir) {
         if (!entry.name.startsWith('.') && entry.name !== 'node_modules') {
           scan(fullPath);
         }
-      } else if (entry.name.endsWith('.template.md')) {
+      } else if (entry.name.endsWith('.template.md') || entry.name.endsWith('.tpl.md')) {
         templates.push(fullPath);
       }
     }
@@ -74,8 +74,15 @@ function processTemplate(templatePath, variables) {
     processed = processed.replace(pattern, value);
   }
   
-  // Generate output path (remove .template)
-  const outputPath = templatePath.replace('.template.md', '.md');
+  // Generate output path (remove .template or .tpl)
+  let outputPath;
+  if (templatePath.endsWith('.template.md')) {
+    outputPath = templatePath.replace('.template.md', '.md');
+  } else if (templatePath.endsWith('.tpl.md')) {
+    outputPath = templatePath.replace('.tpl.md', '.md');
+  } else {
+    outputPath = templatePath;
+  }
   
   // Write the processed file
   fs.writeFileSync(outputPath, processed, 'utf-8');
