@@ -8,11 +8,15 @@ import * as path from 'path';
 import * as os from 'os';
 import { AudioConfig, AudioTranscriptionResult, TranscriptionError } from './types.js';
 import { GroqWhisperProvider } from './providers/groq.js';
+import { OpenAIWhisperProvider } from './providers/openai.js';
+import { LocalWhisperProvider } from './providers/local.js';
 import { logger } from '../logger.js';
 
 export class TranscriptionManager {
   private config: AudioConfig;
   private groqProvider?: GroqWhisperProvider;
+  private openaiProvider?: OpenAIWhisperProvider;
+  private localProvider?: LocalWhisperProvider;
 
   constructor(config: AudioConfig) {
     this.config = config;
@@ -23,6 +27,22 @@ export class TranscriptionManager {
         apiKey: config.groq.apiKey,
         model: config.groq.model,
         baseURL: config.groq.baseURL,
+      });
+    }
+
+    // Initialize OpenAI provider if configured
+    if (config.openai?.apiKey) {
+      this.openaiProvider = new OpenAIWhisperProvider({
+        apiKey: config.openai.apiKey,
+        model: config.openai.model,
+      });
+    }
+
+    // Initialize Local provider if configured
+    if (config.local) {
+      this.localProvider = new LocalWhisperProvider({
+        command: config.local.command,
+        args: config.local.args,
       });
     }
   }
@@ -66,15 +86,21 @@ export class TranscriptionManager {
     switch (provider) {
       case 'groq':
         if (!this.groqProvider) {
-          throw new Error('Groq provider not configured');
+          throw new Error('Groq provider not configured (missing GROQ_API_KEY)');
         }
         return await this.groqProvider.transcribe(audioBuffer, filename, language);
 
       case 'openai':
-        throw new Error('OpenAI provider not yet implemented');
+        if (!this.openaiProvider) {
+          throw new Error('OpenAI provider not configured (missing OPENAI_API_KEY)');
+        }
+        return await this.openaiProvider.transcribe(audioBuffer, filename, language);
 
       case 'local':
-        throw new Error('Local provider not yet implemented');
+        if (!this.localProvider) {
+          throw new Error('Local provider not configured (missing LOCAL_WHISPER_COMMAND)');
+        }
+        return await this.localProvider.transcribe(audioBuffer, filename, language);
 
       default:
         throw new Error(`Unknown provider: ${provider}`);

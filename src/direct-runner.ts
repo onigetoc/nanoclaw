@@ -48,11 +48,33 @@ export async function runDirectAgent(
   fs.mkdirSync(logsDir, { recursive: true });
 
   return new Promise((resolve) => {
+    // Filter secrets from environment to prevent leakage
+    // CRITICAL: Create a clean environment without any secrets
+    const filteredEnv: Record<string, string> = {};
+    
+    // Only copy safe environment variables
+    for (const [key, value] of Object.entries(process.env)) {
+      // Skip all known secrets
+      if (key === 'TELEGRAM_BOT_TOKEN' || 
+          key === 'GROQ_API_KEY' || 
+          key === 'OPENAI_API_KEY' ||
+          key.includes('TOKEN') ||
+          key.includes('SECRET') ||
+          key.includes('PASSWORD') ||
+          key.includes('API_KEY')) {
+        continue;
+      }
+      if (value !== undefined) {
+        filteredEnv[key] = value;
+      }
+    }
+    
+    logger.debug({ group: group.name }, `Filtered env has ${Object.keys(filteredEnv).length} vars (secrets removed)`);
+    
     const agentProcess = spawn('node', ['--import', 'tsx/esm', agentRunnerPath], {
       stdio: ['pipe', 'pipe', 'pipe'],
       cwd: groupDir,
-      // Hériter de l'environnement complet pour que node soit trouvé
-      env: process.env,
+      env: filteredEnv,
     });
 
     onProcess(agentProcess, processName);

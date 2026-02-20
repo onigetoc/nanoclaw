@@ -41,9 +41,43 @@ Only ask the user for help if multiple retries fail with the same error.
 
 ## 3. Container Runtime
 
+**IMPORTANT: Automatic detection on Windows/Linux**
+
+The setup automatically detects if containers can be used. Users don't need to know what Docker is.
+
+### Windows/Linux: Automatic Direct Mode
+
+**On Windows:**
+1. Run the PowerShell compatibility check:
+   ```powershell
+   .\.opencode\skills\setup\scripts\check-docker-compatibility.ps1
+   ```
+
+2. **If exit code 0 (compatible)**:
+   - Tell user: "Your system supports containers. Installing Docker for better isolation..."
+   - Guide Docker Desktop installation
+   - Build container image
+
+3. **If exit code 1 (incompatible)**:
+   - Tell user: "Setting up NanoClaw in direct mode (no containers needed)..."
+   - Skip container setup entirely
+   - Continue to next step
+   - **DO NOT mention Docker, containers, or virtualization**
+   - User doesn't need to know why
+
+**On Linux:**
+- Check if Docker is installed and running
+- If yes → Use containers
+- If no → Ask: "Install Docker for better isolation, or use direct mode?"
+  - Most users → Direct mode (simpler)
+  - Advanced users → Docker
+
+**Key principle: Don't ask users about things they don't understand.**
+
+### macOS: Container Required
+
 Use the environment check results from step 1 to decide which runtime to use:
 
-- PLATFORM=linux → Docker will be used. If the source code still references Apple Container (check for `container system status` in `src/index.ts`), run the `/convert-to-docker` skill first, then continue.
 - PLATFORM=macos + APPLE_CONTAINER=installed → use apple-container
 - PLATFORM=macos + DOCKER=running + APPLE_CONTAINER=not_found → use Docker. If the source code still references Apple Container, run the `/convert-to-docker` skill first.
 - PLATFORM=macos + DOCKER=installed_not_running → start Docker for them: `open -a Docker`. Wait 15s, re-check with `docker info`. If still not running, tell the user Docker is starting up and poll a few more times. Then apply `/convert-to-docker` if source code needs it.
@@ -51,7 +85,6 @@ Use the environment check results from step 1 to decide which runtime to use:
   - **If Docker chosen:** install it, then run the `/convert-to-docker` skill to update the source code.
   - Apple Container: tell user to download from https://github.com/apple/container/releases and install the .pkg. Wait for confirmation, then verify with `container --version`.
   - Docker on macOS: install via `brew install --cask docker`, then `open -a Docker` and wait for it to start. If brew not available, direct to Docker Desktop download.
-  - Docker on Linux: install with `curl -fsSL https://get.docker.com | sh && sudo usermod -aG docker $USER`. Note: user may need to log out/in for group membership.
 
 Run `./.opencode/skills/setup/scripts/03-setup-container.sh --runtime <chosen>` and parse the status block.
 

@@ -9,10 +9,10 @@ import {
   IDLE_TIMEOUT,
   MAIN_GROUP_FOLDER,
   POLL_INTERVAL,
-  TELEGRAM_BOT_TOKEN,
   TELEGRAM_ONLY,
   TRIGGER_PATTERN,
 } from './config.js';
+import { readEnvFile } from './env.js';
 import { WhatsAppChannel } from './channels/whatsapp.js';
 import { TelegramChannel } from './channels/telegram.js';
 import {
@@ -604,8 +604,12 @@ async function main(): Promise<void> {
     await whatsapp.connect();
   }
 
-  if (TELEGRAM_BOT_TOKEN) {
-    const telegram = new TelegramChannel(TELEGRAM_BOT_TOKEN, channelOpts);
+  // Load Telegram token from .env (secret, not in process.env)
+  const secrets = readEnvFile(['TELEGRAM_BOT_TOKEN']);
+  const telegramToken = secrets.TELEGRAM_BOT_TOKEN || '';
+  
+  if (telegramToken) {
+    const telegram = new TelegramChannel(telegramToken, channelOpts);
     channels.push(telegram);
     await telegram.connect();
   }

@@ -1,6 +1,5 @@
 import fs from 'fs';
 import path from 'path';
-import dotenv from 'dotenv';
 
 /**
  * Detected API key information
@@ -47,30 +46,47 @@ function maskApiKey(key: string): string {
 /**
  * Multi-source API key scanner
  * Priority: Local .env > System environment variables
+ * 
+ * SECURITY: Does NOT pollute process.env with secrets.
+ * Reads .env file directly without loading into environment.
  */
 export function scanAndGetApiKeys(): ApiKeysMap {
   const foundKeys: ApiKeysMap = {};
   const envPath = path.join(process.cwd(), '.env');
 
-  // Step 1: Load local .env if it exists
+  // Step 1: Parse local .env WITHOUT loading into process.env
   let localEnvData: Record<string, string> = {};
   if (fs.existsSync(envPath)) {
-    const result = dotenv.config({ path: envPath, override: true });
-    if (result.parsed) {
-      localEnvData = result.parsed;
+    const envContent = fs.readFileSync(envPath, 'utf-8');
+    // Parse manually to avoid polluting process.env
+    for (const line of envContent.split('\n')) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith('#')) continue;
+      const match = trimmed.match(/^([^=]+)=(.*)$/);
+      if (match) {
+        const key = match[1].trim();
+        let value = match[2].trim();
+        // Remove quotes if present
+        if ((value.startsWith('"') && value.endsWith('"')) || 
+            (value.startsWith("'") && value.endsWith("'"))) {
+          value = value.slice(1, -1);
+        }
+        localEnvData[key] = value;
+      }
     }
   }
 
-  // Step 2: Scan each key
+  // Step 2: Scan each key (check local .env first, then system env)
   API_KEYS_TO_TRACK.forEach((keyName) => {
-    const value = process.env[keyName];
+    // Priority: local .env > system environment
+    const localValue = localEnvData[keyName];
+    const systemValue = process.env[keyName];
+    const value = localValue || systemValue;
     
     if (value && value.trim() !== '') {
-      const isLocal = localEnvData.hasOwnProperty(keyName);
-      
       foundKeys[keyName] = {
         value: value,
-        source: isLocal ? 'Project (.env)' : 'System (OS)',
+        source: localValue ? 'Project (.env)' : 'System (OS)',
         masked: maskApiKey(value),
       };
     }

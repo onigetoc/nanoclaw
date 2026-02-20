@@ -1,5 +1,8 @@
 #Project Tools & Links
 
+## Opencode modeles et service a la Openrouter:
+https://opencode.ai/docs/zen/
+
 ## Skills
 
 ### Multiple Agents and Vercel skills : https://www.youtube.com/watch?v=w-t_nw7vhLA
@@ -35,10 +38,16 @@ URL=https://www.google.com/search?q=ou+est+install%C3%A9+openclaw+dans+windows%3
 
 ## OTHER CLAWS
 
+## MonClaw (made witn OpenCode)
+https://github.com/CefBoud/MonClaw
+
+## MiniClaw
 https://github.com/FoundDream/miniclawd
 
+## TinyClaw
 https://github.com/warengonzaga/tinyclaw
 
+## MicroClaw
 https://github.com/microclaw/microclaw
 
 ## Security 

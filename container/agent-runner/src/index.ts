@@ -77,22 +77,22 @@ async function createOpencodeClient(
     // Read base URL from environment (optional, defaults to http://localhost:4096)
     const baseURL = sdkEnv.OPENCODE_BASE_URL || 'http://localhost:4096';
     
-    // Determine log level from environment
-    const logLevel = process.env.LOG_LEVEL === 'debug' ? 'debug' : 'info';
-    
     // Requirement 12.1: Log client initialization with configuration
     log(`Initializing OpenCode client...`);
-    debugLog(`Configuration: baseURL=${baseURL}, logLevel=${logLevel}, timeout=60000ms`);
+    debugLog(`Configuration: baseURL=${baseURL}`);
     
     // Import Opencode SDK (static import at top of file)
     // Create OpenCode client that connects to running server
     // The server must be started separately (e.g., via `opencode` CLI)
+    // 
+    // Note: Model configuration is passed to the OpenCode server via environment variables,
+    // not via SDK client options. The SDK client only needs to know how to connect to the server.
     const client = _createOpencodeClient({
       baseUrl: baseURL
     });
     
     log(`✓ OpenCode client initialized successfully`);
-    debugLog(`Client configuration: baseURL=${baseURL}, timeout=60000ms, maxRetries=2`);
+    debugLog(`Client ready to connect to OpenCode server at ${baseURL}`);
     
     return client;
   } catch (error) {
@@ -538,6 +538,13 @@ async function runQuery(
     }
   }
 
+  // Generate platform-aware paths first (needed for database access)
+  const isDirectMode = !!containerInput.directMode;
+  const platform = process.platform; // 'win32', 'linux', 'darwin'
+  const dbPath = isDirectMode
+    ? path.join(containerInput.directMode!.projectDir!, 'store', 'messages.db')
+    : '/workspace/project/store/messages.db';
+
   // Load recent conversation history from SQLite (last 10 messages)
   // Note: OpenCode sessions maintain full conversation memory automatically.
   // These messages serve as initial context for new sessions or after crashes.
@@ -591,12 +598,7 @@ async function runQuery(
   // This replaces hardcoded /workspace/ paths in AGENTS.md files,
   // making NanoClaw work on Windows, Linux, and macOS without templates.
   // Requirement 9.3: Generate platform-specific environment context
-  const isDirectMode = !!containerInput.directMode;
-  const platform = process.platform; // 'win32', 'linux', 'darwin'
   const shell = platform === 'win32' ? 'PowerShell/cmd' : 'bash';
-  const dbPath = isDirectMode
-    ? path.join(containerInput.directMode!.projectDir!, 'store', 'messages.db')
-    : '/workspace/project/store/messages.db';
   const groupsBasePath = isDirectMode
     ? path.join(containerInput.directMode!.projectDir!, 'groups')
     : '/workspace/project/groups';

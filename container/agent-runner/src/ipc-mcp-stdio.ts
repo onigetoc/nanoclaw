@@ -274,6 +274,163 @@ Use available_groups.json to find the JID for a group. The folder name should be
   },
 );
 
+// Model Management Tools
+server.tool(
+  'get_current_model',
+  'Get the current AI model configuration (primary, small, fallback models)',
+  {},
+  async () => {
+    const projectDir = process.env.PROJECT_DIR || '/workspace/project';
+    const configPath = path.join(projectDir, 'opencode.json');
+    
+    let config: any = {
+      model: 'opencode/minimax-m2.5-free',
+      small_model: 'opencode/minimax-m2.5-free'
+    };
+    
+    if (fs.existsSync(configPath)) {
+      try {
+        config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+      } catch {}
+    }
+    
+    return {
+      content: [{
+        type: 'text' as const,
+        text: JSON.stringify({
+          primary_model: config.model || 'opencode/minimax-m2.5-free',
+          small_model: config.small_model || config.model || 'opencode/minimax-m2.5-free',
+          fallback_model: config.fallback_model || 'none',
+          note: 'Changes require OpenCode server restart to take effect'
+        }, null, 2)
+      }]
+    };
+  }
+);
+
+server.tool(
+  'change_model',
+  'Change the primary AI model used for complex reasoning tasks. Requires server restart.',
+  {
+    model: z.string().describe('Model identifier (e.g., "anthropic/claude-3-5-sonnet", "google/gemini-2.0-flash-lite")')
+  },
+  async (args) => {
+    const projectDir = process.env.PROJECT_DIR || '/workspace/project';
+    const configPath = path.join(projectDir, 'opencode.json');
+    
+    let config: any = {};
+    if (fs.existsSync(configPath)) {
+      try {
+        config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+      } catch {}
+    }
+    
+    config.model = args.model;
+    
+    try {
+      fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf-8');
+      return {
+        content: [{
+          type: 'text' as const,
+          text: `✓ Primary model changed to: ${args.model}\n\n` +
+                `⚠️  OpenCode server restart required for changes to take effect.\n` +
+                `The user needs to restart NanoClaw for the new model to be used.`
+        }]
+      };
+    } catch (err) {
+      return {
+        content: [{
+          type: 'text' as const,
+          text: `✗ Failed to change model: ${err instanceof Error ? err.message : String(err)}`
+        }],
+        isError: true
+      };
+    }
+  }
+);
+
+server.tool(
+  'set_small_model',
+  'Set the lightweight model for simple tasks (searches, summaries). Requires server restart.',
+  {
+    model: z.string().describe('Model identifier for lightweight tasks (e.g., "google/gemini-2.0-flash-lite")')
+  },
+  async (args) => {
+    const projectDir = process.env.PROJECT_DIR || '/workspace/project';
+    const configPath = path.join(projectDir, 'opencode.json');
+    
+    let config: any = {};
+    if (fs.existsSync(configPath)) {
+      try {
+        config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+      } catch {}
+    }
+    
+    config.small_model = args.model;
+    
+    try {
+      fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf-8');
+      return {
+        content: [{
+          type: 'text' as const,
+          text: `✓ Small model changed to: ${args.model}\n\n` +
+                `⚠️  OpenCode server restart required for changes to take effect.`
+        }]
+      };
+    } catch (err) {
+      return {
+        content: [{
+          type: 'text' as const,
+          text: `✗ Failed to set small model: ${err instanceof Error ? err.message : String(err)}`
+        }],
+        isError: true
+      };
+    }
+  }
+);
+
+server.tool(
+  'list_models',
+  'List popular AI models available for use',
+  {
+    category: z.enum(['free', 'premium', 'all']).optional().describe('Filter by category (default: all)')
+  },
+  async (args) => {
+    const category = args.category || 'all';
+    
+    const freeModels = [
+      '• opencode/minimax-m2.5-free - MiniMax M2.5 Free (current default)',
+      '• opencode/glm-5-free - GLM-5 Free (good for Chinese)',
+      '• google/gemini-2.0-flash-lite - Gemini 2.0 Flash Lite (fast, lightweight)',
+      '• google/gemini-2.5-flash-lite - Gemini 2.5 Flash Lite (latest lite version)'
+    ];
+
+    const premiumModels = [
+      '• anthropic/claude-3-5-sonnet - Claude 3.5 Sonnet (balanced, excellent for code)',
+      '• anthropic/claude-3-opus - Claude 3 Opus (best reasoning)',
+      '• openai/gpt-4o - GPT-4 Omni (multimodal)',
+      '• openai/gpt-4-turbo - GPT-4 Turbo (fast GPT-4)',
+      '• google/gemini-2.0-pro - Gemini 2.0 Pro (Google\'s best)',
+      '• deepseek/deepseek-chat - DeepSeek Chat (very cheap, good quality)'
+    ];
+
+    let models = [];
+    if (category === 'free' || category === 'all') {
+      models.push('## Free Models\n', ...freeModels);
+    }
+    if (category === 'premium' || category === 'all') {
+      models.push('\n## Premium Models (require API key)\n', ...premiumModels);
+    }
+
+    return {
+      content: [{
+        type: 'text' as const,
+        text: models.join('\n')
+      }]
+    };
+  }
+);
+
 // Start the stdio transport
 const transport = new StdioServerTransport();
 await server.connect(transport);

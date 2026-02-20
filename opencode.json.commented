@@ -1,0 +1,130 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  
+  // === PRIMARY MODEL (Complex reasoning, code generation) ===
+  // Default: opencode/minimax-m2.5-free (FREE, fast, efficient)
+  // Alternatives:
+  //   - anthropic/claude-3-5-sonnet ($2-12/1M tokens) - Best for code
+  //   - openai/gpt-4o ($2-12/1M tokens) - Multimodal
+  //   - google/gemini-2.5-pro ($2-12/1M tokens) - Google's best
+  "model": "opencode/minimax-m2.5-free",
+  
+  // === SMALL MODEL (Lightweight tasks: searches, summaries) ===
+  // Default: opencode/minimax-m2.5-free (same as primary for now)
+  // Recommended upgrade: google/gemini-2.5-flash-lite (FREE tier available)
+  //   - Supports: text, image, video, audio
+  //   - Paid: $0.10-0.40/1M tokens (very cheap)
+  //   - Perfect for: searches, OCR, quick questions
+  "small_model": "opencode/minimax-m2.5-free",
+  
+  // === FALLBACK MODEL (Backup if primary fails) ===
+  // Default: opencode/glm-5-free (FREE, good for Chinese)
+  // Alternatives:
+  //   - opencode/kimi-k2.5-free (FREE)
+  //   - opencode/big-pickle (FREE)
+  "fallback_model": "opencode/glm-5-free",
+  
+  // === VISION MODEL (Image/Video analysis, OCR, document understanding) ===
+  // Recommended: google/gemini-2.5-flash-lite
+  //   - FREE tier available
+  //   - Supports: images, videos, PDFs, documents
+  //   - Paid: $0.10/1M tokens for text/image/video
+  //   - Perfect for: OCR, image analysis, video understanding
+  // Alternative: google/gemini-2.5-flash ($0.50/1M tokens, more powerful)
+  // "vision_model": "google/gemini-2.5-flash-lite",
+  
+  // === AUDIO MODEL (Audio transcription, alternative to Groq) ===
+  // Note: Currently using Groq Whisper (FREE) in src/media/providers/groq.ts
+  // If you want to use Gemini for audio instead:
+  //   - google/gemini-2.5-flash-lite: $0.30/1M audio tokens (FREE tier)
+  //   - google/gemini-2.5-flash: $1.00/1M audio tokens
+  // Gemini supports: audio transcription, audio understanding, STT
+  // "audio_model": "google/gemini-2.5-flash-lite",
+  
+  // === IMAGE GENERATION MODEL (Create images from text) ===
+  // Recommended: google/gemini-2.5-imagen
+  //   - $0.039 per image (1024x1024)
+  //   - Fast, flexible, contextual understanding
+  // Alternative: google/gemini-3-imagen ($0.134-0.24 per image, higher quality)
+  // "image_gen_model": "google/gemini-2.5-imagen",
+  
+  // === PROVIDER CONFIGURATION ===
+  "provider": {
+    "opencode": {
+      "options": {
+        "timeout": 600000
+      }
+    }
+    // Add Google provider when using Gemini models:
+    // "google": {
+    //   "api_key": "YOUR_GOOGLE_API_KEY_HERE",
+    //   "options": {
+    //     "timeout": 600000
+    //   }
+    // }
+  }
+}
+
+// === RECOMMENDED CONFIGURATIONS ===
+
+// 1. FREE TIER (No API keys required)
+// {
+//   "model": "opencode/minimax-m2.5-free",
+//   "small_model": "opencode/minimax-m2.5-free",
+//   "fallback_model": "opencode/glm-5-free"
+// }
+
+// 2. BALANCED (Free + Gemini for multimodal)
+// {
+//   "model": "opencode/minimax-m2.5-free",
+//   "small_model": "google/gemini-2.5-flash-lite",
+//   "vision_model": "google/gemini-2.5-flash-lite",
+//   "audio_model": "google/gemini-2.5-flash-lite",
+//   "fallback_model": "opencode/glm-5-free"
+// }
+// Cost: ~$0-10/month (Gemini free tier is generous)
+
+// 3. PREMIUM (Best quality)
+// {
+//   "model": "anthropic/claude-3-5-sonnet",
+//   "small_model": "google/gemini-2.5-flash-lite",
+//   "vision_model": "google/gemini-2.5-flash",
+//   "audio_model": "google/gemini-2.5-flash",
+//   "image_gen_model": "google/gemini-2.5-imagen",
+//   "fallback_model": "opencode/minimax-m2.5-free"
+// }
+// Cost: ~$20-100/month depending on usage
+
+// === GEMINI CAPABILITIES SUMMARY ===
+// Gemini 2.5 Flash Lite (FREE tier, $0.10-0.40/1M paid):
+//   ✅ Text generation
+//   ✅ Image understanding (OCR, analysis)
+//   ✅ Video understanding
+//   ✅ Audio transcription (STT)
+//   ✅ Document understanding (PDF, etc.)
+//   ✅ Long context (1M tokens)
+//   ✅ Google Search grounding (500 RPD free)
+//   ❌ Image generation (use gemini-2.5-imagen)
+//   ❌ Text-to-speech (use gemini-2.5-tts-flash)
+
+// Gemini 3 Pro ($2-12/1M tokens):
+//   ✅ All Flash Lite features
+//   ✅ Better reasoning
+//   ✅ Better code generation
+//   ✅ Image generation built-in
+//   ✅ Higher quality outputs
+
+// === PRICING REFERENCE ===
+// OpenCode Free Models: $0 (no API key needed)
+// Gemini 2.5 Flash Lite: FREE tier, then $0.10-0.40/1M tokens
+// Gemini 2.5 Flash: FREE tier, then $0.50-3.00/1M tokens
+// Gemini 3 Pro: $2-12/1M tokens
+// Claude 3.5 Sonnet: $2-12/1M tokens
+// GPT-4o: $2-12/1M tokens
+
+// === NOTES ===
+// - All OpenCode free models are "big models" (no small variants)
+// - Gemini 2.5 Flash Lite is the best "small model" option (multimodal + cheap)
+// - For audio, Groq Whisper (FREE) is currently used, but Gemini is an alternative
+// - Restart NanoClaw after changing models for changes to take effect
+// - Use MCP tools to change models via chat (see .opencode/skills/change-model/)

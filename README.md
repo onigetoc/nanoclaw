@@ -34,15 +34,24 @@ NanoClaw is a partnership between two components:
 
 Think of NanoClaw as the secure shell that lets OpenCode safely interact with your digital life.
 
+## Powered By
+
+NanoClaw is built on top of:
+- **[OpenCode](https://opencode.ai)** - AI coding agent with unified model gateway
+- **[OpenCode SDK](https://github.com/anomalyco/opencode-sdk-js)** - TypeScript SDK for programmatic agent control
+- **OpenCode Model Gateway** - Unified access to GPT, Claude, Gemini, and more through a single API
+
+OpenCode provides the AI infrastructure (LLM routing, web search, file operations) while NanoClaw adds security, multi-channel support, and state management.
+
 ## 100% Free Option
 
-NanoClaw can run completely free with the default configuraion if you choose to do so. 
+NanoClaw can run completely free with the default configuration if you choose to do so. 
 
 OpenCode offers 4 free models:
 
 1. **GLM-5** - General purpose model
 2. **Kimi k2.5** - Advanced reasoning
-3. **Minimax** - Fast responses
+3. **Minimax** - Fast responses (default)
 4. **Big Pickle** - OpenCode's own model
 
 **Free features:**
@@ -50,6 +59,38 @@ OpenCode offers 4 free models:
 - **Audio-to-text** - Free with a Groq Whisper API key (also free)
 
 Just run `opencode auth login` and select the free tier to get started.
+
+## Recommended: Upgrade to Gemini (Optional)
+
+While NanoClaw works great with free models, we **recommend** adding Google Gemini 2.5 Flash Lite as your "small model" for multimodal capabilities:
+
+**Why Gemini 2.5 Flash Lite?**
+- ✅ **FREE tier** with generous limits (500 requests/day)
+- ✅ **Multimodal** - Handles text, images, videos, audio, documents
+- ✅ **Fast** - Optimized for speed
+- ✅ **Cheap** - Only $0.10-0.40 per 1M tokens when you exceed free tier
+- ✅ **Versatile** - Perfect for searches, OCR, summaries, quick questions
+
+**Important:** OpenCode free models (Minimax, GLM-5, etc.) are text-only. If you want to send images, videos, or documents to your bot, you'll need Gemini or another multimodal model.
+
+**Setup:**
+1. Get a free API key: https://aistudio.google.com/apikey
+2. Add to `.env`: `GOOGLE_API_KEY=your_key_here`
+3. Update `opencode.json`:
+```json
+{
+  "model": "opencode/minimax-m2.5-free",
+  "small_model": "google/gemini-2.5-flash-lite",
+  "fallback_model": "opencode/glm-5-free"
+}
+```
+
+**Note:** API keys go in `.env` (secure), not in `opencode.json`!
+
+**Cost estimate:** Most users stay within the free tier. If you exceed it, expect ~$1-5/month for typical personal use.
+
+**Full setup guide:** [docs/GEMINI-SETUP.md](docs/GEMINI-SETUP.md)  
+**All model options:** [docs/MODEL-CONFIGURATION.md](docs/MODEL-CONFIGURATION.md)
 
 ## Why I Built This
 

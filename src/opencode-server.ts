@@ -11,6 +11,7 @@ import { ChildProcess, spawn } from 'child_process';
 import http from 'http';
 
 import { logger } from './logger.js';
+import { getOpenCodeEnv, getModelInfo } from './opencode-config.js';
 
 const OPENCODE_PORT = parseInt(process.env.OPENCODE_PORT || '4096', 10);
 const OPENCODE_HOST = '127.0.0.1';
@@ -67,12 +68,28 @@ async function isPortInUse(): Promise<boolean> {
  * so we can monitor it and restart on crash.
  */
 function spawnServer(): ChildProcess {
-  logger.info('Starting OpenCode server...');
+  // Load model configuration from opencode.json
+  const modelInfo = getModelInfo();
+  logger.info(
+    { 
+      primary: modelInfo.primary, 
+      small: modelInfo.small, 
+      fallback: modelInfo.fallback 
+    }, 
+    'Starting OpenCode server with model configuration'
+  );
+
+  // Merge opencode.json config with process.env
+  const serverEnv = {
+    ...process.env,
+    ...getOpenCodeEnv()
+  };
 
   const proc = spawn('opencode', ['serve'], {
     stdio: ['ignore', 'pipe', 'pipe'],
     shell: true,
     cwd: process.cwd(),
+    env: serverEnv
   });
 
   proc.stdout?.on('data', (data: Buffer) => {

@@ -5,7 +5,7 @@ description: Change the AI model used by OpenCode/NanoClaw. Use when user reques
 
 # Change Model
 
-Allows changing the AI model via chat commands.
+Allows changing the AI model via chat commands using MCP tools.
 
 ## Usage
 
@@ -15,12 +15,18 @@ User can say:
 - "switch to claude-sonnet-4-5"
 - "use gpt-4o"
 - "what model am I using?"
+- "list available models"
+- "set a lightweight model for simple tasks"
 
 ## Popular Models
 
 ### Free Models
 
-- `opencode/glm-5-free` - GLM-5 Free (current default for free tier)
+- `opencode/minimax-m2.5-free` - Minimax M2.5 Free (fast, efficient, recommended - default)
+- `opencode/glm-5-free` - GLM-5 Free (good for Chinese language)
+- `opencode/kimi-k2.5-free` - Kimi K2.5 Free (alternative free option)
+- `opencode/big-pickle` - Big Pickle (another free option)
+- `opencode/gpt-5-nano` - GPT-5 Nano (lightweight free model)
 - `google/gemini-2.5-flash-lite` - Gemini Flash Lite (free with limits)
 - `google/gemini-2.5-flash` - Gemini Flash (free tier available)
 
@@ -33,97 +39,162 @@ User can say:
 - `google/gemini-3-pro` - Gemini 3 Pro
 - `deepseek/deepseek-chat` - DeepSeek Chat (cheap)
 
+## MCP Tools Available
+
+NanoClaw provides MCP tools for model management:
+
+### get_current_model
+Get the current model configuration.
+
+```typescript
+// No parameters needed
+const result = await mcp__nanoclaw__get_current_model();
+// Returns: { primary_model, small_model, fallback_model, note }
+```
+
+### change_model
+Change the primary model (for complex reasoning).
+
+```typescript
+await mcp__nanoclaw__change_model({
+  model: "anthropic/claude-3-5-sonnet"
+});
+```
+
+### set_small_model
+Set the lightweight model (for simple tasks like searches).
+
+```typescript
+await mcp__nanoclaw__set_small_model({
+  model: "google/gemini-2.0-flash-lite"
+});
+```
+
+### list_models
+List available models by category.
+
+```typescript
+await mcp__nanoclaw__list_models({
+  category: "free" // or "premium" or "all"
+});
+```
+
 ## Implementation
 
 When user requests model change:
 
-1. **Parse the requested model** from user message
-2. **Validate the model name** against Models.dev database
-3. **Update the config file** with new model
+1. **Check current model** using `get_current_model`
+2. **List available models** if user is unsure
+3. **Change the model** using appropriate tool
 4. **Inform user** that restart is needed
 
-### Config File Location
+### Example Flow
 
-OpenCode config is at:
+```
+User: "what model am I using?"
 
-- Windows: `C:\Users\{username}\.opencode\opencode.jsonc`
-- macOS/Linux: `~/.opencode/opencode.jsonc`
+Andy: [calls get_current_model]
+You're currently using:
+• Primary: opencode/minimax-m2.5-free
+• Small: opencode/minimax-m2.5-free
+• Fallback: none
 
-### Code Example
+User: "change to claude sonnet"
 
-```javascript
-const fs = require('fs');
-const path = require('path');
-const os = require('os');
+Andy: [calls change_model with "anthropic/claude-3-5-sonnet"]
+✓ Primary model changed to: anthropic/claude-3-5-sonnet
 
-const configPath = path.join(os.homedir(), '.opencode', 'opencode.jsonc');
-
-function changeModel(newModel) {
-  let config = {};
-
-  if (fs.existsSync(configPath)) {
-    const content = fs.readFileSync(configPath, 'utf-8');
-    const jsonContent = content.replace(/\/\/.*$/gm, '');
-    config = JSON.parse(jsonContent);
-  }
-
-  config.model = newModel;
-  fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
-
-  return `Model changed to: ${newModel}\nPlease restart OpenCode for changes to take effect.`;
-}
-
-changeModel('google/gemini-2.5-flash-lite');
+⚠️  OpenCode server restart required for changes to take effect.
+Please restart NanoClaw to use the new model.
 ```
 
 ## Example Responses
 
-**Model specified:**
+**Check current model:**
+
+```
+User: "what model am I using?"
+
+Andy: [calls get_current_model]
+You're currently using:
+• Primary: opencode/minimax-m2.5-free (for complex reasoning)
+• Small: opencode/minimax-m2.5-free (for lightweight tasks)
+• Fallback: none
+```
+
+**Change model:**
 
 ```
 User: "change model to gemini-2.5-flash-lite"
 
-Andy: ✓ Model changed to google/gemini-2.5-flash-lite
-Restart OpenCode (Ctrl+C then run again) for changes to take effect.
+Andy: [calls change_model]
+✓ Model changed to google/gemini-2.5-flash-lite
+Restart NanoClaw for changes to take effect.
 ```
 
-**No model specified:**
+**List models:**
 
 ```
-User: "change model"
+User: "what models are available?"
 
-Andy: Which model would you like to use?
+Andy: [calls list_models with category="all"]
+## Free Models
+• opencode/minimax-m2.5-free - MiniMax M2.5 Free (current default)
+• google/gemini-2.0-flash-lite - Gemini 2.0 Flash Lite (fast, lightweight)
 
-Free:
-• glm-5-free
-• gemini-2.5-flash-lite
-
-Premium:
-• claude-sonnet-4-5
-• claude-opus-4-5
-• gemini-3-pro
-• gpt-5.1
+## Premium Models (require API key)
+• anthropic/claude-3-5-sonnet - Claude 3.5 Sonnet (excellent for code)
+• openai/gpt-4o - GPT-4 Omni (multimodal)
+...
 ```
 
-**Ambiguous model:**
+**Set small model:**
 
 ```
-User: "switch to gemini"
+User: "use gemini flash lite for simple tasks"
 
-Andy: Multiple Gemini models available:
-• google/gemini-2.5-flash (free tier)
-• google/gemini-2.5-flash-lite (lite version)
-• google/gemini-3-pro (premium)
-
-Which one?
+Andy: [calls set_small_model]
+✓ Small model changed to: google/gemini-2.0-flash-lite
+This model will be used for lightweight tasks like searches and summaries.
+Restart required.
 ```
 
-## Current Model Detection
+## Configuration File
 
-To check current model, look for the `model` key in config, or check the Runtime Environment section of the system prompt.
+Model configuration is stored in `opencode.json` at the project root:
+
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "anthropic/claude-3-5-sonnet",
+  "small_model": "google/gemini-2.0-flash-lite",
+  "fallback_model": "openai/gpt-4o",
+  "provider": {
+    "anthropic": {
+      "options": { "timeout": 600000 }
+    },
+    "google": {
+      "options": { "timeout": 600000 }
+    }
+  }
+}
+```
+
+This file is read by NanoClaw at startup and passed to the OpenCode server.
+
+## Model Hierarchy
+
+NanoClaw supports a three-tier model system:
+
+1. **Primary Model** (`model`) - Used for complex reasoning, code generation, deep analysis
+2. **Small Model** (`small_model`) - Used for lightweight tasks, searches, summaries
+3. **Fallback Model** (`fallback_model`) - Used if primary model fails or is unavailable
+
+This allows cost optimization while maintaining quality for important tasks.
 
 ## Notes
 
-- Model change requires OpenCode restart to take effect
-- Invalid model names will be rejected
-- Use Models.dev API to validate model IDs: https://models.dev/api.json
+- Model changes require NanoClaw restart to take effect
+- The OpenCode server must be restarted (happens automatically on NanoClaw restart)
+- Invalid model names will be rejected by OpenCode
+- API keys for premium models must be configured in `.env` or provider config
