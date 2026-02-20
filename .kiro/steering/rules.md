@@ -45,31 +45,18 @@ Use this as your primary reference for answering NanoClaw-related questions.
 
 When the user asks you to "take note" or "remember this for later", use the appropriate location:
 
-**For NanoClaw project ideas:**
-- File: `groups/main/ideas.md`
-- Purpose: Feature ideas, improvements, bugs to fix, future enhancements
+**IMPORTANT: `groups/` is for NanoClaw (Andy via Telegram), NOT for development notes!**
+
+**For development notes (Gino + Kiro):**
+- Location: `dev-notes/` folder
+- Files:
+  - `ideas.md` - Feature ideas, improvements, future enhancements
+  - `bugs.md` - Known bugs, issues to investigate, workarounds
+  - `decisions.md` - Technical decisions, why we chose X over Y
+  - `todo.md` - Actionable tasks, things to do
+  - `preferences.md` - User preferences and personal info
+- These files are ignored by NanoClaw (not in groups/)
 - Format: Markdown with clear sections and dates
-- Example sections: "Production Reliability Issues", "Self-Documenting NanoClaw", "Documentation Website Options"
-
-**For user preferences and personal info:**
-- File: `groups/main/preferences.md` (create if doesn't exist)
-- Purpose: User's personal preferences, habits, important info to remember
-- Format: Structured markdown
-
-**For project decisions and architecture:**
-- File: `groups/main/decisions.md` (create if doesn't exist)
-- Purpose: Important technical decisions, why we chose X over Y
-- Format: Decision log with date, context, decision, consequences
-
-**For bugs and issues:**
-- File: `groups/main/bugs.md` (create if doesn't exist)
-- Purpose: Known bugs, issues to investigate, workarounds
-- Format: List with priority, description, steps to reproduce
-
-**For tasks and TODOs:**
-- File: `groups/main/todo.md` (create if doesn't exist)
-- Purpose: Actionable tasks, things to do
-- Format: Checklist with priorities
 
 ### Note-Taking Best Practices
 

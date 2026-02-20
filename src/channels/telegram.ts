@@ -8,10 +8,7 @@ import {
   OnChatMetadata,
   RegisteredGroup,
 } from '../types.js';
-import {
-  transcribeWithOpenAI,
-  isTranscriptionEnabled,
-} from '../transcription.js';
+import { getTranscriptionManager, isAudioTranscriptionAvailable } from '../media/audio-manager.js';
 import { analyzeImage, isVisionEnabled } from '../vision.js';
 
 export interface TelegramChannelOpts {
@@ -252,30 +249,53 @@ export class TelegramChannel implements Channel {
 
       let content = '[Voice message]';
 
-      if (isTranscriptionEnabled() && ctx.message.voice) {
+      // Use new Groq Whisper transcription system
+      if (isAudioTranscriptionAvailable() && ctx.message.voice) {
         try {
           const file = await ctx.getFile();
-          const fileInfo = await fetch(
-            `https://api.telegram.org/file/bot${this.botToken}/${file.file_path}`,
-          );
+          const fileUrl = `https://api.telegram.org/file/bot${this.botToken}/${file.file_path}`;
+          const fileInfo = await fetch(fileUrl);
           const audioBuffer = Buffer.from(await fileInfo.arrayBuffer());
 
-          const transcription = await transcribeWithOpenAI(
-            audioBuffer,
-            'voice.ogg',
-          );
-          if (transcription) {
-            content = `[Voice: ${transcription.trim()}]`;
-            logger.info(
-              { chatJid, length: transcription.length },
-              'Voice message transcribed',
+          const manager = getTranscriptionManager();
+          if (manager) {
+            const result = await manager.transcribe(
+              audioBuffer,
+              'voice.ogg',
+              undefined // Auto-detect language
             );
+            
+            if (result && result.text) {
+              content = `[Audio] Transcript: "${result.text.trim()}"`;
+              logger.info(
+                { 
+                  chatJid, 
+                  length: result.text.length,
+                  provider: result.provider,
+                  duration: result.duration 
+                },
+                'Voice message transcribed with Groq Whisper',
+              );
+            }
           }
-        } catch (err) {
+        } catch (err: any) {
           logger.warn(
-            { chatJid, err },
+            { 
+              chatJid, 
+              error: err.message,
+              code: err.code,
+              retryAfter: err.retryAfter 
+            },
             'Voice transcription failed, using placeholder',
           );
+          
+          // If rate limit, log it clearly
+          if (err.code === 'RATE_LIMIT') {
+            logger.warn(
+              { retryAfter: err.retryAfter },
+              'Groq rate limit hit, will retry after cooldown'
+            );
+          }
         }
       }
 

@@ -52,6 +52,7 @@ import {
   startHealthChecks,
   stopServer,
 } from './opencode-server.js';
+import { scanAndGetApiKeys, logApiKeysReport } from './api-key-scanner.js';
 
 // Re-export for backwards compatibility during refactor
 export { escapeXml, formatMessages } from './router.js';
@@ -522,6 +523,11 @@ function ensureContainerSystemRunning(): void {
 }
 
 async function main(): Promise<void> {
+  // Scan des clés API au démarrage
+  // TEMPORARILY DISABLED - blocking startup
+  // const apiKeys = scanAndGetApiKeys();
+  // logApiKeysReport(apiKeys);
+
   ensureContainerSystemRunning();
 
   // Start and supervise the OpenCode server

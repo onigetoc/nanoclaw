@@ -14,7 +14,7 @@ setx ANTHROPIC_API_KEY "your_api_here"
 Voici les noms exacts que des logiciels recherchent :
 - $env:ANTHROPIC_API_KEY
 - $env:OPENAI_API_KEY
-- $env:GOOGLE_API_KEY ou 
+- $env:GOOGLE_API_KEY
 - $env:GEMINI_API_KEY
 - $env:DASHSCOPE_API_KEY
 - $env:MISTRAL_API_KEY

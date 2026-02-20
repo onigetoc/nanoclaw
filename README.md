@@ -7,12 +7,49 @@
 </p>
 
 <p align="center">
-  <a href="README_zh.md">中文</a>&nbsp; • &nbsp;
+  <a href="README_zh.md"> </a>
   <a href="https://discord.gg/VGWXrf8x"><img src="https://img.shields.io/discord/1470188214710046894?label=Discord&logo=discord&v=2" alt="Discord" valign="middle"></a>&nbsp; • &nbsp;
   <a href="repo-tokens"><img src="repo-tokens/badge.svg" alt="34.9k tokens, 17% of context window" valign="middle"></a>
 </p>
 
 **New:** First AI assistant to support Agent Swarms. Spin up teams of agents that collaborate in your chat.
+
+## How It Works
+
+NanoClaw is a partnership between two components:
+
+**OpenCode** handles the AI heavy lifting:
+- LLM inference and reasoning
+- Web search and content fetching
+- File operations and code execution
+- Agent orchestration and swarms
+- Audio transcription (via Groq Whisper)
+
+**NanoClaw** handles everything else:
+- **Security** - Container isolation, filesystem sandboxing
+- **Process management** - Message queues, task scheduling
+- **Channel connectivity** - WhatsApp, Telegram integration
+- **State persistence** - SQLite database, group memory
+- **User registration** - Auto-discovery of new chats
+
+Think of NanoClaw as the secure shell that lets OpenCode safely interact with your digital life.
+
+## 100% Free Option
+
+NanoClaw can run completely free with the default configuraion if you choose to do so. 
+
+OpenCode offers 4 free models:
+
+1. **GLM-5** - General purpose model
+2. **Kimi k2.5** - Advanced reasoning
+3. **Minimax** - Fast responses
+4. **Big Pickle** - OpenCode's own model
+
+**Free features:**
+- **Web search and fetch** - Built-in, no API key needed
+- **Audio-to-text** - Free with a Groq Whisper API key (also free)
+
+Just run `opencode auth login` and select the free tier to get started.
 
 ## Why I Built This
 

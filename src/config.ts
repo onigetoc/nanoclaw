@@ -66,3 +66,20 @@ export const TRIGGER_PATTERN = new RegExp(
 // Uses system timezone by default
 export const TIMEZONE =
   process.env.TZ || Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+// === Audio Transcription Configuration ===
+
+export const AUDIO_ENABLED = (process.env.AUDIO_ENABLED || 'true') === 'true';
+export const AUDIO_PROVIDER = (process.env.AUDIO_PROVIDER || 'groq') as 'groq' | 'openai' | 'local';
+export const AUDIO_STRIP_AFTER_TRANSCRIPT = (process.env.AUDIO_STRIP_AFTER_TRANSCRIPT || 'true') === 'true';
+export const AUDIO_TIMEOUT = parseInt(process.env.AUDIO_TIMEOUT || '30000', 10); // 30 seconds
+export const AUDIO_MAX_FILE_SIZE = parseInt(process.env.AUDIO_MAX_FILE_SIZE || '26214400', 10); // 25MB (Whisper limit)
+
+// Groq Whisper (FREE - recommended)
+export const GROQ_API_KEY = process.env.GROQ_API_KEY || '';
+export const GROQ_WHISPER_MODEL = (process.env.GROQ_WHISPER_MODEL || 'whisper-large-v3-turbo') as 'whisper-large-v3' | 'whisper-large-v3-turbo';
+export const GROQ_BASE_URL = process.env.GROQ_BASE_URL || 'https://api.groq.com/openai/v1';
+
+// OpenAI Whisper (fallback)
+export const OPENAI_API_KEY = process.env.OPENAI_API_KEY || '';
+export const OPENAI_WHISPER_MODEL = process.env.OPENAI_WHISPER_MODEL || 'whisper-1';

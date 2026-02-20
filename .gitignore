@@ -42,3 +42,6 @@ groups/**/AGENTS.md
 agents-sdk-docs
 .transcription.config.json
 .vision.config.json
+
+# Dev notes (private, not for NanoClaw/Andy)
+dev-notes/
