@@ -524,9 +524,8 @@ function ensureContainerSystemRunning(): void {
 
 async function main(): Promise<void> {
   // Scan des clés API au démarrage
-  // TEMPORARILY DISABLED - blocking startup
-  // const apiKeys = scanAndGetApiKeys();
-  // logApiKeysReport(apiKeys);
+  const apiKeys = scanAndGetApiKeys();
+  logApiKeysReport(apiKeys);
 
   ensureContainerSystemRunning();
 
