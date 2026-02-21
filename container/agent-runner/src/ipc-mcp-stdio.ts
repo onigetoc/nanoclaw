@@ -281,7 +281,7 @@ server.tool(
   {},
   async () => {
     const projectDir = process.env.PROJECT_DIR || '/workspace/project';
-    const configPath = path.join(projectDir, 'opencode.json');
+    const configPath = path.join(projectDir, 'models-config.json');
     
     let config: any = {
       model: 'opencode/minimax-m2.5-free',
@@ -316,7 +316,7 @@ server.tool(
   },
   async (args) => {
     const projectDir = process.env.PROJECT_DIR || '/workspace/project';
-    const configPath = path.join(projectDir, 'opencode.json');
+    const configPath = path.join(projectDir, 'models-config.json');
     
     let config: any = {};
     if (fs.existsSync(configPath)) {
@@ -357,7 +357,7 @@ server.tool(
   },
   async (args) => {
     const projectDir = process.env.PROJECT_DIR || '/workspace/project';
-    const configPath = path.join(projectDir, 'opencode.json');
+    const configPath = path.join(projectDir, 'models-config.json');
     
     let config: any = {};
     if (fs.existsSync(configPath)) {
@@ -428,6 +428,39 @@ server.tool(
         text: models.join('\n')
       }]
     };
+  }
+);
+
+server.tool(
+  'show_opencode_stats',
+  'Show OpenCode usage statistics including sessions, messages, costs, tokens, and tool usage. Useful to see how much the AI is being used and costing.',
+  {},
+  async () => {
+    const { execSync } = await import('child_process');
+    
+    try {
+      // Run opencode stats command
+      const output = execSync('opencode stats', {
+        encoding: 'utf-8',
+        cwd: process.env.PROJECT_DIR || '/workspace/project',
+        timeout: 10000
+      });
+      
+      return {
+        content: [{
+          type: 'text' as const,
+          text: `# OpenCode Usage Statistics\n\n\`\`\`\n${output}\n\`\`\``
+        }]
+      };
+    } catch (err) {
+      return {
+        content: [{
+          type: 'text' as const,
+          text: `Failed to get OpenCode stats: ${err instanceof Error ? err.message : String(err)}`
+        }],
+        isError: true
+      };
+    }
   }
 );
 

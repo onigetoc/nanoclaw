@@ -56,9 +56,9 @@ GOOGLE_API_KEY=AIzaSy...your_key_here
 - ✅ Follows security best practices
 - ✅ Same pattern as other secrets (GROQ_API_KEY, etc.)
 
-### Alternative: Via opencode.json (Not Recommended)
+### Alternative: Via models-config.json (Not Recommended)
 
-You can also put the key in `opencode.json`, but this is less secure:
+You can also put the key in `models-config.json`, but this is less secure:
 
 ```json
 {
@@ -70,11 +70,11 @@ You can also put the key in `opencode.json`, but this is less secure:
 }
 ```
 
-**⚠️ Warning:** If you do this, make sure `opencode.json` is in `.gitignore`!
+**⚠️ Warning:** If you do this, make sure `models-config.json` is in `.gitignore`!
 
 ## Step 3: Update Model Configuration
 
-Edit `opencode.json` (no API key needed here):
+Edit `models-config.json` (no API key needed here):
 
 ```json
 {
@@ -198,7 +198,7 @@ See [MODEL-CONFIGURATION.md](MODEL-CONFIGURATION.md) for more options.
 
 1. Get free API key: https://aistudio.google.com/apikey
 2. Add to `.env`: `GOOGLE_API_KEY=your_key`
-3. Update `opencode.json`: `"small_model": "google/gemini-2.5-flash-lite"`
+3. Update `models-config.json`: `"small_model": "google/gemini-2.5-flash-lite"`
 4. Restart NanoClaw
 5. Enjoy multimodal capabilities!
 

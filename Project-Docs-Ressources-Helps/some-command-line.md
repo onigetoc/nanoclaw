@@ -32,3 +32,41 @@ $env:PERPLEXITY_API_KEY : Pour utiliser l'IA qui fait des recherches sur le web 
 $env:TOGETHER_API_KEY : Un concurrent de Groq qui héberge des centaines de modèles open-source.
 $env:DEEPSEEK_API_KEY : La nouvelle star chinoise (très puissante et pas chère) qui casse les prix en ce moment.
 $env:VOYAGE_API_KEY : Souvent utilisé pour les "embeddings" (la mémoire vectorielle de l'IA).
+
+## OpenCode Commands
+
+### View Usage Statistics
+```bash
+# Show OpenCode usage stats (sessions, costs, tokens, tool usage)
+opencode stats
+
+# From a specific project directory
+cd C:\Users\LENOVO\APPS\0-AI-Agents\nanoclaw
+opencode stats
+```
+
+This shows:
+- Total sessions and messages
+- Cost breakdown (total, average per day, per session)
+- Token usage (input, output, cache read/write)
+- Tool usage statistics (bash, read, write, etc.)
+
+**Note:** Cache read tokens are much cheaper than regular tokens. High cache numbers = big savings!
+
+### Other Useful OpenCode Commands
+```bash
+# Check OpenCode version
+opencode --version
+
+# Login/authenticate
+opencode auth login
+
+# View current configuration
+opencode config
+
+# Export a session
+opencode export [sessionID]
+
+# Clear cache
+opencode cache clear
+```

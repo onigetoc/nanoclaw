@@ -345,3 +345,27 @@ echo -e "\n8. Session continuity working?"
 SESSIONS=$(grep "Session initialized" logs/nanoclaw.log 2>/dev/null | tail -5 | awk '{print $NF}' | sort -u | wc -l)
 [ "$SESSIONS" -le 2 ] && echo "OK (recent sessions reusing IDs)" || echo "CHECK - multiple different session IDs, may indicate resumption issues"
 ```
+
+## OpenCode Usage Statistics
+
+You can check OpenCode usage stats (sessions, costs, tokens, tool usage) in two ways:
+
+### Via Command Line
+```bash
+# From the project directory
+opencode stats
+```
+
+### Via Andy (MCP Tool)
+Just ask Andy:
+- "show me the stats"
+- "how much am I spending?"
+- "what's my OpenCode usage?"
+
+Andy will call the `show_opencode_stats` MCP tool to display:
+- Total sessions and messages
+- Cost breakdown (total, per day, per session)
+- Token usage (input, output, cache read/write)
+- Tool usage statistics
+
+**Note:** OpenCode has an excellent caching system. You'll see high "Cache Read" numbers (millions of tokens) which saves a lot of money - cached tokens are much cheaper than regular tokens!

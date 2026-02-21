@@ -1,7 +1,7 @@
 /**
  * OpenCode Configuration Manager
  * 
- * Reads opencode.json from project root and provides model configuration
+ * Reads models-config.json from project root and provides model configuration
  * for the OpenCode server and SDK.
  * 
  * Supports:
@@ -33,7 +33,7 @@ let cachedConfig: OpenCodeConfig | null = null;
 let configPath: string | null = null;
 
 /**
- * Load opencode.json from project root.
+ * Load models-config.json from project root.
  * Returns default config if file doesn't exist.
  */
 export function loadOpenCodeConfig(): OpenCodeConfig {
@@ -42,10 +42,10 @@ export function loadOpenCodeConfig(): OpenCodeConfig {
   }
 
   const projectRoot = process.cwd();
-  configPath = path.join(projectRoot, 'opencode.json');
+  configPath = path.join(projectRoot, 'models-config.json');
 
   if (!fs.existsSync(configPath)) {
-    logger.warn(`opencode.json not found at ${configPath}, using defaults`);
+    logger.warn(`models-config.json not found at ${configPath}, using defaults`);
     const defaultConfig = getDefaultConfig();
     cachedConfig = defaultConfig;
     return defaultConfig;
@@ -55,10 +55,10 @@ export function loadOpenCodeConfig(): OpenCodeConfig {
     const content = fs.readFileSync(configPath, 'utf-8');
     const parsedConfig = JSON.parse(content) as OpenCodeConfig;
     cachedConfig = parsedConfig;
-    logger.info({ config: parsedConfig }, 'Loaded opencode.json');
+    logger.info({ config: parsedConfig }, 'Loaded models-config.json');
     return parsedConfig;
   } catch (err) {
-    logger.error({ err, path: configPath }, 'Failed to parse opencode.json, using defaults');
+    logger.error({ err, path: configPath }, 'Failed to parse models-config.json, using defaults');
     const defaultConfig = getDefaultConfig();
     cachedConfig = defaultConfig;
     return defaultConfig;
@@ -66,18 +66,21 @@ export function loadOpenCodeConfig(): OpenCodeConfig {
 }
 
 /**
- * Get default configuration if opencode.json doesn't exist.
+ * Get default configuration if models-config.json doesn't exist.
  * 
- * Uses OpenCode free models that work without API keys:
- * - minimax-m2.5-free: Fast, efficient, recommended (default)
+ * IMPORTANT: This is only used for initial bootstrap when models-config.json is missing.
+ * Users should create their own models-config.json with their preferred models.
+ * These defaults are just to prevent crashes on first run.
+ * 
+ * Default free models (no API keys required):
+ * - minimax-m2.5-free: Fast, efficient, supports vision
  * - glm-5-free: Good for Chinese language
- * - kimi-k2.5-free: Alternative free option
- * - big-pickle: Another free option
  */
 function getDefaultConfig(): OpenCodeConfig {
   return {
     model: 'opencode/minimax-m2.5-free',
     small_model: 'opencode/minimax-m2.5-free',
+    vision_model: 'opencode/minimax-m2.5-free',
     fallback_model: 'opencode/glm-5-free',
     provider: {
       opencode: {
@@ -90,7 +93,7 @@ function getDefaultConfig(): OpenCodeConfig {
 }
 
 /**
- * Reload configuration from disk (useful after user edits opencode.json).
+ * Reload configuration from disk (useful after user edits models-config.json).
  */
 export function reloadOpenCodeConfig(): OpenCodeConfig {
   cachedConfig = null;
@@ -101,7 +104,10 @@ export function reloadOpenCodeConfig(): OpenCodeConfig {
  * Get environment variables for OpenCode server based on config.
  * These will be passed to the `opencode serve` process.
  * 
- * API keys are read from process.env (from .env file), NOT from opencode.json.
+ * Note: This function only passes model configuration (from models-config.json).
+ * API keys are managed by OpenCode's own authentication system:
+ *   - Via 'opencode auth login' (stored in ~/.local/share/opencode/auth.json)
+ *   - Or via system environment variables (not NanoClaw's .env file)
  */
 export function getOpenCodeEnv(): Record<string, string> {
   const config = loadOpenCodeConfig();
@@ -129,21 +135,23 @@ export function getOpenCodeEnv(): Record<string, string> {
   if (config.audio_model) {
     env.OPENCODE_AUDIO_MODEL = config.audio_model;
   }
+  // Specialized models
+  if (config.vision_model) {
+    env.OPENCODE_VISION_MODEL = config.vision_model;
+  }
+  if (config.audio_model) {
+    env.OPENCODE_AUDIO_MODEL = config.audio_model;
+  }
   if (config.image_gen_model) {
     env.OPENCODE_IMAGE_GEN_MODEL = config.image_gen_model;
   }
 
-  // API keys come from process.env (from .env file), not from opencode.json
-  // This is more secure and follows best practices
-  if (process.env.GOOGLE_API_KEY) {
-    env.GOOGLE_API_KEY = process.env.GOOGLE_API_KEY;
-  }
-  if (process.env.ANTHROPIC_API_KEY) {
-    env.ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
-  }
-  if (process.env.OPENAI_API_KEY) {
-    env.OPENAI_API_KEY = process.env.OPENAI_API_KEY;
-  }
+  // Note: API keys are managed by OpenCode's authentication system
+  // (via 'opencode auth login' or system environment variables).
+  // They are NOT read from NanoClaw's .env file.
+  // OpenCode server will automatically use keys from:
+  //   1. ~/.local/share/opencode/auth.json (via opencode auth login)
+  //   2. System environment variables (if set)
 
   return env;
 }
@@ -162,16 +170,16 @@ export function getModelInfo(): {
   const config = loadOpenCodeConfig();
   return {
     primary: config.model || 'opencode/minimax-m2.5-free',
-    small: config.small_model || config.model || 'opencode/minimax-m2.5-free',
-    fallback: config.fallback_model,
-    vision: config.vision_model,
+    small: config.small_model || 'opencode/minimax-m2.5-free',
+    fallback: config.fallback_model || 'opencode/glm-5-free',
+    vision: config.vision_model || 'opencode/minimax-m2.5-free',
     audio: config.audio_model,
     imageGen: config.image_gen_model
   };
 }
 
 /**
- * Update opencode.json with new model configuration.
+ * Update models-config.json with new model configuration.
  * Used by the change-model skill.
  */
 export function updateModelConfig(updates: {
@@ -192,15 +200,15 @@ export function updateModelConfig(updates: {
   if (updates.image_gen_model) config.image_gen_model = updates.image_gen_model;
 
   if (!configPath) {
-    configPath = path.join(process.cwd(), 'opencode.json');
+    configPath = path.join(process.cwd(), 'models-config.json');
   }
 
   try {
     fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf-8');
     cachedConfig = config;
-    logger.info({ updates }, 'Updated opencode.json');
+    logger.info({ updates }, 'Updated models-config.json');
   } catch (err) {
-    logger.error({ err, path: configPath }, 'Failed to write opencode.json');
-    throw new Error(`Failed to update opencode.json: ${err instanceof Error ? err.message : String(err)}`);
+    logger.error({ err, path: configPath }, 'Failed to write models-config.json');
+    throw new Error(`Failed to update models-config.json: ${err instanceof Error ? err.message : String(err)}`);
   }
 }

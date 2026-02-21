@@ -20,6 +20,9 @@ groups/*/
 *.keys.json
 .env
 
+# OpenCode config for CLI testing (use models-config.json for NanoClaw)
+opencode.json
+
 # OS
 .DS_Store
 
@@ -34,3 +37,6 @@ agents-sdk-docs
 # Dev notes and project docs (private, not for NanoClaw/Andy)
 dev-notes/
 Project-Docs-Ressources-Helps
+
+# Dev scripts (temporary analysis tools)
+dev-scripts/

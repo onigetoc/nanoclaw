@@ -60,6 +60,38 @@ OpenCode offers 4 free models:
 
 Just run `opencode auth login` and select the free tier to get started.
 
+### Real-World Usage Example
+
+Here's my actual usage an pricing from a NanoClaw user over 5 days:
+
+```
+User: "what's my OpenCode usage?"
+
+NanoClaw: "So cool! Here is your OpenCode usage:
+
+| Stats | Value |
+|-------|-------|
+| Sessions | 35 |
+| Messages | 1,313 |
+| Days | 5 |
+| Total cost | $0.02 |
+| Input tokens | 7.1M |
+| Output tokens | 108K |
+
+Tool usage:
+- bash: 127 (39%)
+- read: 86 (27%)
+- websearch: 23 (7%)
+- edit: 20 (6%)
+- glob: 20 (6%)
+
+That's cheap — only 2 cents for 5 days! 🎉"
+```
+
+**35 sessions, 1,313 messages, 7.1M tokens processed — for $0.02.** OpenCode's caching system makes this incredibly cost-effective.
+
+To check your own usage, just ask your assistant: "what's my OpenCode usage?"
+
 ## Recommended: Upgrade to Gemini (Optional)
 
 While NanoClaw works great with free models, we **recommend** adding Google Gemini 2.5 Flash Lite as your "small model" for multimodal capabilities:
@@ -75,8 +107,19 @@ While NanoClaw works great with free models, we **recommend** adding Google Gemi
 
 **Setup:**
 1. Get a free API key: https://aistudio.google.com/apikey
-2. Add to `.env`: `GOOGLE_API_KEY=your_key_here`
-3. Update `opencode.json`:
+2. Configure the API key using OpenCode's authentication system:
+   ```bash
+   opencode auth login
+   # Select "Google" from the list
+   # Paste your API key when prompted
+   ```
+   Alternatively, set it as a system environment variable:
+   - **Windows (PowerShell):** `$env:GOOGLE_API_KEY="your_key_here"`
+   - **Mac/Linux:** `export GOOGLE_API_KEY="your_key_here"`
+   
+   To make it permanent, add to your shell profile (`~/.zshrc`, `~/.bashrc`, or Windows Environment Variables).
+
+3. Update `models-config.json`:
 ```json
 {
   "model": "opencode/minimax-m2.5-free",
@@ -85,12 +128,14 @@ While NanoClaw works great with free models, we **recommend** adding Google Gemi
 }
 ```
 
-**Note:** API keys go in `.env` (secure), not in `opencode.json`!
+**Note:** API keys are managed by OpenCode (via `opencode auth login` or system environment variables), not in NanoClaw's `.env` file. The `.env` file is only for NanoClaw-specific settings like `TELEGRAM_BOT_TOKEN` and `ASSISTANT_NAME`.
 
 **Cost estimate:** Most users stay within the free tier. If you exceed it, expect ~$1-5/month for typical personal use.
 
-**Full setup guide:** [docs/GEMINI-SETUP.md](docs/GEMINI-SETUP.md)  
-**All model options:** [docs/MODEL-CONFIGURATION.md](docs/MODEL-CONFIGURATION.md)
+**Setup guides:**
+- [API Keys Configuration](docs/API-KEYS-SETUP.md) - How to configure API keys (all providers)
+- [Gemini Setup Guide](docs/GEMINI-SETUP.md) - Detailed Gemini configuration
+- [Model Configuration](docs/MODEL-CONFIGURATION.md) - All available models
 
 ## Why I Built This
 

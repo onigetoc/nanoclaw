@@ -161,7 +161,7 @@ Restart required.
 
 ## Configuration File
 
-Model configuration is stored in `opencode.json` at the project root:
+Model configuration is stored in `models-config.json` at the project root:
 
 ```json
 {
@@ -198,3 +198,17 @@ This allows cost optimization while maintaining quality for important tasks.
 - The OpenCode server must be restarted (happens automatically on NanoClaw restart)
 - Invalid model names will be rejected by OpenCode
 - API keys for premium models must be configured in `.env` or provider config
+
+## Monitoring Usage
+
+To see how much you're spending and which models are being used:
+
+**Via command line:**
+```bash
+opencode stats
+```
+
+**Via Andy:**
+Just ask: "show me the stats" or "how much am I spending?"
+
+This shows sessions, costs, token usage, and tool statistics. OpenCode's cache system can save millions of tokens (and lots of money)!

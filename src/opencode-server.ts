@@ -68,7 +68,7 @@ async function isPortInUse(): Promise<boolean> {
  * so we can monitor it and restart on crash.
  */
 function spawnServer(): ChildProcess {
-  // Load model configuration from opencode.json
+  // Load model configuration from models-config.json
   const modelInfo = getModelInfo();
   logger.info(
     { 
@@ -79,7 +79,7 @@ function spawnServer(): ChildProcess {
     'Starting OpenCode server with model configuration'
   );
 
-  // Merge opencode.json config with process.env
+  // Merge models-config.json config with process.env
   const serverEnv = {
     ...process.env,
     ...getOpenCodeEnv()

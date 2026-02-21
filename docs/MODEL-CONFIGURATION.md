@@ -1,6 +1,6 @@
 # Model Configuration Guide
 
-NanoClaw supports flexible model configuration via `opencode.json` at the project root.
+NanoClaw supports flexible model configuration via `models-config.json` at the project root.
 
 ## Quick Start
 
@@ -28,7 +28,7 @@ NanoClaw works out-of-the-box with OpenCode free models:
 
 Add Gemini for multimodal support (images, videos, documents):
 
-**opencode.json:**
+**models-config.json:**
 ```json
 {
   "$schema": "https://opencode.ai/config.json",
@@ -63,7 +63,7 @@ GOOGLE_API_KEY=AIzaSy...your_key_here
 
 If you prefer to stay completely free:
 
-1. Edit `opencode.json` in the project root
+1. Edit `models-config.json` in the project root
 2. Set your desired models
 3. Restart NanoClaw
 
@@ -99,7 +99,7 @@ NanoClaw uses a client-server architecture:
    - Does NOT configure models or API keys
    - Just sends messages and receives responses
 
-**Important:** Model configuration happens server-side, not client-side. When you edit `opencode.json`, NanoClaw passes the configuration to the OpenCode server via environment variables. The SDK client only connects to the server - it doesn't know or care which models are being used.
+**Important:** Model configuration happens server-side, not client-side. When you edit `models-config.json`, NanoClaw passes the configuration to the OpenCode server via environment variables. The SDK client only connects to the server - it doesn't know or care which models are being used.
 
 ## Configuration File
 
@@ -108,6 +108,7 @@ NanoClaw uses a client-server architecture:
   "$schema": "https://opencode.ai/config.json",
   "model": "anthropic/claude-3-5-sonnet",
   "small_model": "google/gemini-2.0-flash-lite",
+  "vision_model": "opencode/minimax-m2.5-free",
   "fallback_model": "openai/gpt-4o",
   "provider": {
     "anthropic": {
@@ -125,7 +126,7 @@ NanoClaw uses a client-server architecture:
 
 ## Model Hierarchy
 
-NanoClaw uses a three-tier model system for cost optimization:
+NanoClaw uses a four-tier model system for cost optimization and specialized tasks:
 
 ### 1. Primary Model (`model`)
 
@@ -153,15 +154,6 @@ Used for lightweight tasks to save costs.
 - `opencode/glm-5-free` - Free, good for Chinese
 - `anthropic/claude-3-haiku` - Fast, cheap
 
-**Free**
-- `opencode/minimax-m2.5-free` - Minimax M2.5 Free (fast, efficient, recommended - default)
-- `opencode/glm-5-free` - GLM-5 Free (good for Chinese language)
-- `opencode/kimi-k2.5-free` - Kimi K2.5 Free (alternative free option)
-- `opencode/big-pickle` - Big Pickle (another free option)
-- `opencode/gpt-5-nano` - GPT-5 Nano (lightweight free model)
-- `google/gemini-2.5-flash-lite` - Gemini Flash Lite (free with limits)
-- `google/gemini-2.5-flash` - Gemini Flash (free tier available)
-
 **When used:**
 - Web searches
 - Summaries
@@ -169,7 +161,30 @@ Used for lightweight tasks to save costs.
 - Quick responses
 - Title generation
 
-### 3. Fallback Model (`fallback_model`)
+### 3. Vision Model (`vision_model`) - NEW! 🎨
+
+Used specifically for image analysis and multimodal tasks. This allows you to use a text-only model as your primary (like Kimi) while still being able to read images.
+
+**Examples:**
+- `opencode/minimax-m2.5-free` - Free, supports vision (default)
+- `google/gemini-2.0-flash-lite` - Free, excellent vision
+- `google/gemini-2.5-flash-lite` - Latest, best vision
+- `anthropic/claude-3-5-sonnet` - Premium, excellent vision
+- `openai/gpt-4o` - Premium, multimodal
+
+**When used:**
+- Image analysis and OCR
+- Reading screenshots
+- Analyzing diagrams
+- Processing visual content
+- Any task involving images
+
+**Why separate vision model?**
+- Use cheaper text-only models for most tasks
+- Switch to vision-capable model only when needed
+- Example: Kimi (text) + Minimax (vision) = Best of both worlds
+
+### 4. Fallback Model (`fallback_model`)
 
 Used if the primary model fails or is unavailable.
 
