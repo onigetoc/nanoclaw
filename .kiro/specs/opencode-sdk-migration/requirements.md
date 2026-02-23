@@ -2,11 +2,11 @@
 
 ## Introduction
 
-NanoClaw is a personal AI assistant that runs securely in containers, connecting to messaging platforms (WhatsApp, Telegram) and routing messages to AI agents. This document specifies the requirements for migrating from the Claude SDK (@anthropic-ai/opencode-sdk) to the OpenCode SDK (@opencode-ai/sdk) while maintaining all existing functionality.
+EureClaw is a personal AI assistant that runs securely in containers, connecting to messaging platforms (WhatsApp, Telegram) and routing messages to AI agents. This document specifies the requirements for migrating from the Claude SDK (@anthropic-ai/opencode-sdk) to the OpenCode SDK (@opencode-ai/sdk) while maintaining all existing functionality.
 
 ## Glossary
 
-- **NanoClaw**: The orchestrator system that manages messaging channels, containers, and agent execution
+- **EureClaw**: The orchestrator system that manages messaging channels, containers, and agent execution
 - **Agent_Runner**: The containerized process that executes AI agent sessions using the SDK
 - **Container_Runner**: The host process that spawns and manages agent containers
 - **Session**: A persistent conversation context maintained by the SDK
@@ -20,7 +20,7 @@ NanoClaw is a personal AI assistant that runs securely in containers, connecting
 
 ### Requirement 1: SDK Package Migration
 
-**User Story:** As a developer, I want to replace the Claude SDK with the OpenCode SDK, so that NanoClaw can use OpenCode's AI capabilities.
+**User Story:** As a developer, I want to replace the Claude SDK with the OpenCode SDK, so that EureClaw can use OpenCode's AI capabilities.
 
 #### Acceptance Criteria
 
@@ -127,7 +127,7 @@ NanoClaw is a personal AI assistant that runs securely in containers, connecting
 
 ### Requirement 10: Multi-Platform Compatibility
 
-**User Story:** As a user on Windows/Linux/macOS, I want NanoClaw to work on my platform, so that I can use it regardless of my operating system.
+**User Story:** As a user on Windows/Linux/macOS, I want EureClaw to work on my platform, so that I can use it regardless of my operating system.
 
 #### Acceptance Criteria
 
@@ -139,7 +139,7 @@ NanoClaw is a personal AI assistant that runs securely in containers, connecting
 
 ### Requirement 11: Backward Compatibility
 
-**User Story:** As an existing NanoClaw user, I want my data and configuration to continue working, so that the migration is seamless.
+**User Story:** As an existing EureClaw user, I want my data and configuration to continue working, so that the migration is seamless.
 
 #### Acceptance Criteria
 

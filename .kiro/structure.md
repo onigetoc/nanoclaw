@@ -1,9 +1,9 @@
-# NanoClaw Architecture
+# EureClaw Architecture
 
 ## Project Structure
 
 ```
-nanoclaw/
+eureclaw/
 ├── src/
 │   ├── channels/          # Messaging platform integrations
 │   │   ├── whatsapp.ts    # WhatsApp channel implementation

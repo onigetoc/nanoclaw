@@ -1,5 +1,5 @@
 /**
- * NanoClaw Agent Runner
+ * EureClaw Agent Runner
  * Runs inside a container, receives config via stdin, outputs result to stdout
  *
  * Input protocol:
@@ -120,8 +120,8 @@ async function readStdin(): Promise<string> {
   });
 }
 
-const OUTPUT_START_MARKER = '---NANOCLAW_OUTPUT_START---';
-const OUTPUT_END_MARKER = '---NANOCLAW_OUTPUT_END---';
+const OUTPUT_START_MARKER = '---EURECLAW_OUTPUT_START---';
+const OUTPUT_END_MARKER = '---EURECLAW_OUTPUT_END---';
 
 function writeOutput(output: ContainerOutput): void {
   console.log(OUTPUT_START_MARKER);
@@ -596,7 +596,7 @@ async function runQuery(
 
   // Generate platform-aware environment context for the agent.
   // This replaces hardcoded /workspace/ paths in AGENTS.md files,
-  // making NanoClaw work on Windows, Linux, and macOS without templates.
+  // making EureClaw work on Windows, Linux, and macOS without templates.
   // Requirement 9.3: Generate platform-specific environment context
   const shell = platform === 'win32' ? 'PowerShell/cmd' : 'bash';
   const groupsBasePath = isDirectMode
@@ -617,7 +617,7 @@ async function runQuery(
     `- IPC directory: ${ipcBaseDir}`,
     ``,
     `Use these paths for file operations and database queries.`,
-    `For group management, prefer MCP tools (mcp__nanoclaw__register_group, mcp__nanoclaw__list_tasks, etc.).`,
+    `For group management, prefer MCP tools (mcp__eureclaw__register_group, mcp__eureclaw__list_tasks, etc.).`,
   ].join('\n');
 
   // Requirement 9.4: Append both to system prompt
@@ -866,7 +866,7 @@ async function main(): Promise<void> {
     // Delete the temp file the entrypoint wrote — it contains secrets
     try { fs.unlinkSync('/tmp/input.json'); } catch { /* may not exist */ }
     
-    log(`=== NanoClaw Agent Runner Started ===`);
+    log(`=== EureClaw Agent Runner Started ===`);
     log(`Group: ${containerInput.groupFolder}, ChatJID: ${containerInput.chatJid}, IsMain: ${containerInput.isMain}`);
     debugLog(`Container input: sessionId=${containerInput.sessionId || 'none'}, isScheduledTask=${containerInput.isScheduledTask || false}, directMode=${!!containerInput.directMode}`);
   } catch (err) {
@@ -959,17 +959,17 @@ async function main(): Promise<void> {
   log(`Initial prompt prepared: ${prompt.length} chars`);
   debugLog(`Prompt preview: ${prompt.slice(0, 150)}${prompt.length > 150 ? '...' : ''}`);
 
-  // Register NanoClaw MCP server dynamically with the OpenCode server.
+  // Register EureClaw MCP server dynamically with the OpenCode server.
   // This makes tools like send_message, send_image, schedule_task available to the agent.
   // Must be done before the first query so the agent can use these tools.
   try {
     preClient = await createOpencodeClient(sdkEnv);
-    log('Registering NanoClaw MCP server with OpenCode...');
+    log('Registering EureClaw MCP server with OpenCode...');
 
-    // Disconnect existing nanoclaw MCP server if any (env vars may have changed)
+    // Disconnect existing eureclaw MCP server if any (env vars may have changed)
     try {
-      await preClient.mcp.disconnect({ path: { name: 'nanoclaw' } });
-      debugLog('Disconnected existing nanoclaw MCP server');
+      await preClient.mcp.disconnect({ path: { name: 'eureclaw' } });
+      debugLog('Disconnected existing eureclaw MCP server');
     } catch {
       // Server may not exist yet — that's fine
     }
@@ -986,17 +986,17 @@ async function main(): Promise<void> {
 
     // Environment variables for the MCP server process
     const mcpEnv: Record<string, string> = {
-      NANOCLAW_CHAT_JID: containerInput.chatJid,
-      NANOCLAW_GROUP_FOLDER: containerInput.groupFolder,
-      NANOCLAW_IS_MAIN: containerInput.isMain ? '1' : '0',
-      NANOCLAW_IPC_DIR: ipcBaseDir,
-      NANOCLAW_GROUP_DIR: groupDir,
+      EURECLAW_CHAT_JID: containerInput.chatJid,
+      EURECLAW_GROUP_FOLDER: containerInput.groupFolder,
+      EURECLAW_IS_MAIN: containerInput.isMain ? '1' : '0',
+      EURECLAW_IPC_DIR: ipcBaseDir,
+      EURECLAW_GROUP_DIR: groupDir,
       PROJECT_DIR: containerInput.directMode?.projectDir || '/workspace/project',
     };
 
     await preClient.mcp.add({
       body: {
-        name: 'nanoclaw',
+        name: 'eureclaw',
         config: {
           type: 'local' as const,
           command: mcpCommand,
@@ -1007,16 +1007,16 @@ async function main(): Promise<void> {
       },
     });
 
-    log('✓ NanoClaw MCP server registered successfully');
+    log('✓ EureClaw MCP server registered successfully');
 
     // Verify it's connected
     try {
       const status = await preClient.mcp.status();
       const statusData = (status as any).data ?? status;
       if (Array.isArray(statusData)) {
-        const nanoclaw = statusData.find((s: any) => s.name === 'nanoclaw');
-        if (nanoclaw) {
-          log(`MCP server 'nanoclaw' status: ${JSON.stringify(nanoclaw).slice(0, 200)}`);
+        const eureclaw = statusData.find((s: any) => s.name === 'eureclaw');
+        if (eureclaw) {
+          log(`MCP server 'eureclaw' status: ${JSON.stringify(eureclaw).slice(0, 200)}`);
         }
       }
     } catch {
@@ -1024,9 +1024,9 @@ async function main(): Promise<void> {
     }
   } catch (err) {
     const errorMessage = err instanceof Error ? err.message : String(err);
-    log(`⚠ Failed to register NanoClaw MCP server: ${errorMessage}`);
+    log(`⚠ Failed to register EureClaw MCP server: ${errorMessage}`);
     log('Agent will continue without MCP tools (send_message, send_image, etc.)');
-    // Non-fatal — agent can still work, just without NanoClaw-specific tools
+    // Non-fatal — agent can still work, just without EureClaw-specific tools
   }
 
   // Query loop: run query → wait for IPC message → run new query → repeat
@@ -1115,7 +1115,7 @@ async function main(): Promise<void> {
   } finally {
     // Note: OpenCode client doesn't need explicit cleanup
     // The client just makes HTTP requests to the OpenCode server
-    log(`=== NanoClaw Agent Runner Finished ===`);
+    log(`=== EureClaw Agent Runner Finished ===`);
   }
 }
 

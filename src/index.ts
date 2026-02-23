@@ -54,6 +54,9 @@ import {
   stopServer,
 } from './opencode-server.js';
 import { scanAndGetApiKeys, logApiKeysReport } from './api-key-scanner.js';
+import { executeCommand } from './commands/index.js';
+import './commands/builtin-commands.js'; // Register built-in commands
+import { loadSleepState, isSleeping, setOnWakeCallback } from './commands/sleep-manager.js';
 
 // Re-export for backwards compatibility during refactor
 export { escapeXml, formatMessages } from './router.js';
@@ -403,10 +406,16 @@ async function startMessageLoop(): Promise<void> {
   }
   messageLoopRunning = true;
 
-  logger.info(`NanoClaw running (trigger: @${ASSISTANT_NAME})`);
+  logger.info(`EureClaw running (trigger: @${ASSISTANT_NAME})`);
 
   while (true) {
     try {
+      // Skip processing if bot is sleeping
+      if (isSleeping()) {
+        await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL));
+        continue;
+      }
+
       const jids = Object.keys(registeredGroups);
       const { messages, newTimestamp } = getNewMessages(jids, lastTimestamp, ASSISTANT_NAME);
 
@@ -538,7 +547,7 @@ function ensureContainerSystemRunning(): void {
         '║  2. Run: container system start                               ║',
       );
       console.error(
-        '║  3. Restart NanoClaw                                          ║',
+        '║  3. Restart EureClaw                                          ║',
       );
       console.error(
         '╚════════════════════════════════════════════════════════════════╝\n',
@@ -547,7 +556,7 @@ function ensureContainerSystemRunning(): void {
     }
   }
 
-  // Kill and clean up orphaned NanoClaw containers from previous runs
+  // Kill and clean up orphaned EureClaw containers from previous runs
   try {
     const output = execSync('container ls --format json', {
       stdio: ['pipe', 'pipe', 'pipe'],
@@ -555,7 +564,7 @@ function ensureContainerSystemRunning(): void {
     });
     const containers: { status: string; configuration: { id: string } }[] = JSON.parse(output || '[]');
     const orphans = containers
-      .filter((c) => c.status === 'running' && c.configuration.id.startsWith('nanoclaw-'))
+      .filter((c) => c.status === 'running' && c.configuration.id.startsWith('eureclaw-'))
       .map((c) => c.configuration.id);
     for (const name of orphans) {
       try {
@@ -584,6 +593,17 @@ async function main(): Promise<void> {
   initDatabase();
   logger.info('Database initialized');
   loadState();
+  loadSleepState();
+  logger.info({ isSleeping: isSleeping() }, 'Sleep state loaded');
+
+  // Setup wake callback to send message when bot wakes up automatically
+  setOnWakeCallback(async (chatJid: string, message: string) => {
+    const channel = findChannel(channels, chatJid);
+    if (channel) {
+      await channel.sendMessage(chatJid, message);
+      logger.info({ chatJid }, 'Auto-wake message sent');
+    }
+  });
 
   // Graceful shutdown handlers
   const shutdown = async (signal: string) => {
@@ -598,7 +618,7 @@ async function main(): Promise<void> {
 
   // Channel callbacks (shared by all channels)
   const channelOpts = {
-    onMessage: (chatJid: string, msg: NewMessage) => {
+    onMessage: async (chatJid: string, msg: NewMessage) => {
       // Check if chat is registered
       let group = registeredGroups[chatJid];
       
@@ -635,6 +655,42 @@ async function main(): Promise<void> {
             'Auto-registration failed',
           );
         }
+      }
+      
+      // Check for slash commands (universal across all channels)
+      const commandResult = await executeCommand(msg.content, {
+        chatJid,
+        senderName: msg.sender_name,
+        senderId: msg.sender,
+        group,
+      });
+
+      if (commandResult) {
+        // Command was executed - send reply if provided
+        if (commandResult.reply) {
+          const channel = findChannel(channels, chatJid);
+          if (channel) {
+            await channel.sendMessage(chatJid, commandResult.reply);
+          }
+        }
+
+        // Handle special actions
+        if (commandResult.action === 'restart') {
+          // Give time for the message to be sent and connections to close
+          setTimeout(() => {
+            logger.info('Initiating restart via command');
+            process.exit(0); // Exit cleanly - supervisor will restart
+          }, 2000);
+        }
+
+        // Don't store command messages in DB or process them further
+        return;
+      }
+
+      // If bot is sleeping, ignore all non-command messages
+      if (isSleeping()) {
+        logger.debug({ chatJid, sender: msg.sender_name }, 'Message ignored (bot sleeping)');
+        return;
       }
       
       // Store message (existing logic)
@@ -741,7 +797,7 @@ const isDirectRun =
 
 if (isDirectRun) {
   main().catch((err) => {
-    logger.error({ err }, 'Failed to start NanoClaw');
+    logger.error({ err }, 'Failed to start EureClaw');
     process.exit(1);
   });
 }

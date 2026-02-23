@@ -1,5 +1,5 @@
 /**
- * Direct Runner for NanoClaw (Windows/Linux fallback)
+ * Direct Runner for EureClaw (Windows/Linux fallback)
  * Runs agent directly without container isolation
  * WARNING: Less secure than container mode - use only when containers unavailable
  */
@@ -14,8 +14,8 @@ import { logger } from './logger.js';
 import { RegisteredGroup } from './types.js';
 import { ContainerInput, ContainerOutput } from './container-runner.js';
 
-const OUTPUT_START_MARKER = '---NANOCLAW_OUTPUT_START---';
-const OUTPUT_END_MARKER = '---NANOCLAW_OUTPUT_END---';
+const OUTPUT_START_MARKER = '---EURECLAW_OUTPUT_START---';
+const OUTPUT_END_MARKER = '---EURECLAW_OUTPUT_END---';
 
 /**
  * Run agent directly using Node.js (no container isolation)
@@ -58,7 +58,7 @@ export async function runDirectAgent(
     }
   }
 
-  const processName = `nanoclaw-direct-${group.folder}-${Date.now()}`;
+  const processName = `eureclaw-direct-${group.folder}-${Date.now()}`;
   const agentRunnerPath = path.join(process.cwd(), 'container', 'agent-runner', 'src', 'index.ts');
 
   logger.info(

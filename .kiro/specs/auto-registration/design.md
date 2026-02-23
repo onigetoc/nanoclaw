@@ -2,7 +2,7 @@
 
 ## Overview
 
-This design implements automatic registration of the first chat as the 'main' group in NanoClaw, eliminating manual JID entry and configuration scripts. When a user sends their first message to the bot on any channel (Telegram, WhatsApp), the system automatically:
+This design implements automatic registration of the first chat as the 'main' group in EureClaw, eliminating manual JID entry and configuration scripts. When a user sends their first message to the bot on any channel (Telegram, WhatsApp), the system automatically:
 
 1. Detects that no 'main' group exists
 2. Registers the chat as 'main' with appropriate settings

@@ -1,19 +1,19 @@
 ---
 name: add-voice-transcription
-description: Add voice message transcription to NanoClaw using Groq Whisper (FREE) or OpenAI Whisper (paid). Automatically transcribes voice messages so the agent can read and respond to them.
+description: Add voice message transcription to EureClaw using Groq Whisper (FREE) or OpenAI Whisper (paid). Automatically transcribes voice messages so the agent can read and respond to them.
 ---
 
 # Add Voice Message Transcription
 
-This skill enables automatic voice message transcription for Telegram and WhatsApp. The transcription system is already built into NanoClaw core - this skill just helps you configure it.
+This skill enables automatic voice message transcription for Telegram and WhatsApp. The transcription system is already built into EureClaw core - this skill just helps you configure it.
 
-**Note:** NanoClaw's media system (`src/media/`) is part of the core and supports multiple providers. This skill only configures which provider to use.
+**Note:** EureClaw's media system (`src/media/`) is part of the core and supports multiple providers. This skill only configures which provider to use.
 
 ## Choose Your Provider
 
 **Use the AskUserQuestion tool** to present options:
 
-> NanoClaw supports 3 transcription providers:
+> EureClaw supports 3 transcription providers:
 >
 > 1. **Groq Whisper (Recommended - FREE)**
 >    - 2000 requests/day, 8 hours audio/day
@@ -128,17 +128,17 @@ LOCAL_WHISPER_ARGS=--model base --language auto
 
 ## Restart Service
 
-After configuring `.env`, restart NanoClaw:
+After configuring `.env`, restart EureClaw:
 
 ```bash
 npm run build
-launchctl kickstart -k gui/$(id -u)/com.nanoclaw
+launchctl kickstart -k gui/$(id -u)/com.eureclaw
 ```
 
 Or on Linux:
 ```bash
 npm run build
-systemctl --user restart nanoclaw
+systemctl --user restart eureclaw
 ```
 
 ---
@@ -160,7 +160,7 @@ Tell the user:
 Watch for transcription in the logs:
 
 ```bash
-tail -f logs/nanoclaw.log | grep -i "voice\|transcri"
+tail -f logs/eureclaw.log | grep -i "voice\|transcri"
 ```
 
 ---
@@ -202,7 +202,7 @@ AUDIO_MAX_FILE_SIZE=26214400    # 25MB (Whisper limit)
 
 Check logs:
 ```bash
-tail -100 logs/nanoclaw.log | grep -i transcription
+tail -100 logs/eureclaw.log | grep -i transcription
 ```
 
 Common causes:
@@ -238,7 +238,7 @@ AUDIO_ENABLED=false
 
 # Restart
 npm run build
-launchctl kickstart -k gui/$(id -u)/com.nanoclaw
+launchctl kickstart -k gui/$(id -u)/com.eureclaw
 ```
 
 The code stays in place (it's part of core), but transcription is disabled.
@@ -249,7 +249,7 @@ The code stays in place (it's part of core), but transcription is disabled.
 
 **Why is this in core?**
 
-The media system (`src/media/`) is part of NanoClaw core because:
+The media system (`src/media/`) is part of EureClaw core because:
 - MIME detection is essential for all media types
 - Prevents binary injection bugs (like OpenClaw had)
 - Reusable for images, videos, documents
@@ -269,4 +269,4 @@ Potential additions:
 
 ---
 
-*This skill configures NanoClaw's built-in media system. No core files are modified.*
+*This skill configures EureClaw's built-in media system. No core files are modified.*

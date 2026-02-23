@@ -10,7 +10,7 @@ Before testing, ensure:
 - ✅ Container image has been rebuilt (`./container/build.sh`)
 - ✅ All code changes are committed
 - ✅ You have access to WhatsApp and/or Telegram for testing
-- ✅ The NanoClaw service is running
+- ✅ The EureClaw service is running
 
 ## Testing Checklist
 
@@ -22,16 +22,16 @@ Before testing, ensure:
 
 ```bash
 # macOS - Check service status
-launchctl list | grep nanoclaw
+launchctl list | grep eureclaw
 
 # If not running, start it
-launchctl kickstart -k gui/$(id -u)/com.nanoclaw
+launchctl kickstart -k gui/$(id -u)/com.eureclaw
 
 # Linux (systemd) - Check service status
-systemctl --user status nanoclaw
+systemctl --user status eureclaw
 
 # If not running, start it
-systemctl --user restart nanoclaw
+systemctl --user restart eureclaw
 ```
 
 **Expected Result:** Service should be running without errors.
@@ -89,21 +89,21 @@ systemctl --user restart nanoclaw
 
 **Test Case 3.2: Session Persistence After Restart**
 
-1. Send: `@Andy my project name is NanoClaw`
+1. Send: `@Andy my project name is EureClaw`
 2. Wait for acknowledgment
 3. Restart the service:
    ```bash
    # macOS
-   launchctl kickstart -k gui/$(id -u)/com.nanoclaw
+   launchctl kickstart -k gui/$(id -u)/com.eureclaw
    
    # Linux
-   systemctl --user restart nanoclaw
+   systemctl --user restart eureclaw
    ```
 4. Wait 10 seconds for service to start
 5. Send: `@Andy what is my project name?`
 
 **Expected Result:**
-- Agent remembers "NanoClaw" from before the restart
+- Agent remembers "EureClaw" from before the restart
 - Session context is preserved
 - No errors about invalid session IDs
 
@@ -154,12 +154,12 @@ systemctl --user restart nanoclaw
 
 **Test Case 5.1: Read File**
 
-1. Send: `@Andy read the README.md file and tell me what NanoClaw is`
+1. Send: `@Andy read the README.md file and tell me what EureClaw is`
 2. Wait for response
 
 **Expected Result:**
 - Agent reads the file successfully
-- Provides a summary of NanoClaw
+- Provides a summary of EureClaw
 - No permission errors
 
 **Test Case 5.2: Write File**
@@ -258,7 +258,7 @@ systemctl --user restart nanoclaw
 2. Wait for acknowledgment
 3. Check the database:
    ```bash
-   sqlite3 data/nanoclaw.db "SELECT * FROM tasks WHERE status='active';"
+   sqlite3 data/eureclaw.db "SELECT * FROM tasks WHERE status='active';"
    ```
 
 **Expected Result:**
@@ -324,7 +324,7 @@ systemctl --user restart nanoclaw
 
 1. Check for existing sessions in database:
    ```bash
-   sqlite3 data/nanoclaw.db "SELECT id, group_folder, created_at FROM sessions LIMIT 5;"
+   sqlite3 data/eureclaw.db "SELECT id, group_folder, created_at FROM sessions LIMIT 5;"
    ```
 2. If you have existing sessions, send a message to resume one
 3. Verify context is preserved
@@ -356,10 +356,10 @@ During all tests, monitor logs for errors:
 
 ```bash
 # Watch service logs (macOS)
-tail -f ~/Library/Logs/nanoclaw.log
+tail -f ~/Library/Logs/eureclaw.log
 
 # Watch service logs (Linux)
-journalctl --user -u nanoclaw -f
+journalctl --user -u eureclaw -f
 
 # Watch container logs
 tail -f groups/main/logs/container-*.log
@@ -402,10 +402,10 @@ The migration is successful if:
 **Check:**
 ```bash
 # macOS
-cat ~/Library/Logs/nanoclaw.log
+cat ~/Library/Logs/eureclaw.log
 
 # Linux
-journalctl --user -u nanoclaw -n 50
+journalctl --user -u eureclaw -n 50
 ```
 
 **Common causes:**
@@ -417,9 +417,9 @@ journalctl --user -u nanoclaw -n 50
 ### Issue: Agent doesn't respond
 
 **Check:**
-1. Service is running: `launchctl list | grep nanoclaw`
+1. Service is running: `launchctl list | grep eureclaw`
 2. Container logs: `cat groups/main/logs/container-*.log | tail -100`
-3. Database connection: `sqlite3 data/nanoclaw.db "SELECT COUNT(*) FROM messages;"`
+3. Database connection: `sqlite3 data/eureclaw.db "SELECT COUNT(*) FROM messages;"`
 
 **Common causes:**
 - Container timeout (check timeout settings)
@@ -429,7 +429,7 @@ journalctl --user -u nanoclaw -n 50
 ### Issue: "Session not found" errors
 
 **Check:**
-1. Database has sessions: `sqlite3 data/nanoclaw.db "SELECT * FROM sessions;"`
+1. Database has sessions: `sqlite3 data/eureclaw.db "SELECT * FROM sessions;"`
 2. Session IDs are valid UUIDs
 3. OpenCode SDK is configured correctly
 
@@ -458,13 +458,13 @@ If you encounter issues during testing:
 1. **Collect logs:**
    ```bash
    # Service logs
-   cat ~/Library/Logs/nanoclaw.log > migration-test-service.log
+   cat ~/Library/Logs/eureclaw.log > migration-test-service.log
    
    # Container logs
    cat groups/main/logs/container-*.log > migration-test-container.log
    
    # Database state
-   sqlite3 data/nanoclaw.db ".dump" > migration-test-db.sql
+   sqlite3 data/eureclaw.db ".dump" > migration-test-db.sql
    ```
 
 2. **Document the issue:**
@@ -504,10 +504,10 @@ If critical issues are found:
 1. **Stop the service:**
    ```bash
    # macOS
-   launchctl unload ~/Library/LaunchAgents/com.nanoclaw.plist
+   launchctl unload ~/Library/LaunchAgents/com.eureclaw.plist
    
    # Linux
-   systemctl --user stop nanoclaw
+   systemctl --user stop eureclaw
    ```
 
 2. **Revert to previous version:**
@@ -520,10 +520,10 @@ If critical issues are found:
 3. **Restart the service:**
    ```bash
    # macOS
-   launchctl load ~/Library/LaunchAgents/com.nanoclaw.plist
+   launchctl load ~/Library/LaunchAgents/com.eureclaw.plist
    
    # Linux
-   systemctl --user start nanoclaw
+   systemctl --user start eureclaw
    ```
 
 4. **Verify rollback:**

@@ -1,6 +1,6 @@
 # Gemini Setup Guide
 
-Quick guide to get your free Google Gemini API key and add multimodal support to NanoClaw.
+Quick guide to get your free Google Gemini API key and add multimodal support to EureClaw.
 
 ## Why You Need Gemini
 
@@ -20,7 +20,7 @@ Quick guide to get your free Google Gemini API key and add multimodal support to
 
 ## Why Gemini?
 
-Gemini 2.5 Flash Lite is the **perfect "small model"** for NanoClaw:
+Gemini 2.5 Flash Lite is the **perfect "small model"** for EureClaw:
 
 - ✅ **FREE tier** - 500 requests/day (generous for personal use)
 - ✅ **Multimodal** - Handles text, images, videos, audio, documents
@@ -39,7 +39,7 @@ Most users stay within the free tier. If you exceed it, expect ~$1-5/month for t
 
 **That's it!** No credit card required for the free tier.
 
-## Step 2: Add to NanoClaw
+## Step 2: Add to EureClaw
 
 ### Recommended: Via Environment Variable (Secure)
 
@@ -92,11 +92,11 @@ Edit `models-config.json` (no API key needed here):
 
 **Note:** The API key comes from `.env`, not from this file!
 
-## Step 4: Restart NanoClaw
+## Step 4: Restart EureClaw
 
 ```bash
 # macOS (if using launchd service)
-launchctl kickstart -k gui/$(id -u)/com.nanoclaw
+launchctl kickstart -k gui/$(id -u)/com.eureclaw
 
 # Or just restart the process
 # Ctrl+C then npm start
@@ -199,7 +199,7 @@ See [MODEL-CONFIGURATION.md](MODEL-CONFIGURATION.md) for more options.
 1. Get free API key: https://aistudio.google.com/apikey
 2. Add to `.env`: `GOOGLE_API_KEY=your_key`
 3. Update `models-config.json`: `"small_model": "google/gemini-2.5-flash-lite"`
-4. Restart NanoClaw
+4. Restart EureClaw
 5. Enjoy multimodal capabilities!
 
 **Cost:** $0/month for most users, ~$1-5/month if you exceed free tier.

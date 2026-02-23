@@ -1,5 +1,5 @@
 /**
- * Stdio MCP Server for NanoClaw
+ * Stdio MCP Server for EureClaw
  * Standalone process that agent teams subagents can inherit.
  * Reads context from environment variables, writes IPC files for the host.
  */
@@ -11,14 +11,14 @@ import fs from 'fs';
 import path from 'path';
 import { CronExpressionParser } from 'cron-parser';
 
-const IPC_DIR = process.env.NANOCLAW_IPC_DIR || '/workspace/ipc';
+const IPC_DIR = process.env.EURECLAW_IPC_DIR || '/workspace/ipc';
 const MESSAGES_DIR = path.join(IPC_DIR, 'messages');
 const TASKS_DIR = path.join(IPC_DIR, 'tasks');
 
 // Context from environment variables (set by the agent runner)
-const chatJid = process.env.NANOCLAW_CHAT_JID!;
-const groupFolder = process.env.NANOCLAW_GROUP_FOLDER!;
-const isMain = process.env.NANOCLAW_IS_MAIN === '1';
+const chatJid = process.env.EURECLAW_CHAT_JID!;
+const groupFolder = process.env.EURECLAW_GROUP_FOLDER!;
+const isMain = process.env.EURECLAW_IS_MAIN === '1';
 
 function writeIpcFile(dir: string, data: object): string {
   fs.mkdirSync(dir, { recursive: true });
@@ -35,7 +35,7 @@ function writeIpcFile(dir: string, data: object): string {
 }
 
 const server = new McpServer({
-  name: 'nanoclaw',
+  name: 'eureclaw',
   version: '1.0.0',
 });
 
@@ -293,15 +293,24 @@ server.tool(
         config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
       } catch {}
     }
+
+    // Check what model is actually running (from env vars passed to OpenCode)
+    const runningModel = process.env.OPENCODE_MODEL || 'unknown';
+    const configuredModel = config.model || 'opencode/minimax-m2.5-free';
+    const modelsMatch = runningModel === configuredModel || runningModel === 'unknown';
     
     return {
       content: [{
         type: 'text' as const,
         text: JSON.stringify({
-          primary_model: config.model || 'opencode/minimax-m2.5-free',
-          small_model: config.small_model || config.model || 'opencode/minimax-m2.5-free',
-          fallback_model: config.fallback_model || 'none',
-          note: 'Changes require OpenCode server restart to take effect'
+          configured_primary_model: configuredModel,
+          configured_small_model: config.small_model || config.model || 'opencode/minimax-m2.5-free',
+          configured_fallback_model: config.fallback_model || 'none',
+          currently_running_model: runningModel,
+          models_in_sync: modelsMatch,
+          note: modelsMatch 
+            ? 'Configuration matches running model' 
+            : 'Configuration changed - restart required to apply'
         }, null, 2)
       }]
     };
@@ -333,8 +342,8 @@ server.tool(
         content: [{
           type: 'text' as const,
           text: `✓ Primary model changed to: ${args.model}\n\n` +
-                `⚠️  OpenCode server restart required for changes to take effect.\n` +
-                `The user needs to restart NanoClaw for the new model to be used.`
+                `⚠️  Restart required for changes to take effect.\n` +
+                `Wait a few seconds, then use /restart to apply the new model.`
         }]
       };
     } catch (err) {
@@ -374,7 +383,8 @@ server.tool(
         content: [{
           type: 'text' as const,
           text: `✓ Small model changed to: ${args.model}\n\n` +
-                `⚠️  OpenCode server restart required for changes to take effect.`
+                `⚠️  Restart required for changes to take effect.\n` +
+                `Wait a few seconds, then use /restart to apply the new model.`
         }]
       };
     } catch (err) {
@@ -472,7 +482,7 @@ server.tool(
     caption: z.string().optional().describe('Optional caption for the image')
   },
   async (args) => {
-    const groupDir = process.env.NANOCLAW_GROUP_DIR || '/workspace/group';
+    const groupDir = process.env.EURECLAW_GROUP_DIR || '/workspace/group';
     const projectDir = process.env.PROJECT_DIR || '/workspace/project';
     
     // Resolve path

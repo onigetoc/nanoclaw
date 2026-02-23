@@ -8,7 +8,7 @@
 
 ## Skills
 
-A skill is a markdown file in `.opencode/skills/` that teaches OpenCode how to transform a NanoClaw installation.
+A skill is a markdown file in `.opencode/skills/` that teaches OpenCode how to transform a EureClaw installation.
 
 A PR that contributes a skill should not modify any source files.
 

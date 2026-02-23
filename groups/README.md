@@ -106,4 +106,4 @@ Edit `AGENTS.md` only
 ## See Also
 
 - [New Architecture Guide](../Project-Docs-Ressources-Helps/new-architecture-guide.md) - Detailed explanation
-- [OpenClaw Comparison](../Project-Docs-Ressources-Helps/comparison-openclaw-vs-nanoclaw.md) - How we compare
+- [OpenClaw Comparison](../Project-Docs-Ressources-Helps/comparison-openclaw-vs-eureclaw.md) - How we compare

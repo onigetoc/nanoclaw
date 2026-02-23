@@ -1,6 +1,6 @@
 # Groups Templates System
 
-This directory contains the template system for NanoClaw group context files.
+This directory contains the template system for EureClaw group context files.
 
 ## Structure
 
@@ -55,7 +55,7 @@ The `.tpl.md` extension ensures:
 ## Usage
 
 ### Automatic Setup
-When a new group is registered, NanoClaw automatically:
+When a new group is registered, EureClaw automatically:
 1. Creates a new folder in `groups/{group-name}/`
 2. Copies all `.tpl.md` files from `templates/`
 3. Renames them to `.md` (e.g., `IDENTITY.tpl.md` → `IDENTITY.md`)
@@ -133,7 +133,7 @@ npm run generate:context
 3. Restart the service:
 ```bash
 # macOS
-launchctl kickstart -k gui/$(id -u)/com.nanoclaw
+launchctl kickstart -k gui/$(id -u)/com.eureclaw
 
 # Or rebuild container if needed
 ./container/build.sh

@@ -35,7 +35,7 @@ Write in standard markdown - the router handles conversion automatically.
 ### Response Structure
 
 1. **Quick acknowledgment** (if task takes time)
-   - Use `mcp__nanoclaw__send_message` to acknowledge immediately
+   - Use `mcp__eureclaw__send_message` to acknowledge immediately
    - Then continue working
 
 2. **Internal reasoning** (hidden from user)

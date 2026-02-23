@@ -73,7 +73,7 @@ export class WhatsAppChannel implements Channel {
           'WhatsApp authentication required. Run /setup in OpenCode.';
         logger.error(msg);
         exec(
-          `osascript -e 'display notification "${msg}" with title "NanoClaw" sound name "Basso"'`,
+          `osascript -e 'display notification "${msg}" with title "EureClaw" sound name "Basso"'`,
         );
         setTimeout(() => process.exit(1), 1000);
       }

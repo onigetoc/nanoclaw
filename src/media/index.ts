@@ -1,5 +1,5 @@
 /**
- * Media handling module for NanoClaw
+ * Media handling module for EureClaw
  * Exports all media-related functionality
  */
 

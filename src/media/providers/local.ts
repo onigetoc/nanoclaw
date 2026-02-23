@@ -41,7 +41,7 @@ export class LocalWhisperProvider {
     try {
       // Save buffer to temporary file
       const tempDir = os.tmpdir();
-      tempPath = path.join(tempDir, `nanoclaw-whisper-${Date.now()}-${filename}`);
+      tempPath = path.join(tempDir, `eureclaw-whisper-${Date.now()}-${filename}`);
       await fs.writeFile(tempPath, audioBuffer);
 
       // Build command arguments

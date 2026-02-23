@@ -1,15 +1,96 @@
 {
   "$schema": "https://opencode.ai/config.json",
-  
   "model": "opencode/minimax-m2.5-free",
   "small_model": "opencode/minimax-m2.5-free",
-  "fallback_model": "opencode/glm-5-free",
-  
   "provider": {
     "opencode": {
       "options": {
         "timeout": 600000
       }
+    }
+  },
+  "mcp": {
+    "_comment": "MCP Server Configuration Examples",
+    "_instructions": [
+      "1. Copy an example below and rename it (remove the underscore prefix)",
+      "2. Set 'enabled': true to activate the server",
+      "3. Configure the command/url and any required credentials",
+      "4. Restart OpenCode or reload configuration"
+    ],
+
+    "_example_context7": {
+      "type": "remote",
+      "url": "https://mcp.context7.com/mcp",
+      "enabled": false,
+      "headers": {
+        "Authorization": "Bearer YOUR_CONTEXT7_API_KEY"
+      },
+      "_description": "Context7: AI-powered documentation and knowledge base"
+    },
+
+    "_example_shadcn": {
+      "type": "local",
+      "command": ["npx", "-y", "shadcn@latest", "mcp"],
+      "enabled": false,
+      "_description": "shadcn/ui: React component library MCP"
+    },
+
+    "_example_filesystem": {
+      "type": "local",
+      "command": ["npx", "-y", "@modelcontextprotocol/server-filesystem", "/path/to/allowed/directory"],
+      "enabled": false,
+      "_description": "Filesystem MCP: Safe file system access"
+    },
+
+    "_example_github": {
+      "type": "local",
+      "command": ["npx", "-y", "@modelcontextprotocol/server-github"],
+      "enabled": false,
+      "env": {
+        "GITHUB_PERSONAL_ACCESS_TOKEN": "your_github_token_here"
+      },
+      "_description": "GitHub MCP: Repository and issue management"
+    },
+
+    "_example_postgres": {
+      "type": "local",
+      "command": ["npx", "-y", "@modelcontextprotocol/server-postgres"],
+      "enabled": false,
+      "env": {
+        "POSTGRES_CONNECTION_STRING": "postgresql://user:password@localhost:5432/dbname"
+      },
+      "_description": "PostgreSQL MCP: Database queries and management"
+    },
+
+    "_example_brave_search": {
+      "type": "local",
+      "command": ["npx", "-y", "@modelcontextprotocol/server-brave-search"],
+      "enabled": false,
+      "env": {
+        "BRAVE_API_KEY": "your_brave_api_key_here"
+      },
+      "_description": "Brave Search MCP: Web search capabilities"
+    },
+
+    "_example_custom_local": {
+      "type": "local",
+      "command": ["node", "/absolute/path/to/your/mcp-server.js"],
+      "enabled": false,
+      "env": {
+        "CUSTOM_ENV_VAR": "value"
+      },
+      "_description": "Custom local MCP server"
+    },
+
+    "_example_custom_remote": {
+      "type": "remote",
+      "url": "https://your-mcp-server.com/mcp",
+      "enabled": false,
+      "headers": {
+        "Authorization": "Bearer YOUR_API_KEY",
+        "X-Custom-Header": "value"
+      },
+      "_description": "Custom remote MCP server"
     }
   }
 }

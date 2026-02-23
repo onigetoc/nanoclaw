@@ -2,7 +2,7 @@
 
 ## Introduction
 
-NanoClaw is migrating from Claude SDK (single API key) to OpenCode SDK which supports multiple AI providers. This feature enables secure, flexible configuration of API keys for multiple providers (Google, Anthropic, Groq, OpenAI) with cross-platform support and future-proofing for Electron GUI integration.
+EureClaw is migrating from Claude SDK (single API key) to OpenCode SDK which supports multiple AI providers. This feature enables secure, flexible configuration of API keys for multiple providers (Google, Anthropic, Groq, OpenAI) with cross-platform support and future-proofing for Electron GUI integration.
 
 ## Glossary
 
@@ -18,7 +18,7 @@ NanoClaw is migrating from Claude SDK (single API key) to OpenCode SDK which sup
 
 ### Requirement 1: Multi-Provider Support
 
-**User Story:** As a NanoClaw user, I want to configure API keys for multiple AI providers, so that I can use different models from Google, Anthropic, Groq, and OpenAI.
+**User Story:** As a EureClaw user, I want to configure API keys for multiple AI providers, so that I can use different models from Google, Anthropic, Groq, and OpenAI.
 
 #### Acceptance Criteria
 
@@ -68,7 +68,7 @@ NanoClaw is migrating from Claude SDK (single API key) to OpenCode SDK which sup
 
 ### Requirement 5: Configuration Validation
 
-**User Story:** As a NanoClaw operator, I want to be notified at startup which providers are configured, so that I can verify my configuration is correct.
+**User Story:** As a EureClaw operator, I want to be notified at startup which providers are configured, so that I can verify my configuration is correct.
 
 #### Acceptance Criteria
 
@@ -90,7 +90,7 @@ NanoClaw is migrating from Claude SDK (single API key) to OpenCode SDK which sup
 
 ### Requirement 7: Backward Compatibility
 
-**User Story:** As an existing NanoClaw user, I want my current .env configuration to continue working, so that the migration doesn't break my setup.
+**User Story:** As an existing EureClaw user, I want my current .env configuration to continue working, so that the migration doesn't break my setup.
 
 #### Acceptance Criteria
 
@@ -112,7 +112,7 @@ NanoClaw is migrating from Claude SDK (single API key) to OpenCode SDK which sup
 
 ### Requirement 9: Documentation Requirements
 
-**User Story:** As a new NanoClaw user, I want comprehensive documentation on API key setup, so that I can configure the system without confusion.
+**User Story:** As a new EureClaw user, I want comprehensive documentation on API key setup, so that I can configure the system without confusion.
 
 #### Acceptance Criteria
 

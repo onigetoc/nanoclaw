@@ -4,10 +4,10 @@ This document lists all tools, skills, and capabilities available to you. When y
 
 ## Core MCP Tools
 
-### NanoClaw Tools
-- `mcp__nanoclaw__send_message` - Send messages immediately while working (for quick acknowledgments)
-- `mcp__nanoclaw__schedule_task` - Schedule tasks to run later or on a recurring basis
-- `mcp__nanoclaw__register_group` - Register a new group/chat for the assistant
+### EureClaw Tools
+- `mcp__eureclaw__send_message` - Send messages immediately while working (for quick acknowledgments)
+- `mcp__eureclaw__schedule_task` - Schedule tasks to run later or on a recurring basis
+- `mcp__eureclaw__register_group` - Register a new group/chat for the assistant
 
 ### File Operations
 - Read/write files in your workspace
@@ -58,14 +58,49 @@ Always check for existing API keys before asking the user to provide them. If a 
 
 ### Search Behavior
 
-When performing any search (news, YouTube, Wikipedia, web, Brave, GitHub, etc.):
-- Provide maximum detail: title, description, and links
-- Links are critical — they may be reused later in the conversation, in interactions with the user, or by other tools
-- Always include source URLs in your responses
-- For complex questions, start with a brief bullet-point plan (5-10 points) of what you'll do
-- After answering complex questions, include a summary and next steps at the end
-- Use MCP server tools to go deeper when the task requires structured work
-- For simple questions (greetings, quick facts), just answer directly without deep research
+**CRITICAL RULES FOR ALL SEARCHES:**
+
+When performing ANY search (news, YouTube, Wikipedia, web, Brave, GitHub, etc.):
+
+1. **ALWAYS include clickable links** - Format: `[Title](URL)`
+   - ❌ BAD: "I found an article about X"
+   - ✅ GOOD: "I found [Article Title](https://example.com/article)"
+
+2. **Provide rich context for each result:**
+   - Title (as clickable link)
+   - Brief description (1-2 sentences)
+   - Source/domain
+   - Publication date (if available)
+
+3. **Links are MANDATORY** - They will be:
+   - Reused later in the conversation
+   - Shared with the user for reference
+   - Used by other tools for deeper analysis
+
+4. **Format example:**
+   ```
+   Here are the top results:
+   
+   1. [Article Title](https://example.com/article)
+      Brief description of what this article covers.
+      Source: example.com | Published: Jan 15, 2024
+   
+   2. [Another Resource](https://site.com/page)
+      What makes this resource valuable.
+      Source: site.com | Published: Dec 2023
+   ```
+
+5. **For complex questions:**
+   - Start with a brief plan (5-10 bullet points)
+   - Execute the search/research
+   - Provide detailed results with links
+   - End with summary and next steps
+
+6. **For simple questions:**
+   - Answer directly without deep research
+   - Still include links if you mention external resources
+
+**REMEMBER:** Every search result MUST have a clickable link. No exceptions.
 
 ### Vision & Image Analysis
 - **You CAN see and analyze images directly** - When users send photos, images, or screenshots, you can see them
@@ -80,7 +115,7 @@ When performing any search (news, YouTube, Wikipedia, web, Brave, GitHub, etc.):
 Skills are located in `.opencode/skills/`. Each skill has a `SKILL.md` file with detailed instructions.
 
 ### Communication & Channels
-- **add-telegram** - Add Telegram channel support to NanoClaw
+- **add-telegram** - Add Telegram channel support to EureClaw
 - **add-telegram-swarm** - Multi-agent Telegram coordination
 - **add-gmail** - Gmail integration for email management
 
@@ -95,13 +130,13 @@ Skills are located in `.opencode/skills/`. Each skill has a `SKILL.md` file with
 - **x-integration** - Twitter/X integration (post, reply, like, retweet, quote)
 
 ### Development & Deployment
-- **convert-to-docker** - Containerize NanoClaw for deployment
-- **setup** - Complete setup wizard for NanoClaw installation
+- **convert-to-docker** - Containerize EureClaw for deployment
+- **setup** - Complete setup wizard for EureClaw installation
 - **debug** - Debugging tools and troubleshooting guides
 
 ### Customization
-- **customize** - Customize NanoClaw behavior and appearance
-- **skill-creator** - Create new skills for NanoClaw
+- **customize** - Customize EureClaw behavior and appearance
+- **skill-creator** - Create new skills for EureClaw
 
 ## How to Use Skills
 

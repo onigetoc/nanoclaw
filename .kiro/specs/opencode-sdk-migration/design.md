@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document describes the technical design for migrating NanoClaw from the Claude SDK (@anthropic-ai/opencode-sdk) to the OpenCode SDK (@opencode-ai/sdk). The migration maintains all existing functionality while adapting to OpenCode's session-based API, streaming event system, and configuration model.
+This document describes the technical design for migrating EureClaw from the Claude SDK (@anthropic-ai/opencode-sdk) to the OpenCode SDK (@opencode-ai/sdk). The migration maintains all existing functionality while adapting to OpenCode's session-based API, streaming event system, and configuration model.
 
 The migration affects three primary areas:
 1. **Agent Runner** (container/agent-runner/src/index.ts) - Core SDK integration
@@ -91,7 +91,7 @@ function createOpencodeClient(sdkEnv: Record<string, string | undefined>): Openc
     maxRetries: 2,
     logLevel: process.env.LOG_LEVEL === 'debug' ? 'debug' : 'info',
     defaultHeaders: {
-      'User-Agent': 'NanoClaw/1.0'
+      'User-Agent': 'EureClaw/1.0'
     }
   });
 }
@@ -204,11 +204,11 @@ for await (const message of query({
   prompt: stream,
   options: {
     mcpServers: {
-      nanoclaw: {
+      eureclaw: {
         command: 'node',
         args: [mcpServerPath],
         env: {
-          NANOCLAW_CHAT_JID: containerInput.chatJid,
+          EURECLAW_CHAT_JID: containerInput.chatJid,
           // ...
         },
       },
@@ -228,14 +228,14 @@ for await (const message of query({
 
 await client.session.init(currentSessionId, {
   mcpServers: {
-    nanoclaw: {
+    eureclaw: {
       command: 'node',
       args: [mcpServerPath],
       env: {
-        NANOCLAW_CHAT_JID: containerInput.chatJid,
-        NANOCLAW_GROUP_FOLDER: containerInput.groupFolder,
-        NANOCLAW_IS_MAIN: containerInput.isMain ? '1' : '0',
-        NANOCLAW_IPC_DIR: ipcBaseDir,
+        EURECLAW_CHAT_JID: containerInput.chatJid,
+        EURECLAW_GROUP_FOLDER: containerInput.groupFolder,
+        EURECLAW_IS_MAIN: containerInput.isMain ? '1' : '0',
+        EURECLAW_IPC_DIR: ipcBaseDir,
       },
     },
   },
@@ -670,7 +670,7 @@ The following properties represent the unique, testable behavioral requirements:
 
 ### Property 15: Database Schema Compatibility
 
-*For any* existing NanoClaw database, the migrated system must successfully read and write all existing tables (sessions, messages, chats, tasks, router_state) without schema changes.
+*For any* existing EureClaw database, the migrated system must successfully read and write all existing tables (sessions, messages, chats, tasks, router_state) without schema changes.
 
 **Validates: Requirements 11.1**
 

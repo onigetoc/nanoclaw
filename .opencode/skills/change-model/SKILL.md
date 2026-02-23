@@ -1,6 +1,6 @@
 ---
 name: change-model
-description: Change the AI model used by OpenCode/NanoClaw. Use when user requests to switch models, change to a different AI provider, or asks what model is currently being used. Triggers on "change model", "switch model", "use model", "set model".
+description: Change the AI model used by OpenCode/EureClaw. Use when user requests to switch models, change to a different AI provider, or asks what model is currently being used. Triggers on "change model", "switch model", "use model", "set model".
 ---
 
 # Change Model
@@ -41,22 +41,33 @@ User can say:
 
 ## MCP Tools Available
 
-NanoClaw provides MCP tools for model management:
+EureClaw provides MCP tools for model management:
 
 ### get_current_model
-Get the current model configuration.
+Get the current model configuration and check if restart is needed.
 
 ```typescript
 // No parameters needed
-const result = await mcp__nanoclaw__get_current_model();
-// Returns: { primary_model, small_model, fallback_model, note }
+const result = await mcp__eureclaw__get_current_model();
+// Returns: {
+//   configured_primary_model: string,
+//   configured_small_model: string,
+//   configured_fallback_model: string,
+//   currently_running_model: string,
+//   models_in_sync: boolean,  // true = no restart needed, false = restart required
+//   note: string
+// }
 ```
+
+**IMPORTANT:** Always check `models_in_sync` field:
+- `true` = Configuration matches running model (no restart needed)
+- `false` = Configuration changed, restart required to apply
 
 ### change_model
 Change the primary model (for complex reasoning).
 
 ```typescript
-await mcp__nanoclaw__change_model({
+await mcp__eureclaw__change_model({
   model: "anthropic/claude-3-5-sonnet"
 });
 ```
@@ -65,7 +76,7 @@ await mcp__nanoclaw__change_model({
 Set the lightweight model (for simple tasks like searches).
 
 ```typescript
-await mcp__nanoclaw__set_small_model({
+await mcp__eureclaw__set_small_model({
   model: "google/gemini-2.0-flash-lite"
 });
 ```
@@ -74,7 +85,7 @@ await mcp__nanoclaw__set_small_model({
 List available models by category.
 
 ```typescript
-await mcp__nanoclaw__list_models({
+await mcp__eureclaw__list_models({
   category: "free" // or "premium" or "all"
 });
 ```
@@ -93,7 +104,7 @@ When user requests model change:
 ```
 User: "what model am I using?"
 
-Andy: [calls get_current_model]
+Andy: [calls get_current_model, checks models_in_sync]
 You're currently using:
 • Primary: opencode/minimax-m2.5-free
 • Small: opencode/minimax-m2.5-free
@@ -104,8 +115,20 @@ User: "change to claude sonnet"
 Andy: [calls change_model with "anthropic/claude-3-5-sonnet"]
 ✓ Primary model changed to: anthropic/claude-3-5-sonnet
 
-⚠️  OpenCode server restart required for changes to take effect.
-Please restart NanoClaw to use the new model.
+⚠️  Restart required for changes to take effect.
+Wait a few seconds, then use /restart to apply the new model.
+
+User: [waits 5 seconds, then sends] /restart
+
+Andy: 🔄 Restarting EureClaw...
+[Bot restarts]
+
+User: "what model am I using now?"
+
+Andy: [calls get_current_model, sees models_in_sync = true]
+You're now using:
+• Primary: anthropic/claude-3-5-sonnet ✓
+The restart was successful!
 ```
 
 ## Example Responses
@@ -115,11 +138,20 @@ Please restart NanoClaw to use the new model.
 ```
 User: "what model am I using?"
 
-Andy: [calls get_current_model]
-You're currently using:
+Andy: [calls get_current_model, checks models_in_sync field]
+
+If models_in_sync = true:
+"You're currently using:
 • Primary: opencode/minimax-m2.5-free (for complex reasoning)
 • Small: opencode/minimax-m2.5-free (for lightweight tasks)
-• Fallback: none
+• Fallback: none"
+
+If models_in_sync = false:
+"Configuration shows:
+• Primary: google/gemini-2.5-flash-lite
+But you're still running: opencode/minimax-m2.5-free
+
+⚠️  Restart required to apply the new model. Use /restart"
 ```
 
 **Change model:**
@@ -129,7 +161,7 @@ User: "change model to gemini-2.5-flash-lite"
 
 Andy: [calls change_model]
 ✓ Model changed to google/gemini-2.5-flash-lite
-Restart NanoClaw for changes to take effect.
+Restart EureClaw for changes to take effect.
 ```
 
 **List models:**
@@ -180,11 +212,11 @@ Model configuration is stored in `models-config.json` at the project root:
 }
 ```
 
-This file is read by NanoClaw at startup and passed to the OpenCode server.
+This file is read by EureClaw at startup and passed to the OpenCode server.
 
 ## Model Hierarchy
 
-NanoClaw supports a three-tier model system:
+EureClaw supports a three-tier model system:
 
 1. **Primary Model** (`model`) - Used for complex reasoning, code generation, deep analysis
 2. **Small Model** (`small_model`) - Used for lightweight tasks, searches, summaries
@@ -194,8 +226,8 @@ This allows cost optimization while maintaining quality for important tasks.
 
 ## Notes
 
-- Model changes require NanoClaw restart to take effect
-- The OpenCode server must be restarted (happens automatically on NanoClaw restart)
+- Model changes require EureClaw restart to take effect
+- The OpenCode server must be restarted (happens automatically on EureClaw restart)
 - Invalid model names will be rejected by OpenCode
 - API keys for premium models must be configured in `.env` or provider config
 

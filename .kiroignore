@@ -25,5 +25,5 @@ agents-sdk-docs
 # Git
 .git/
 
-# Dev notes (private, not for NanoClaw)
+# Dev notes (private, not for EureClaw)
 dev-notes/

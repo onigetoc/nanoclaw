@@ -1,5 +1,5 @@
 /**
- * Media handling types for NanoClaw
+ * Media handling types for EureClaw
  * Supports audio, images, documents, and other media types
  */
 

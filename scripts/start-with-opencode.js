@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
- * NanoClaw startup script with OpenCode auto-install
- * Checks if OpenCode is installed and running, installs if needed, then starts NanoClaw
+ * EureClaw startup script with OpenCode auto-install
+ * Checks if OpenCode is installed and running, installs if needed, then starts EureClaw
  */
 import { execSync, spawn } from 'child_process';
 import { fileURLToPath } from 'url';
@@ -49,7 +49,7 @@ function isOpencodeServerRunning() {
 }
 
 async function main() {
-  log('\n🚀 Starting NanoClaw with OpenCode...', colors.blue);
+  log('\n🚀 Starting EureClaw with OpenCode...', colors.blue);
   log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n', colors.blue);
 
   // Step 1: Check if npm is installed
@@ -83,25 +83,25 @@ async function main() {
     log(`✅ OpenCode is installed (v${version})\n`, colors.green);
   }
 
-  // Step 3: OpenCode server is now managed by NanoClaw itself (src/opencode-server.ts)
+  // Step 3: OpenCode server is now managed by EureClaw itself (src/opencode-server.ts)
   // It will auto-start, health-check, and restart the server as needed.
   // Kill any zombie OpenCode server from previous runs to avoid port conflicts.
   log('🔌 Checking for stale OpenCode server...', colors.yellow);
   if (isOpencodeServerRunning()) {
     log('⚠️  Found existing OpenCode server on port 4096', colors.yellow);
-    log('   NanoClaw will manage it automatically. Killing stale process...', colors.yellow);
+    log('   EureClaw will manage it automatically. Killing stale process...', colors.yellow);
     try {
       if (process.platform === 'win32') {
         execSync('for /f "tokens=5" %a in (\'netstat -ano ^| findstr :4096 ^| findstr LISTENING\') do taskkill /F /PID %a', { stdio: 'pipe', shell: true });
       } else {
         execSync('kill $(lsof -t -i :4096) 2>/dev/null || true', { stdio: 'pipe' });
       }
-      log('✅ Stale server killed. NanoClaw will start a fresh one.\n', colors.green);
+      log('✅ Stale server killed. EureClaw will start a fresh one.\n', colors.green);
     } catch {
-      log('   Could not kill stale server, NanoClaw will handle it.\n', colors.yellow);
+      log('   Could not kill stale server, EureClaw will handle it.\n', colors.yellow);
     }
   } else {
-    log('✅ No stale OpenCode server found. NanoClaw will start one.\n', colors.green);
+    log('✅ No stale OpenCode server found. EureClaw will start one.\n', colors.green);
   }
 
   // Step 4: Run auto-setup
@@ -116,27 +116,27 @@ async function main() {
   }
 
   log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', colors.blue);
-  log('🎉 All checks passed! Starting NanoClaw...', colors.green);
+  log('🎉 All checks passed! Starting EureClaw...', colors.green);
   log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n', colors.blue);
 
-  // Step 5: Start NanoClaw
-  const nanoclaw = spawn('tsx', ['src/index.ts'], {
+  // Step 5: Start EureClaw
+  const eureclaw = spawn('tsx', ['src/index.ts'], {
     stdio: 'inherit',
     cwd: projectRoot,
     shell: true // Required on Windows
   });
 
-  nanoclaw.on('exit', (code) => {
+  eureclaw.on('exit', (code) => {
     if (code !== 0) {
-      log(`\n❌ NanoClaw exited with code ${code}`, colors.red);
+      log(`\n❌ EureClaw exited with code ${code}`, colors.red);
     }
     process.exit(code);
   });
 
   // Handle Ctrl+C gracefully
   process.on('SIGINT', () => {
-    log('\n\n👋 Shutting down NanoClaw...', colors.yellow);
-    nanoclaw.kill('SIGINT');
+    log('\n\n👋 Shutting down EureClaw...', colors.yellow);
+    eureclaw.kill('SIGINT');
   });
 }
 

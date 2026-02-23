@@ -106,4 +106,4 @@ After taking a screenshot, send it to the user with the `send_image` MCP tool:
 send_image(filePath: "screenshot.png", caption: "optional description")
 ```
 
-Save screenshots in the group folder for NanoClaw to access them.
+Save screenshots in the group folder for EureClaw to access them.

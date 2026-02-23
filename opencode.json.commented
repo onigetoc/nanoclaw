@@ -126,5 +126,5 @@
 // - All OpenCode free models are "big models" (no small variants)
 // - Gemini 2.5 Flash Lite is the best "small model" option (multimodal + cheap)
 // - For audio, Groq Whisper (FREE) is currently used, but Gemini is an alternative
-// - Restart NanoClaw after changing models for changes to take effect
+// - Restart EureClaw after changing models for changes to take effect
 // - Use MCP tools to change models via chat (see .opencode/skills/change-model/)

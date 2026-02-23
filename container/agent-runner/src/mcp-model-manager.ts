@@ -134,7 +134,7 @@ export const tool_change_model = {
             type: 'text',
             text: `✓ Primary model changed to: ${args.model}\n\n` +
                   `⚠️  OpenCode server restart required for changes to take effect.\n` +
-                  `The user needs to restart NanoClaw for the new model to be used.`
+                  `The user needs to restart EureClaw for the new model to be used.`
           }
         ]
       };

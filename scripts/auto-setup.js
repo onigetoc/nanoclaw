@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Auto-setup script for NanoClaw
+ * Auto-setup script for EureClaw
  * Runs on first start to configure the main chat automatically
  */
 import Database from 'better-sqlite3';
@@ -17,7 +17,7 @@ const dbPath = path.join(storeDir, 'messages.db');
 const groupsDir = path.join(projectRoot, 'groups');
 const mainGroupDir = path.join(groupsDir, 'main');
 
-console.log('🔍 Checking NanoClaw setup...');
+console.log('🔍 Checking EureClaw setup...');
 
 // Create store directory
 fs.mkdirSync(storeDir, { recursive: true });
@@ -161,7 +161,7 @@ console.log('✅ Setup complete!');
 console.log('');
 console.log('Next steps:');
 console.log('1. Make sure TELEGRAM_BOT_TOKEN is set in .env');
-console.log('2. Start NanoClaw: npm start');
+console.log('2. Start EureClaw: npm start');
 console.log('3. Send a message to your bot on Telegram');
 console.log('4. The bot will auto-register your chat!');
 console.log('');

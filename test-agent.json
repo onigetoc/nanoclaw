@@ -5,9 +5,9 @@
   "chatJid": "tg:1382389542",
   "isMain": true,
   "directMode": {
-    "ipcDir": "C:\\Users\\LENOVO\\APPS\\0-AI-Agents\\nanoclaw\\data\\ipc\\main",
-    "groupDir": "C:\\Users\\LENOVO\\APPS\\0-AI-Agents\\nanoclaw\\groups\\main",
-    "globalDir": "C:\\Users\\LENOVO\\APPS\\0-AI-Agents\\nanoclaw\\groups\\global",
-    "projectDir": "C:\\Users\\LENOVO\\APPS\\0-AI-Agents\\nanoclaw"
+    "ipcDir": "C:\\Users\\LENOVO\\APPS\\0-AI-Agents\\eureclaw\\data\\ipc\\main",
+    "groupDir": "C:\\Users\\LENOVO\\APPS\\0-AI-Agents\\eureclaw\\groups\\main",
+    "globalDir": "C:\\Users\\LENOVO\\APPS\\0-AI-Agents\\eureclaw\\groups\\global",
+    "projectDir": "C:\\Users\\LENOVO\\APPS\\0-AI-Agents\\eureclaw"
   }
 }

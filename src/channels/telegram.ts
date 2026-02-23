@@ -56,16 +56,8 @@ export class TelegramChannel implements Channel {
       );
     });
 
-    // Command to check bot status
-    this.bot.command('ping', (ctx) => {
-      this.lastActivity = Date.now();
-      ctx.reply(`${ASSISTANT_NAME} is online.`);
-    });
-
     this.bot.on('message:text', async (ctx) => {
       this.lastActivity = Date.now();
-      // Skip commands
-      if (ctx.message.text.startsWith('/')) return;
 
       const chatJid = `tg:${ctx.chat.id}`;
       let content = ctx.message.text;

@@ -2,7 +2,7 @@
 
 ## Overview
 
-NanoClaw uses a hybrid memory system combining SQLite and markdown files for optimal performance and simplicity.
+EureClaw uses a hybrid memory system combining SQLite and markdown files for optimal performance and simplicity.
 
 ## Architecture
 

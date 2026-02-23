@@ -44,26 +44,26 @@ Execute rollback if any of the following critical issues occur:
 
 **macOS (launchd):**
 ```bash
-# Stop the NanoClaw service
-launchctl unload ~/Library/LaunchAgents/com.nanoclaw.plist
+# Stop the EureClaw service
+launchctl unload ~/Library/LaunchAgents/com.eureclaw.plist
 
 # Verify service is stopped
-launchctl list | grep nanoclaw
+launchctl list | grep eureclaw
 ```
 
 **Linux (systemd):**
 ```bash
-# Stop the NanoClaw service
-sudo systemctl stop nanoclaw
+# Stop the EureClaw service
+sudo systemctl stop eureclaw
 
 # Verify service is stopped
-sudo systemctl status nanoclaw
+sudo systemctl status eureclaw
 ```
 
 **Windows (manual process):**
 ```powershell
-# Find and kill the NanoClaw process
-Get-Process -Name node | Where-Object {$_.Path -like "*nanoclaw*"} | Stop-Process -Force
+# Find and kill the EureClaw process
+Get-Process -Name node | Where-Object {$_.Path -like "*eureclaw*"} | Stop-Process -Force
 ```
 
 ### Step 2: Revert Container Image
@@ -71,7 +71,7 @@ Get-Process -Name node | Where-Object {$_.Path -like "*nanoclaw*"} | Stop-Proces
 **macOS:**
 ```bash
 # Navigate to project directory
-cd ~/nanoclaw
+cd ~/eureclaw
 
 # Checkout previous commit (before migration)
 git log --oneline --grep="OpenCode SDK" -1  # Find migration commit
@@ -81,13 +81,13 @@ git checkout HEAD~1  # Or specific commit hash
 ./container/build.sh
 
 # Verify container image
-container images | grep nanoclaw-agent
+container images | grep eureclaw-agent
 ```
 
 **Windows/Linux (Direct Mode):**
 ```bash
 # Navigate to project directory
-cd ~/nanoclaw
+cd ~/eureclaw
 
 # Checkout previous commit
 git checkout HEAD~1  # Or specific commit hash
@@ -121,31 +121,31 @@ nano .env  # or vim, code, etc.
 **macOS:**
 ```bash
 # Reload the service
-launchctl load ~/Library/LaunchAgents/com.nanoclaw.plist
+launchctl load ~/Library/LaunchAgents/com.eureclaw.plist
 
 # Verify service is running
-launchctl list | grep nanoclaw
+launchctl list | grep eureclaw
 
 # Check logs
-tail -f ~/nanoclaw/logs/nanoclaw.log
+tail -f ~/eureclaw/logs/eureclaw.log
 ```
 
 **Linux:**
 ```bash
 # Restart the service
-sudo systemctl start nanoclaw
+sudo systemctl start eureclaw
 
 # Verify service is running
-sudo systemctl status nanoclaw
+sudo systemctl status eureclaw
 
 # Check logs
-journalctl -u nanoclaw -f
+journalctl -u eureclaw -f
 ```
 
 **Windows:**
 ```powershell
 # Start the process manually
-cd C:\nanoclaw
+cd C:\eureclaw
 node src\index.js
 
 # Or use Task Scheduler to restart the scheduled task
@@ -167,7 +167,7 @@ node src\index.js
 # Expected: Tools execute successfully
 
 # Check logs for errors
-tail -n 100 ~/nanoclaw/logs/nanoclaw.log | grep -i error
+tail -n 100 ~/eureclaw/logs/eureclaw.log | grep -i error
 ```
 
 ## Data Preservation Strategy
@@ -191,34 +191,34 @@ tail -n 100 ~/nanoclaw/logs/nanoclaw.log | grep -i error
 **Verification:**
 ```bash
 # Check database integrity
-sqlite3 ~/nanoclaw/data/nanoclaw.db "PRAGMA integrity_check;"
+sqlite3 ~/eureclaw/data/eureclaw.db "PRAGMA integrity_check;"
 
 # Verify session count
-sqlite3 ~/nanoclaw/data/nanoclaw.db "SELECT COUNT(*) FROM sessions;"
+sqlite3 ~/eureclaw/data/eureclaw.db "SELECT COUNT(*) FROM sessions;"
 
 # Check recent sessions
-sqlite3 ~/nanoclaw/data/nanoclaw.db "SELECT chat_jid, session_id, created_at FROM sessions ORDER BY created_at DESC LIMIT 10;"
+sqlite3 ~/eureclaw/data/eureclaw.db "SELECT chat_jid, session_id, created_at FROM sessions ORDER BY created_at DESC LIMIT 10;"
 ```
 
 ### File System Preservation
 
 **Group Memory (AGENTS.md):**
-- Location: `~/nanoclaw/groups/{group_name}/AGENTS.md`
+- Location: `~/eureclaw/groups/{group_name}/AGENTS.md`
 - Format: Unchanged
 - Action: No changes required during rollback
 
 **Conversation Archives:**
-- Location: `~/nanoclaw/groups/{group_name}/conversations/`
+- Location: `~/eureclaw/groups/{group_name}/conversations/`
 - Format: Unchanged
 - Action: Archives created by OpenCode SDK remain valid
 
 **IPC Files:**
-- Location: `~/nanoclaw/ipc/`
+- Location: `~/eureclaw/ipc/`
 - Format: Unchanged
 - Action: Clear stale IPC files after rollback
 
 **Logs:**
-- Location: `~/nanoclaw/logs/` and `~/nanoclaw/groups/{group_name}/logs/`
+- Location: `~/eureclaw/logs/` and `~/eureclaw/groups/{group_name}/logs/`
 - Format: May differ slightly (OpenCode vs Claude SDK)
 - Action: Preserve all logs for debugging
 
@@ -230,8 +230,8 @@ sqlite3 ~/nanoclaw/data/nanoclaw.db "SELECT chat_jid, session_id, created_at FRO
 - Paths: Unchanged (mount points, directories)
 
 **Service Configuration:**
-- macOS: `~/Library/LaunchAgents/com.nanoclaw.plist` (unchanged)
-- Linux: `/etc/systemd/system/nanoclaw.service` (unchanged)
+- macOS: `~/Library/LaunchAgents/com.eureclaw.plist` (unchanged)
+- Linux: `/etc/systemd/system/eureclaw.service` (unchanged)
 - Windows: Task Scheduler configuration (unchanged)
 
 ## Gradual Migration Approach
@@ -245,7 +245,7 @@ To minimize risk, consider a gradual migration strategy instead of immediate ful
 1. **Identify Test Groups:**
    ```bash
    # List all registered groups
-   sqlite3 ~/nanoclaw/data/nanoclaw.db "SELECT jid, name FROM chats WHERE is_active = 1;"
+   sqlite3 ~/eureclaw/data/eureclaw.db "SELECT jid, name FROM chats WHERE is_active = 1;"
    
    # Select 1-2 low-traffic groups for OpenCode SDK testing
    ```
@@ -253,11 +253,11 @@ To minimize risk, consider a gradual migration strategy instead of immediate ful
 2. **Create Separate Containers:**
    ```bash
    # Build OpenCode SDK container with different tag
-   cd ~/nanoclaw
-   docker build -t nanoclaw-agent:opencode -f container/Dockerfile .
+   cd ~/eureclaw
+   docker build -t eureclaw-agent:opencode -f container/Dockerfile .
    
    # Keep existing Claude SDK container
-   docker tag nanoclaw-agent:latest nanoclaw-agent:claude
+   docker tag eureclaw-agent:latest eureclaw-agent:claude
    ```
 
 3. **Route Groups to Different SDKs:**
@@ -266,19 +266,19 @@ To minimize risk, consider a gradual migration strategy instead of immediate ful
    function getContainerImage(chatJid: string): string {
      const testGroups = ['120363336345536173@g.us']; // OpenCode test groups
      return testGroups.includes(chatJid) 
-       ? 'nanoclaw-agent:opencode'
-       : 'nanoclaw-agent:claude';
+       ? 'eureclaw-agent:opencode'
+       : 'eureclaw-agent:claude';
    }
    ```
 
 4. **Monitor Both Groups:**
    ```bash
    # Compare logs side-by-side
-   tail -f ~/nanoclaw/groups/test-group/logs/*.log &
-   tail -f ~/nanoclaw/groups/main/logs/*.log &
+   tail -f ~/eureclaw/groups/test-group/logs/*.log &
+   tail -f ~/eureclaw/groups/main/logs/*.log &
    
    # Compare session behavior
-   sqlite3 ~/nanoclaw/data/nanoclaw.db "SELECT chat_jid, COUNT(*) as msg_count FROM messages WHERE created_at > datetime('now', '-1 day') GROUP BY chat_jid;"
+   sqlite3 ~/eureclaw/data/eureclaw.db "SELECT chat_jid, COUNT(*) as msg_count FROM messages WHERE created_at > datetime('now', '-1 day') GROUP BY chat_jid;"
    ```
 
 ### Phase 2: Incremental Group Migration
@@ -415,13 +415,13 @@ After executing rollback, verify the following:
 **Investigate the failure:**
 ```bash
 # Collect logs from failed deployment
-mkdir -p ~/nanoclaw/rollback-analysis/$(date +%Y%m%d)
-cp -r ~/nanoclaw/logs ~/nanoclaw/rollback-analysis/$(date +%Y%m%d)/
-cp -r ~/nanoclaw/groups/*/logs ~/nanoclaw/rollback-analysis/$(date +%Y%m%d)/
+mkdir -p ~/eureclaw/rollback-analysis/$(date +%Y%m%d)
+cp -r ~/eureclaw/logs ~/eureclaw/rollback-analysis/$(date +%Y%m%d)/
+cp -r ~/eureclaw/groups/*/logs ~/eureclaw/rollback-analysis/$(date +%Y%m%d)/
 
 # Extract error patterns
-grep -r "ERROR" ~/nanoclaw/rollback-analysis/$(date +%Y%m%d)/ > errors.txt
-grep -r "OpenCode" ~/nanoclaw/rollback-analysis/$(date +%Y%m%d)/ > opencode-refs.txt
+grep -r "ERROR" ~/eureclaw/rollback-analysis/$(date +%Y%m%d)/ > errors.txt
+grep -r "OpenCode" ~/eureclaw/rollback-analysis/$(date +%Y%m%d)/ > opencode-refs.txt
 ```
 
 **Document findings:**
@@ -476,7 +476,7 @@ grep -r "OpenCode" ~/nanoclaw/rollback-analysis/$(date +%Y%m%d)/ > opencode-refs
 **Solution:**
 ```bash
 # Rebuild container from clean state
-cd ~/nanoclaw
+cd ~/eureclaw
 git clean -fdx container/agent-runner/node_modules
 ./container/build.sh --no-cache
 ```
@@ -490,10 +490,10 @@ git clean -fdx container/agent-runner/node_modules
 **Solution:**
 ```bash
 # Check database for session IDs
-sqlite3 ~/nanoclaw/data/nanoclaw.db "SELECT * FROM sessions WHERE chat_jid = 'YOUR_CHAT_JID';"
+sqlite3 ~/eureclaw/data/eureclaw.db "SELECT * FROM sessions WHERE chat_jid = 'YOUR_CHAT_JID';"
 
 # If session IDs are corrupted, clear and start fresh
-sqlite3 ~/nanoclaw/data/nanoclaw.db "DELETE FROM sessions WHERE chat_jid = 'YOUR_CHAT_JID';"
+sqlite3 ~/eureclaw/data/eureclaw.db "DELETE FROM sessions WHERE chat_jid = 'YOUR_CHAT_JID';"
 ```
 
 ### Issue 3: MCP Tools Not Working
@@ -505,14 +505,14 @@ sqlite3 ~/nanoclaw/data/nanoclaw.db "DELETE FROM sessions WHERE chat_jid = 'YOUR
 **Solution:**
 ```bash
 # Verify MCP server script exists
-ls -la ~/nanoclaw/container/agent-runner/src/ipc-mcp-stdio.ts
+ls -la ~/eureclaw/container/agent-runner/src/ipc-mcp-stdio.ts
 
 # Check IPC directory permissions
-ls -ld ~/nanoclaw/ipc
-chmod 755 ~/nanoclaw/ipc
+ls -ld ~/eureclaw/ipc
+chmod 755 ~/eureclaw/ipc
 
 # Clear stale IPC files
-rm -f ~/nanoclaw/ipc/*.json
+rm -f ~/eureclaw/ipc/*.json
 ```
 
 ### Issue 4: Environment Variables Not Loaded
@@ -524,16 +524,16 @@ rm -f ~/nanoclaw/ipc/*.json
 **Solution:**
 ```bash
 # Verify .env file exists and is readable
-cat ~/nanoclaw/.env | grep ANTHROPIC_API_KEY
+cat ~/eureclaw/.env | grep ANTHROPIC_API_KEY
 
 # Reload environment in service
 # macOS:
-launchctl unload ~/Library/LaunchAgents/com.nanoclaw.plist
-launchctl load ~/Library/LaunchAgents/com.nanoclaw.plist
+launchctl unload ~/Library/LaunchAgents/com.eureclaw.plist
+launchctl load ~/Library/LaunchAgents/com.eureclaw.plist
 
 # Linux:
 sudo systemctl daemon-reload
-sudo systemctl restart nanoclaw
+sudo systemctl restart eureclaw
 ```
 
 ### Issue 5: Logs Show Mixed SDK References
@@ -551,7 +551,7 @@ git log -1 --oneline
 cat container/agent-runner/package.json | grep -E "(opencode|opencode-sdk)"
 
 # Check running process
-ps aux | grep node | grep nanoclaw
+ps aux | grep node | grep eureclaw
 ```
 
 ## Conclusion

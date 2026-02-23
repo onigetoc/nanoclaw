@@ -1,23 +1,23 @@
 {
-  "name": "nanoclaw",
+  "name": "eureclaw",
   "version": "1.0.0",
   "description": "Personal Opencode assistant. Lightweight, secure, customizable.",
   "type": "module",
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc",
-    "start": "node scripts/start-with-opencode.js",
-    "start:simple": "node scripts/auto-setup.js && node dist/index.js",
-    "dev": "node scripts/start-with-opencode.js",
-    "dev:simple": "node scripts/auto-setup.js && tsx src/index.ts",
-    "auth": "tsx src/whatsapp-auth.ts",
+    "start": "bun scripts/run-with-restart.js",
+    "start:simple": "bun scripts/start-with-opencode.js",
+    "dev": "bun scripts/start-with-opencode.js",
+    "dev:simple": "bun scripts/auto-setup.js && bun --watch src/index.ts",
+    "auth": "bun --watch src/whatsapp-auth.ts",
     "typecheck": "tsc --noEmit",
     "format": "prettier --write \"src/**/*.ts\"",
     "format:check": "prettier --check \"src/**/*.ts\"",
     "test": "vitest run",
     "test:watch": "vitest",
-    "generate:context": "node scripts/generate-context-files.js",
-    "setup": "node scripts/auto-setup.js"
+    "generate:context": "bun scripts/generate-context-files.js",
+    "setup": "bun scripts/auto-setup.js"
   },
   "dependencies": {
     "@whiskeysockets/baileys": "^7.0.0-rc.9",

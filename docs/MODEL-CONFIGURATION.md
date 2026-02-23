@@ -1,12 +1,12 @@
 # Model Configuration Guide
 
-NanoClaw supports flexible model configuration via `models-config.json` at the project root.
+EureClaw supports flexible model configuration via `models-config.json` at the project root.
 
 ## Quick Start
 
 ### Default: 100% Free (Text-Only)
 
-NanoClaw works out-of-the-box with OpenCode free models:
+EureClaw works out-of-the-box with OpenCode free models:
 
 ```json
 {
@@ -65,7 +65,7 @@ If you prefer to stay completely free:
 
 1. Edit `models-config.json` in the project root
 2. Set your desired models
-3. Restart NanoClaw
+3. Restart EureClaw
 
 ### Alternative: 100% Free (No API Keys)
 
@@ -87,7 +87,7 @@ This works great, but you'll miss out on Gemini's multimodal capabilities (image
 
 ## How It Works
 
-NanoClaw uses a client-server architecture:
+EureClaw uses a client-server architecture:
 
 1. **OpenCode Server** - Runs locally (`opencode serve`)
    - Reads model configuration from environment variables
@@ -99,7 +99,7 @@ NanoClaw uses a client-server architecture:
    - Does NOT configure models or API keys
    - Just sends messages and receives responses
 
-**Important:** Model configuration happens server-side, not client-side. When you edit `models-config.json`, NanoClaw passes the configuration to the OpenCode server via environment variables. The SDK client only connects to the server - it doesn't know or care which models are being used.
+**Important:** Model configuration happens server-side, not client-side. When you edit `models-config.json`, EureClaw passes the configuration to the OpenCode server via environment variables. The SDK client only connects to the server - it doesn't know or care which models are being used.
 
 ## Configuration File
 
@@ -126,7 +126,7 @@ NanoClaw uses a client-server architecture:
 
 ## Model Hierarchy
 
-NanoClaw uses a four-tier model system for cost optimization and specialized tasks:
+EureClaw uses a four-tier model system for cost optimization and specialized tasks:
 
 ### 1. Primary Model (`model`)
 
@@ -235,7 +235,7 @@ Andy: [calls get_current_model]
 User: "change to claude sonnet"
 Andy: [calls change_model]
       ✓ Model changed to: anthropic/claude-3-5-sonnet
-      ⚠️  Restart NanoClaw for changes to take effect.
+      ⚠️  Restart EureClaw for changes to take effect.
 
 User: "list available models"
 Andy: [calls list_models]

@@ -1,18 +1,18 @@
 # API Keys Configuration Guide
 
-This guide explains how to configure AI provider API keys for NanoClaw/OpenCode.
+This guide explains how to configure AI provider API keys for EureClaw/OpenCode.
 
 ## Understanding API Key Management
 
-**Important:** NanoClaw uses OpenCode SDK, which has its own authentication system. API keys are managed by OpenCode, not by NanoClaw's `.env` file.
+**Important:** EureClaw uses OpenCode SDK, which has its own authentication system. API keys are managed by OpenCode, not by EureClaw's `.env` file.
 
-### Why not use NanoClaw's .env?
+### Why not use EureClaw's .env?
 
 OpenCode reads API keys from:
 1. Its own credentials file (`~/.local/share/opencode/auth.json`)
 2. System environment variables
 
-NanoClaw's `.env` file is only loaded by the NanoClaw Node.js process and is NOT automatically visible to OpenCode.
+EureClaw's `.env` file is only loaded by the EureClaw Node.js process and is NOT automatically visible to OpenCode.
 
 ## Configuration Methods
 
@@ -78,7 +78,7 @@ You have two ways to access OpenCode's authentication:
 - ✅ Secure (credentials encrypted)
 - ✅ Easy to manage multiple providers
 - ✅ Works across all OpenCode projects
-- ✅ No need to restart NanoClaw
+- ✅ No need to restart EureClaw
 - ✅ Two interfaces (CLI or TUI) - choose what you prefer
 
 **Cons:**
@@ -186,7 +186,7 @@ npm start
 
 ---
 
-## Recommended Setup for NanoClaw Users
+## Recommended Setup for EureClaw Users
 
 We recommend **Option 1 (OpenCode Auth)** for most users:
 
@@ -209,7 +209,7 @@ We recommend **Option 1 (OpenCode Auth)** for most users:
    }
    ```
 
-4. Restart NanoClaw:
+4. Restart EureClaw:
    ```bash
    npm start
    ```
@@ -251,7 +251,7 @@ T  Environment
    - Windows: `echo $env:GOOGLE_API_KEY`
    - Mac/Linux: `echo $GOOGLE_API_KEY`
 
-3. Restart NanoClaw after adding keys
+3. Restart EureClaw after adding keys
 
 ### "Invalid API key"
 
@@ -261,7 +261,7 @@ T  Environment
 
 ### Keys in .env not working
 
-Remember: NanoClaw's `.env` file is NOT automatically read by OpenCode. You must either:
+Remember: EureClaw's `.env` file is NOT automatically read by OpenCode. You must either:
 - Use `opencode auth login` (recommended)
 - OR export the keys to system environment variables
 

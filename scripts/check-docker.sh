@@ -1,5 +1,5 @@
 #!/bin/bash
-# Docker detection script for NanoClaw
+# Docker detection script for EureClaw
 
 echo "=== Docker Capability Detection ==="
 echo ""

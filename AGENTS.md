@@ -1,10 +1,10 @@
-# NanoClaw
+# EureClaw
 
 Personal AI assistant. See [README.md](README.md) for philosophy and setup. See [docs/REQUIREMENTS.md](docs/REQUIREMENTS.md) for architecture decisions.
 
 ## Quick Context
 
-NanoClaw is a personal Opencode assistant that runs securely in containers. Single Node.js process connecting to messaging platforms (WhatsApp, Telegram), routing messages to Opencode SDK in isolated containers.
+EureClaw is a personal Opencode assistant that runs securely in containers. Single Node.js process connecting to messaging platforms (WhatsApp, Telegram), routing messages to Opencode SDK in isolated containers.
 
 ## Key Files
 
@@ -29,9 +29,9 @@ NanoClaw is a personal Opencode assistant that runs securely in containers. Sing
 
 Service management (macOS):
 ```bash
-launchctl load ~/Library/LaunchAgents/com.nanoclaw.plist
-launchctl unload ~/Library/LaunchAgents/com.nanoclaw.plist
-launchctl kickstart -k gui/$(id -u)/com.nanoclaw
+launchctl load ~/Library/LaunchAgents/com.eureclaw.plist
+launchctl unload ~/Library/LaunchAgents/com.eureclaw.plist
+launchctl kickstart -k gui/$(id -u)/com.eureclaw
 ```
 
 ### Channel Abstraction
@@ -63,4 +63,4 @@ container builder stop && container builder rm && container builder start
 ./container/build.sh
 ```
 
-Verify: `container run -i --rm --entrypoint wc nanoclaw-agent:latest -l /app/src/index.ts`
+Verify: `container run -i --rm --entrypoint wc eureclaw-agent:latest -l /app/src/index.ts`

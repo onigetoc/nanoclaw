@@ -1,5 +1,16 @@
 A file must never exceed 600 lines of code. If this is the case, make a refactor and split the file.
 
+## Package Manager
+
+Always use `bun` instead of `npm` for all commands:
+- `bun install` (not `npm install`)
+- `bun run dev` (not `npm run dev`)
+- `bun run build` (not `npm run build`)
+- `bun add <package>` (not `npm install <package>`)
+
+- Alway do the build `bun run build` for me, do not ask me to do it. this way you can see yourself if there's an error.
+- Let me do the `bun run dev` or `bun start` because you have the tendency to do multiple of these and you open to many server or process.
+
 • Always use Context Master MCP when I need
 Library/API documentation, code generation,
 setup or configuration steps without me having
@@ -13,20 +24,20 @@ When you don't know something or are uncertain about information:
 - Search for documentation, specifications, or authoritative sources
 - Example: If asked "what is X?" and you're not certain, search the web first
 
-## NanoClaw Documentation Reference
+## EureClaw Documentation Reference
 
 **Complete Project Documentation:** `groups/global/DOCUMENTATION.md`
 
 **SDK & Tools Reference:** `Project-Docs-Ressources-Helps/`
 This folder contains important reference documentation:
 - `opencode-sdk.md` - OpenCode TypeScript SDK API reference
-- `nanoclaw-complete-documentation.md` - Full NanoClaw documentation
+- `eureclaw-complete-documentation.md` - Full EureClaw documentation
 - `Project-tools&links.md` - Tools and useful links
 - `some-command-line.md` - Command line references
 
-Consult these files when working with OpenCode SDK, project tooling, or NanoClaw internals.
+Consult these files when working with OpenCode SDK, project tooling, or EureClaw internals.
 
-When users ask questions about NanoClaw architecture, features, or how things work:
+When users ask questions about EureClaw architecture, features, or how things work:
 - Consult `groups/global/DOCUMENTATION.md` first
 - This file contains comprehensive documentation covering:
   - Architecture and data flows
@@ -37,7 +48,7 @@ When users ask questions about NanoClaw architecture, features, or how things wo
   - Development and debugging guides
   - Comparison with OpenClaw
 
-Use this as your primary reference for answering NanoClaw-related questions.
+Use this as your primary reference for answering EureClaw-related questions.
 
 ## Project Organization & Note-Taking
 
@@ -45,7 +56,7 @@ Use this as your primary reference for answering NanoClaw-related questions.
 
 When the user asks you to "take note" or "remember this for later", use the appropriate location:
 
-**IMPORTANT: `groups/` is for NanoClaw (Andy via Telegram), NOT for development notes!**
+**IMPORTANT: `groups/` is for EureClaw (Andy via Telegram), NOT for development notes!**
 
 **For development notes (Gino + Kiro):**
 - Location: `dev-notes/` folder
@@ -55,7 +66,7 @@ When the user asks you to "take note" or "remember this for later", use the appr
   - `decisions.md` - Technical decisions, why we chose X over Y
   - `todo.md` - Actionable tasks, things to do
   - `preferences.md` - User preferences and personal info
-- These files are ignored by NanoClaw (not in groups/)
+- These files are ignored by EureClaw (not in groups/)
 - Format: Markdown with clear sections and dates
 
 ### Note-Taking Best Practices

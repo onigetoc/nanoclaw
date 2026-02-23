@@ -2,7 +2,7 @@
 
 ## Overview
 
-This plan implements automatic registration of the first chat as the 'main' group in NanoClaw. The implementation is structured to minimize changes to existing code while adding the auto-registration capability in a testable, channel-agnostic way.
+This plan implements automatic registration of the first chat as the 'main' group in EureClaw. The implementation is structured to minimize changes to existing code while adding the auto-registration capability in a testable, channel-agnostic way.
 
 ## Tasks
 

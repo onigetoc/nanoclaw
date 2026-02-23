@@ -4,10 +4,10 @@ This document lists all tools, skills, and capabilities available to you. When y
 
 ## Core MCP Tools
 
-### NanoClaw Tools
-- `mcp__nanoclaw__send_message` - Send messages immediately while working (for quick acknowledgments)
-- `mcp__nanoclaw__schedule_task` - Schedule tasks to run later or on a recurring basis
-- `mcp__nanoclaw__register_group` - Register a new group/chat for the assistant
+### EureClaw Tools
+- `mcp__eureclaw__send_message` - Send messages immediately while working (for quick acknowledgments)
+- `mcp__eureclaw__schedule_task` - Schedule tasks to run later or on a recurring basis
+- `mcp__eureclaw__register_group` - Register a new group/chat for the assistant
 
 ### File Operations
 - Read/write files in your workspace
@@ -72,7 +72,7 @@ When performing any search (news, YouTube, Wikipedia, web, Brave, GitHub, etc.):
 Skills are located in `.opencode/skills/`. Each skill has a `SKILL.md` file with detailed instructions.
 
 ### Communication & Channels
-- **add-telegram** - Add Telegram channel support to NanoClaw
+- **add-telegram** - Add Telegram channel support to EureClaw
 - **add-telegram-swarm** - Multi-agent Telegram coordination
 - **add-gmail** - Gmail integration for email management
 
@@ -87,13 +87,13 @@ Skills are located in `.opencode/skills/`. Each skill has a `SKILL.md` file with
 - **x-integration** - Twitter/X integration (post, reply, like, retweet, quote)
 
 ### Development & Deployment
-- **convert-to-docker** - Containerize NanoClaw for deployment
-- **setup** - Complete setup wizard for NanoClaw installation
+- **convert-to-docker** - Containerize EureClaw for deployment
+- **setup** - Complete setup wizard for EureClaw installation
 - **debug** - Debugging tools and troubleshooting guides
 
 ### Customization
-- **customize** - Customize NanoClaw behavior and appearance
-- **skill-creator** - Create new skills for NanoClaw
+- **customize** - Customize EureClaw behavior and appearance
+- **skill-creator** - Create new skills for EureClaw
 
 ## How to Use Skills
 

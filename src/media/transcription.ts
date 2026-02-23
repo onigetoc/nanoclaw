@@ -122,7 +122,7 @@ export class TranscriptionManager {
 
       // Save to temp file
       const tempDir = os.tmpdir();
-      const tempPath = path.join(tempDir, `nanoclaw-audio-${Date.now()}.ogg`);
+      const tempPath = path.join(tempDir, `eureclaw-audio-${Date.now()}.ogg`);
       await fs.writeFile(tempPath, buffer);
 
       return { buffer, tempPath };

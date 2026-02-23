@@ -1,4 +1,4 @@
-# Docker Detection for NanoClaw
+# Docker Detection for EureClaw
 # Run with: powershell -File check-docker.ps1
 
 Write-Host "=== Docker Capability Detection ===" -ForegroundColor Cyan

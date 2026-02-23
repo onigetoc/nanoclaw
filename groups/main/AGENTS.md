@@ -145,7 +145,7 @@ sqlite3 <DB_PATH> "INSERT INTO registered_groups (jid, name, folder, trigger_pat
 
 Then create the group folder under the groups base directory (see Runtime Environment for the path).
 
-Alternatively, the MCP tool `mcp__nanoclaw__register_group` can do this too.
+Alternatively, the MCP tool `mcp__eureclaw__register_group` can do this too.
 
 ### Removing a Group
 
@@ -163,4 +163,4 @@ Your Runtime Environment provides the global memory path. Read and write to the 
 
 ## Scheduling for Other Groups
 
-Use `mcp__nanoclaw__schedule_task` with the `target_group_jid` parameter set to the group's JID. The task will run in that group's context.
+Use `mcp__eureclaw__schedule_task` with the `target_group_jid` parameter set to the group's JID. The task will run in that group's context.

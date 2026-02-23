@@ -107,7 +107,7 @@ export function reloadOpenCodeConfig(): OpenCodeConfig {
  * Note: This function only passes model configuration (from models-config.json).
  * API keys are managed by OpenCode's own authentication system:
  *   - Via 'opencode auth login' (stored in ~/.local/share/opencode/auth.json)
- *   - Or via system environment variables (not NanoClaw's .env file)
+ *   - Or via system environment variables (not EureClaw's .env file)
  */
 export function getOpenCodeEnv(): Record<string, string> {
   const config = loadOpenCodeConfig();
@@ -148,7 +148,7 @@ export function getOpenCodeEnv(): Record<string, string> {
 
   // Note: API keys are managed by OpenCode's authentication system
   // (via 'opencode auth login' or system environment variables).
-  // They are NOT read from NanoClaw's .env file.
+  // They are NOT read from EureClaw's .env file.
   // OpenCode server will automatically use keys from:
   //   1. ~/.local/share/opencode/auth.json (via opencode auth login)
   //   2. System environment variables (if set)

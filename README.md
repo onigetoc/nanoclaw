@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/nanoclaw-logo.png" alt="NanoClaw" width="400">
+  <img src="assets/eureclaw-logo.png" alt="EureClaw" width="400">
 </p>
 
 <p align="center">
@@ -16,7 +16,7 @@
 
 ## How It Works
 
-NanoClaw is a partnership between two components:
+EureClaw is a partnership between two components:
 
 **OpenCode** handles the AI heavy lifting:
 - LLM inference and reasoning
@@ -25,27 +25,27 @@ NanoClaw is a partnership between two components:
 - Agent orchestration and swarms
 - Audio transcription (via Groq Whisper)
 
-**NanoClaw** handles everything else:
+**EureClaw** handles everything else:
 - **Security** - Container isolation, filesystem sandboxing
 - **Process management** - Message queues, task scheduling
 - **Channel connectivity** - WhatsApp, Telegram integration
 - **State persistence** - SQLite database, group memory
 - **User registration** - Auto-discovery of new chats
 
-Think of NanoClaw as the secure shell that lets OpenCode safely interact with your digital life.
+Think of EureClaw as the secure shell that lets OpenCode safely interact with your digital life.
 
 ## Powered By
 
-NanoClaw is built on top of:
+EureClaw is built on top of:
 - **[OpenCode](https://opencode.ai)** - AI coding agent with unified model gateway
 - **[OpenCode SDK](https://github.com/anomalyco/opencode-sdk-js)** - TypeScript SDK for programmatic agent control
 - **OpenCode Model Gateway** - Unified access to GPT, Claude, Gemini, and more through a single API
 
-OpenCode provides the AI infrastructure (LLM routing, web search, file operations) while NanoClaw adds security, multi-channel support, and state management.
+OpenCode provides the AI infrastructure (LLM routing, web search, file operations) while EureClaw adds security, multi-channel support, and state management.
 
 ## 100% Free Option
 
-NanoClaw can run completely free with the default configuration if you choose to do so. 
+EureClaw can run completely free with the default configuration if you choose to do so. 
 
 OpenCode offers 4 free models:
 
@@ -62,12 +62,12 @@ Just run `opencode auth login` and select the free tier to get started.
 
 ### Real-World Usage Example
 
-Here's a actual usage an pricing from a NanoClaw user over 5 days:
+Here's a actual usage an pricing from a EureClaw user over 5 days:
 
 ```
 User: "what's my OpenCode usage?"
 
-NanoClaw: "So cool! Here is your OpenCode usage:
+EureClaw: "So cool! Here is your OpenCode usage:
 
 | Stats | Value |
 |-------|-------|
@@ -94,7 +94,7 @@ To check your own usage, just ask your assistant: "what's my OpenCode usage?"
 
 ## Recommended: Upgrade to Gemini (Optional)
 
-While NanoClaw works great with free models, we **recommend** adding Google Gemini 2.5 Flash Lite as your "small model" for multimodal capabilities:
+While EureClaw works great with free models, we **recommend** adding Google Gemini 2.5 Flash Lite as your "small model" for multimodal capabilities:
 
 **Why Gemini 2.5 Flash Lite?**
 - ✅ **FREE tier** with generous limits (500 requests/day)
@@ -128,7 +128,7 @@ While NanoClaw works great with free models, we **recommend** adding Google Gemi
 }
 ```
 
-**Note:** API keys are managed by OpenCode (via `opencode auth login` or system environment variables), not in NanoClaw's `.env` file. The `.env` file is only for NanoClaw-specific settings like `TELEGRAM_BOT_TOKEN` and `ASSISTANT_NAME`.
+**Note:** API keys are managed by OpenCode (via `opencode auth login` or system environment variables), not in EureClaw's `.env` file. The `.env` file is only for EureClaw-specific settings like `TELEGRAM_BOT_TOKEN` and `ASSISTANT_NAME`.
 
 **Cost estimate:** Most users stay within the free tier. If you exceed it, expect ~$1-5/month for typical personal use.
 
@@ -141,13 +141,13 @@ While NanoClaw works great with free models, we **recommend** adding Google Gemi
 
 [OpenClaw](https://github.com/openclaw/openclaw) is an impressive project with a great vision. But I can't sleep well running software I don't understand with access to my life. OpenClaw has 52+ modules, 8 config management files, 45+ dependencies, and abstractions for 15 channel providers. Security is application-level (allowlists, pairing codes) rather than OS isolation. Everything runs in one Node process with shared memory.
 
-NanoClaw gives you the same core functionality in a codebase you can understand in 8 minutes. One process. A handful of files. Agents run in actual Linux containers with filesystem isolation, not behind permission checks.
+EureClaw gives you the same core functionality in a codebase you can understand in 8 minutes. One process. A handful of files. Agents run in actual Linux containers with filesystem isolation, not behind permission checks.
 
 ## Quick Start
 
 ```bash
-git clone https://github.com/gavrielc/nanoclaw.git
-cd nanoclaw
+git clone https://github.com/gavrielc/eureclaw.git
+cd eureclaw
 opencode
 ```
 
@@ -190,7 +190,7 @@ Then run `/setup`. OpenCode handles everything: dependencies, authentication, co
 2. Add your channel credentials to `.env`:
    - For WhatsApp: Authentication happens automatically on first run
    - For Telegram: Add `TELEGRAM_BOT_TOKEN` from @BotFather
-3. Start NanoClaw: `npm start` (automatically checks and installs OpenCode if needed)
+3. Start EureClaw: `npm start` (automatically checks and installs OpenCode if needed)
 4. Send your first message to the bot on any channel
 
 **That's it.** Your first message automatically registers that chat as your 'main' group. No manual JID entry, no configuration scripts. The bot responds immediately and you're ready to go.
@@ -200,7 +200,7 @@ Then run `/setup`. OpenCode handles everything: dependencies, authentication, co
 - Checks if OpenCode is installed (installs via npm if missing)
 - Checks if OpenCode server is running (starts it if not)
 - Runs the auto-setup script
-- Starts NanoClaw
+- Starts EureClaw
 
 If you prefer to manage OpenCode manually, use `npm run start:simple` instead.
 
@@ -239,6 +239,42 @@ From the main channel (your self-chat), you can manage groups and tasks:
 @Andy join the Family Chat group
 ```
 
+### Slash Commands
+
+EureClaw supports universal slash commands that work across all channels (WhatsApp, Telegram, future Web UI):
+
+**System Control:**
+- `/restart` - Restart EureClaw (auto-restarts with `bun start`)
+- `/status` - Check if bot is awake or sleeping
+- `/help` - Show all available commands
+
+**Sleep Mode** (pause all activity):
+- `/sleep` - Sleep indefinitely (until `/awake`)
+- `/sleep 4h` - Sleep for 4 hours (auto-wake)
+- `/sleep 30m` - Sleep for 30 minutes
+- `/sleep 2d` - Sleep for 2 days
+- `/awake` - Wake from sleep mode
+
+**Examples:**
+```
+/sleep 8h          # Night mode - bot sleeps for 8 hours
+/status            # Check if sleeping or awake
+/awake             # Wake up early
+/restart           # Restart the bot
+```
+
+**Sleep mode pauses:**
+- All message processing (bot ignores messages)
+- Scheduled tasks and crons
+- Only slash commands work during sleep
+
+**Use cases:**
+- Night mode: `/sleep 8h` before bed
+- Vacation: `/sleep 7d` when away
+- Maintenance: `/sleep` while fixing issues
+
+See [docs/COMMANDS.md](docs/COMMANDS.md) for complete documentation.
+
 ## Customizing
 
 There are no configuration files to learn. Just tell OpenCode what you want:
@@ -256,7 +292,7 @@ The codebase is small enough that OpenCode can safely modify it.
 
 **Don't add features. Add skills.**
 
-If you want to add Telegram support, don't create a PR that adds Telegram alongside WhatsApp. Instead, contribute a skill file (`.opencode/skills/add-telegram/SKILL.md`) that teaches OpenCode how to transform a NanoClaw installation to use Telegram.
+If you want to add Telegram support, don't create a PR that adds Telegram alongside WhatsApp. Instead, contribute a skill file (`.opencode/skills/add-telegram/SKILL.md`) that teaches OpenCode how to transform a EureClaw installation to use Telegram.
 
 Users then run `/add-telegram` on their fork and get clean code that does exactly what they need, not a bloated system trying to support every use case.
 
@@ -282,7 +318,7 @@ Skills we'd love to see:
 - [OpenCode](https://opencode.ai/download)
 - [Apple Container](https://github.com/apple/container) (macOS) or [Docker](https://docker.com/products/docker-desktop) (macOS/Linux)
 
-**Note on OpenCode:** NanoClaw uses the OpenCode SDK for agent execution. The `npm start` command automatically installs and starts OpenCode if it's not already running. You can also install it manually:
+**Note on OpenCode:** EureClaw uses the OpenCode SDK for agent execution. The `npm start` command automatically installs and starts OpenCode if it's not already running. You can also install it manually:
 
 ```bash
 # Via npm (recommended)
@@ -322,7 +358,7 @@ Key files:
 
 ## Environment Variables
 
-NanoClaw supports the following environment variables:
+EureClaw supports the following environment variables:
 
 - `ASSISTANT_NAME` - Name of your assistant (default: Andy)
 - `TELEGRAM_ONLY` - Set to `true` to use Telegram only (disable WhatsApp)
@@ -331,7 +367,7 @@ NanoClaw supports the following environment variables:
 - `LOG_LEVEL` - Logging verbosity: `debug`, `info`, `warn`, `error` (default: info)
 
 **Note on AI Provider API Keys:**
-NanoClaw uses OpenCode SDK which reads AI provider credentials from your system configuration. You must have OpenCode configured before running NanoClaw:
+EureClaw uses OpenCode SDK which reads AI provider credentials from your system configuration. You must have OpenCode configured before running EureClaw:
 
 ```bash
 # Configure AI providers (one-time setup)
@@ -345,7 +381,7 @@ opencode auth login
 ```
 
 **Note on Chat Registration:**
-After configuring your environment and starting NanoClaw, simply send your first message to the bot. That chat will automatically be registered as your 'main' group—no manual JID entry required.
+After configuring your environment and starting EureClaw, simply send your first message to the bot. That chat will automatically be registered as your 'main' group—no manual JID entry required.
 
 See `.env.example` for a template configuration file.
 

@@ -175,7 +175,7 @@ if ($compatible) {
         Write-Host "  • $reason" -ForegroundColor Gray
     }
     Write-Host ""
-    Write-Host "Recommendation: Use NanoClaw in Direct Mode (no containers)" -ForegroundColor Yellow
+    Write-Host "Recommendation: Use EureClaw in Direct Mode (no containers)" -ForegroundColor Yellow
     Write-Host "  Direct mode works perfectly on Windows without Docker!" -ForegroundColor Gray
 }
 

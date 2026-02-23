@@ -1,6 +1,6 @@
 # Media Handling Module
 
-Ce module gère tous les types de médias dans NanoClaw : audio, images, vidéos, et documents.
+Ce module gère tous les types de médias dans EureClaw : audio, images, vidéos, et documents.
 
 ## Structure
 
