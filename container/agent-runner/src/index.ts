@@ -464,7 +464,7 @@ async function runQuery(
     client = existingClient;
   } else {
     // Create OpenCode client (Requirements 4.1, 4.2, 4.3, 4.4)
-    // Note: MCP servers are configured in OpenCode server config, not via SDK
+    // MCP servers are registered dynamically via client.mcp.add() in main()
     client = await createOpencodeClient(sdkEnv);
   }
   
@@ -894,6 +894,9 @@ async function main(): Promise<void> {
   const __dirname = path.dirname(fileURLToPath(import.meta.url));
   const mcpServerPath = path.join(__dirname, 'ipc-mcp-stdio.js');
 
+  // Pre-create the OpenCode client so we can register MCP before the first query
+  let preClient: any = null;
+
   let sessionId = containerInput.sessionId;
 
   // Direct mode: override hardcoded container paths with real host paths
@@ -922,6 +925,15 @@ async function main(): Promise<void> {
         log(`Added ${nodePath} to PATH for SDK subprocesses`);
       }
     }
+    
+    // Pass HEADED and GROUP_FOLDER to subprocesses (for browser automation)
+    // These are set by direct-runner.ts and need to be inherited by bash commands
+    if (process.env.HEADED) {
+      log(`HEADED=${process.env.HEADED} will be passed to subprocesses`);
+    }
+    if (process.env.GROUP_FOLDER) {
+      log(`GROUP_FOLDER=${process.env.GROUP_FOLDER} will be passed to subprocesses`);
+    }
   } else {
     log(`Container mode enabled (paths: /workspace/*)`);
   }
@@ -947,10 +959,80 @@ async function main(): Promise<void> {
   log(`Initial prompt prepared: ${prompt.length} chars`);
   debugLog(`Prompt preview: ${prompt.slice(0, 150)}${prompt.length > 150 ? '...' : ''}`);
 
+  // Register NanoClaw MCP server dynamically with the OpenCode server.
+  // This makes tools like send_message, send_image, schedule_task available to the agent.
+  // Must be done before the first query so the agent can use these tools.
+  try {
+    preClient = await createOpencodeClient(sdkEnv);
+    log('Registering NanoClaw MCP server with OpenCode...');
+
+    // Disconnect existing nanoclaw MCP server if any (env vars may have changed)
+    try {
+      await preClient.mcp.disconnect({ path: { name: 'nanoclaw' } });
+      debugLog('Disconnected existing nanoclaw MCP server');
+    } catch {
+      // Server may not exist yet — that's fine
+    }
+
+    // Build the command array for the MCP server process.
+    // The OpenCode server spawns this as a subprocess.
+    // Use the compiled JS from dist/ with absolute path so it works from any cwd.
+    const isDirectMode = !!containerInput.directMode;
+    const projectDir = containerInput.directMode?.projectDir || process.cwd();
+    const mcpServerAbsPath = isDirectMode
+      ? path.join(projectDir, 'container', 'agent-runner', 'dist', 'ipc-mcp-stdio.js')
+      : mcpServerPath;
+    const mcpCommand = ['node', mcpServerAbsPath];
+
+    // Environment variables for the MCP server process
+    const mcpEnv: Record<string, string> = {
+      NANOCLAW_CHAT_JID: containerInput.chatJid,
+      NANOCLAW_GROUP_FOLDER: containerInput.groupFolder,
+      NANOCLAW_IS_MAIN: containerInput.isMain ? '1' : '0',
+      NANOCLAW_IPC_DIR: ipcBaseDir,
+      NANOCLAW_GROUP_DIR: groupDir,
+      PROJECT_DIR: containerInput.directMode?.projectDir || '/workspace/project',
+    };
+
+    await preClient.mcp.add({
+      body: {
+        name: 'nanoclaw',
+        config: {
+          type: 'local' as const,
+          command: mcpCommand,
+          environment: mcpEnv,
+          enabled: true,
+          timeout: 10000,
+        },
+      },
+    });
+
+    log('✓ NanoClaw MCP server registered successfully');
+
+    // Verify it's connected
+    try {
+      const status = await preClient.mcp.status();
+      const statusData = (status as any).data ?? status;
+      if (Array.isArray(statusData)) {
+        const nanoclaw = statusData.find((s: any) => s.name === 'nanoclaw');
+        if (nanoclaw) {
+          log(`MCP server 'nanoclaw' status: ${JSON.stringify(nanoclaw).slice(0, 200)}`);
+        }
+      }
+    } catch {
+      // Non-critical — just for logging
+    }
+  } catch (err) {
+    const errorMessage = err instanceof Error ? err.message : String(err);
+    log(`⚠ Failed to register NanoClaw MCP server: ${errorMessage}`);
+    log('Agent will continue without MCP tools (send_message, send_image, etc.)');
+    // Non-fatal — agent can still work, just without NanoClaw-specific tools
+  }
+
   // Query loop: run query → wait for IPC message → run new query → repeat
   // OpenCode client is created on first query and reused for subsequent queries
   let resumeAt: string | undefined;
-  let clientInstance: any = null;
+  let clientInstance: any = preClient;
   let queryCount = 0;
   const ARCHIVE_INTERVAL = 10; // Archive every 10 queries
   

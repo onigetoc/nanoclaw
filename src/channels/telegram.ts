@@ -1,4 +1,6 @@
-import { Bot } from 'grammy';
+import { Bot, InputFile } from 'grammy';
+import path from 'path';
+import fs from 'fs/promises';
 
 import { ASSISTANT_NAME, TRIGGER_PATTERN } from '../config.js';
 import { logger } from '../logger.js';
@@ -449,6 +451,40 @@ export class TelegramChannel implements Channel {
       logger.info({ jid, length: text.length }, 'Telegram message sent');
     } catch (err) {
       logger.error({ jid, err }, 'Failed to send Telegram message');
+    }
+  }
+  async sendMedia(jid: string, filePath: string, options?: { caption?: string }): Promise<void> {
+    if (!this.bot) {
+      logger.warn('Telegram bot not initialized');
+      return;
+    }
+
+    try {
+      const numericId = jid.replace(/^tg:/, '');
+
+      // Check if file exists
+      await fs.access(filePath);
+
+      // Detect file type by extension
+      const ext = path.extname(filePath).toLowerCase();
+      const inputFile = new InputFile(filePath);
+
+      if (['.png', '.jpg', '.jpeg', '.gif', '.webp'].includes(ext)) {
+        await this.bot.api.sendPhoto(numericId, inputFile, {
+          caption: options?.caption
+        });
+        logger.info({ jid, filePath }, 'Telegram photo sent');
+      } else if (ext === '.pdf') {
+        await this.bot.api.sendDocument(numericId, inputFile, {
+          caption: options?.caption
+        });
+        logger.info({ jid, filePath }, 'Telegram document sent');
+      } else {
+        throw new Error(`Unsupported file type: ${ext}`);
+      }
+    } catch (err) {
+      logger.error({ jid, filePath, err }, 'Failed to send Telegram media');
+      throw err;
     }
   }
 

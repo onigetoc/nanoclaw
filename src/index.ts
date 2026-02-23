@@ -6,6 +6,7 @@ import path from 'path';
 import {
   ASSISTANT_NAME,
   DATA_DIR,
+  GROUPS_DIR,
   IDLE_TIMEOUT,
   MAIN_GROUP_FOLDER,
   POLL_INTERVAL,
@@ -97,12 +98,59 @@ function registerGroup(jid: string, group: RegisteredGroup): void {
   setRegisteredGroup(jid, group);
 
   // Create group folder
-  const groupDir = path.join(DATA_DIR, '..', 'groups', group.folder);
+  const groupDir = path.join(GROUPS_DIR, group.folder);
   fs.mkdirSync(path.join(groupDir, 'logs'), { recursive: true });
+
+  // Copy templates if group folder has no .md files yet
+  copyTemplatesToGroup(groupDir);
 
   logger.info(
     { jid, name: group.name, folder: group.folder },
     'Group registered',
+  );
+}
+
+/**
+ * Copy template files from groups/templates/ into a new group folder.
+ * Renames .tpl.md → .md and substitutes {{ASSISTANT_NAME}}.
+ * Skips if the group already has .md files (not a fresh group).
+ */
+function copyTemplatesToGroup(groupDir: string): void {
+  // Check if group already has .md files (skip if not fresh)
+  const existingFiles = fs.readdirSync(groupDir);
+  const hasMdFiles = existingFiles.some(
+    (f) => f.endsWith('.md') && !f.endsWith('.tpl.md'),
+  );
+  if (hasMdFiles) return;
+
+  const templatesDir = path.join(GROUPS_DIR, 'templates');
+  if (!fs.existsSync(templatesDir)) {
+    logger.warn({ templatesDir }, 'Templates directory not found, skipping template copy');
+    return;
+  }
+
+  const templates = fs.readdirSync(templatesDir).filter((f) => f.endsWith('.tpl.md'));
+  if (templates.length === 0) return;
+
+  const variables: Record<string, string> = {
+    ASSISTANT_NAME,
+  };
+
+  for (const tplFile of templates) {
+    let content = fs.readFileSync(path.join(templatesDir, tplFile), 'utf-8');
+
+    // Substitute {{VARIABLE}} patterns
+    for (const [key, value] of Object.entries(variables)) {
+      content = content.replace(new RegExp(`\\{\\{${key}\\}\\}`, 'g'), value);
+    }
+
+    const outputName = tplFile.replace('.tpl.md', '.md');
+    fs.writeFileSync(path.join(groupDir, outputName), content, 'utf-8');
+  }
+
+  logger.info(
+    { groupDir, templateCount: templates.length },
+    'Copied templates to new group',
   );
 }
 
@@ -659,6 +707,21 @@ async function main(): Promise<void> {
         is_from_me: true,
         is_bot_message: true,
       });
+    },
+    sendImage: async (jid, filePath, options) => {
+      const channel = findChannel(channels, jid);
+      if (!channel) throw new Error(`No channel for JID: ${jid}`);
+      
+      // Check if channel supports sendMedia
+      if (typeof channel.sendMedia === 'function') {
+        await channel.sendMedia(jid, filePath, options);
+        logger.info({ jid, filePath }, 'Image sent via channel');
+      } else {
+        // Fallback: send path as text if channel doesn't support media
+        const fallbackText = `📎 Image: ${filePath}${options?.caption ? `\n${options.caption}` : ''}`;
+        await sendDeduped(channel, jid, fallbackText);
+        logger.warn({ jid, channel: channel.name }, 'Channel does not support sendMedia, sent path as text');
+      }
     },
     registeredGroups: () => registeredGroups,
     registerGroup,

@@ -9,6 +9,7 @@ import os from 'os';
 import path from 'path';
 
 import { CONTAINER_MAX_OUTPUT_SIZE, CONTAINER_TIMEOUT, DATA_DIR, GROUPS_DIR } from './config.js';
+import { readEnvFile } from './env.js';
 import { logger } from './logger.js';
 import { RegisteredGroup } from './types.js';
 import { ContainerInput, ContainerOutput } from './container-runner.js';
@@ -36,6 +37,27 @@ export async function runDirectAgent(
   fs.mkdirSync(path.join(groupIpcDir, 'tasks'), { recursive: true });
   fs.mkdirSync(path.join(groupIpcDir, 'input'), { recursive: true });
 
+  // Setup sessions directory and sync skills (same as container mode)
+  const groupSessionsDir = path.join(DATA_DIR, 'sessions', group.folder);
+  fs.mkdirSync(groupSessionsDir, { recursive: true });
+
+  // Sync skills from container/skills/ into sessions directory
+  const skillsSrc = path.join(process.cwd(), 'container', 'skills');
+  const skillsDst = path.join(groupSessionsDir, 'skills');
+  if (fs.existsSync(skillsSrc)) {
+    for (const skillDir of fs.readdirSync(skillsSrc)) {
+      const srcDir = path.join(skillsSrc, skillDir);
+      if (!fs.statSync(srcDir).isDirectory()) continue;
+      const dstDir = path.join(skillsDst, skillDir);
+      fs.mkdirSync(dstDir, { recursive: true });
+      for (const file of fs.readdirSync(srcDir)) {
+        const srcFile = path.join(srcDir, file);
+        const dstFile = path.join(dstDir, file);
+        fs.copyFileSync(srcFile, dstFile);
+      }
+    }
+  }
+
   const processName = `nanoclaw-direct-${group.folder}-${Date.now()}`;
   const agentRunnerPath = path.join(process.cwd(), 'container', 'agent-runner', 'src', 'index.ts');
 
@@ -51,6 +73,10 @@ export async function runDirectAgent(
     // Filter secrets from environment to prevent leakage
     // CRITICAL: Create a clean environment without any secrets
     const filteredEnv: Record<string, string> = {};
+    
+    // Load HEADED from .env if not in process.env
+    const envFile = readEnvFile(['HEADED']);
+    const headedValue = process.env.HEADED || envFile.HEADED || 'false';
     
     // Only copy safe environment variables
     for (const [key, value] of Object.entries(process.env)) {
@@ -68,6 +94,15 @@ export async function runDirectAgent(
         filteredEnv[key] = value;
       }
     }
+    
+    // Add HEADED explicitly (for browser automation)
+    filteredEnv['HEADED'] = headedValue;
+    
+    // Add GROUP_FOLDER for browser scripts to save files in correct location
+    filteredEnv['GROUP_FOLDER'] = group.folder;
+    
+    // Add PROJECT_DIR so scripts can find the project root
+    filteredEnv['PROJECT_DIR'] = process.cwd();
     
     logger.debug({ group: group.name }, `Filtered env has ${Object.keys(filteredEnv).length} vars (secrets removed)`);
     

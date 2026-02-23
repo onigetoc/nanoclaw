@@ -62,7 +62,7 @@ Just run `opencode auth login` and select the free tier to get started.
 
 ### Real-World Usage Example
 
-Here's my actual usage an pricing from a NanoClaw user over 5 days:
+Here's a actual usage an pricing from a NanoClaw user over 5 days:
 
 ```
 User: "what's my OpenCode usage?"

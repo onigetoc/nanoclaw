@@ -464,6 +464,86 @@ server.tool(
   }
 );
 
+server.tool(
+  'send_image',
+  'Send an image or file to the user via Telegram/WhatsApp. Use this after taking screenshots or generating images.',
+  {
+    filePath: z.string().describe('Path to image file (relative to group folder or absolute). Supported: .png, .jpg, .jpeg, .gif, .webp, .pdf'),
+    caption: z.string().optional().describe('Optional caption for the image')
+  },
+  async (args) => {
+    const groupDir = process.env.NANOCLAW_GROUP_DIR || '/workspace/group';
+    const projectDir = process.env.PROJECT_DIR || '/workspace/project';
+    
+    // Resolve path
+    let resolvedPath = args.filePath;
+    if (!path.isAbsolute(args.filePath)) {
+      // Try group folder first
+      const groupPath = path.join(groupDir, args.filePath);
+      if (fs.existsSync(groupPath)) {
+        resolvedPath = groupPath;
+      } else {
+        // Try project root
+        const projectPath = path.join(projectDir, args.filePath);
+        if (fs.existsSync(projectPath)) {
+          resolvedPath = projectPath;
+        } else {
+          return {
+            content: [{
+              type: 'text' as const,
+              text: `✗ File not found: ${args.filePath}\nTried:\n- ${groupPath}\n- ${projectPath}`
+            }],
+            isError: true
+          };
+        }
+      }
+    }
+    
+    // Check if file exists
+    if (!fs.existsSync(resolvedPath)) {
+      return {
+        content: [{
+          type: 'text' as const,
+          text: `✗ File not found: ${resolvedPath}`
+        }],
+        isError: true
+      };
+    }
+    
+    // Validate file type
+    const ext = path.extname(resolvedPath).toLowerCase();
+    const supportedTypes = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.pdf'];
+    if (!supportedTypes.includes(ext)) {
+      return {
+        content: [{
+          type: 'text' as const,
+          text: `✗ Unsupported file type: ${ext}\nSupported: ${supportedTypes.join(', ')}`
+        }],
+        isError: true
+      };
+    }
+    
+    // Write IPC message
+    const data = {
+      type: 'send_image',
+      filePath: resolvedPath,
+      caption: args.caption,
+      chatJid,
+      groupFolder,
+      timestamp: new Date().toISOString(),
+    };
+    
+    writeIpcFile(MESSAGES_DIR, data);
+    
+    return {
+      content: [{
+        type: 'text' as const,
+        text: `✓ Image queued for sending: ${path.basename(resolvedPath)}`
+      }]
+    };
+  }
+);
+
 // Start the stdio transport
 const transport = new StdioServerTransport();
 await server.connect(transport);
