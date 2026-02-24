@@ -554,6 +554,164 @@ server.tool(
   }
 );
 
+server.tool(
+  'list_logs',
+  'List agent execution logs for debugging. Shows recent log files from the current group or all groups (main only).',
+  {
+    limit: z.number().optional().default(20).describe('Maximum number of log files to return (default: 20)'),
+    all_groups: z.boolean().optional().default(false).describe('(Main only) Show logs from all groups, not just current group')
+  },
+  async (args) => {
+    const groupDir = process.env.EURECLAW_GROUP_DIR || '/workspace/group';
+    const projectDir = process.env.PROJECT_DIR || '/workspace/project';
+    
+    try {
+      const logs: Array<{ file: string; group: string; timestamp: string; size: number }> = [];
+      
+      if (args.all_groups && isMain) {
+        // List logs from all groups
+        const groupsDir = path.join(projectDir, 'groups');
+        const groups = fs.readdirSync(groupsDir, { withFileTypes: true })
+          .filter(d => d.isDirectory() && !['templates', 'global'].includes(d.name));
+        
+        for (const group of groups) {
+          const logsDir = path.join(groupsDir, group.name, 'logs');
+          if (fs.existsSync(logsDir)) {
+            const files = fs.readdirSync(logsDir)
+              .filter(f => f.endsWith('.log'))
+              .map(f => {
+                const stat = fs.statSync(path.join(logsDir, f));
+                return {
+                  file: f,
+                  group: group.name,
+                  timestamp: stat.mtime.toISOString(),
+                  size: stat.size
+                };
+              });
+            logs.push(...files);
+          }
+        }
+      } else {
+        // List logs from current group only
+        const logsDir = path.join(groupDir, 'logs');
+        if (fs.existsSync(logsDir)) {
+          const files = fs.readdirSync(logsDir)
+            .filter(f => f.endsWith('.log'))
+            .map(f => {
+              const stat = fs.statSync(path.join(logsDir, f));
+              return {
+                file: f,
+                group: groupFolder,
+                timestamp: stat.mtime.toISOString(),
+                size: stat.size
+              };
+            });
+          logs.push(...files);
+        }
+      }
+      
+      if (logs.length === 0) {
+        return {
+          content: [{
+            type: 'text' as const,
+            text: 'No log files found.'
+          }]
+        };
+      }
+      
+      // Sort by timestamp (newest first) and limit
+      logs.sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+      const limited = logs.slice(0, args.limit);
+      
+      const formatted = limited.map(log => {
+        const sizeKB = (log.size / 1024).toFixed(1);
+        const date = new Date(log.timestamp).toLocaleString();
+        return `• ${log.file} (${log.group}) - ${sizeKB}KB - ${date}`;
+      }).join('\n');
+      
+      return {
+        content: [{
+          type: 'text' as const,
+          text: `Found ${logs.length} log files (showing ${limited.length}):\n\n${formatted}\n\nUse read_log to view a specific log file.`
+        }]
+      };
+    } catch (err) {
+      return {
+        content: [{
+          type: 'text' as const,
+          text: `✗ Error listing logs: ${err instanceof Error ? err.message : String(err)}`
+        }],
+        isError: true
+      };
+    }
+  }
+);
+
+server.tool(
+  'read_log',
+  'Read the contents of a specific agent execution log file for debugging.',
+  {
+    filename: z.string().describe('Log filename (e.g., "direct-2026-02-23T12-00-00-000Z.log")'),
+    lines: z.number().optional().describe('Number of lines to read from the end (default: all)'),
+    group: z.string().optional().describe('(Main only) Group folder name if reading from another group')
+  },
+  async (args) => {
+    const groupDir = process.env.EURECLAW_GROUP_DIR || '/workspace/group';
+    const projectDir = process.env.PROJECT_DIR || '/workspace/project';
+    
+    try {
+      let logsDir: string;
+      
+      if (args.group && isMain) {
+        // Read from specified group
+        logsDir = path.join(projectDir, 'groups', args.group, 'logs');
+      } else {
+        // Read from current group
+        logsDir = path.join(groupDir, 'logs');
+      }
+      
+      const logPath = path.join(logsDir, args.filename);
+      
+      if (!fs.existsSync(logPath)) {
+        return {
+          content: [{
+            type: 'text' as const,
+            text: `✗ Log file not found: ${args.filename}`
+          }],
+          isError: true
+        };
+      }
+      
+      let content = fs.readFileSync(logPath, 'utf-8');
+      
+      // If lines limit specified, get last N lines
+      if (args.lines) {
+        const allLines = content.split('\n');
+        const lastLines = allLines.slice(-args.lines);
+        content = lastLines.join('\n');
+      }
+      
+      const stat = fs.statSync(logPath);
+      const sizeKB = (stat.size / 1024).toFixed(1);
+      
+      return {
+        content: [{
+          type: 'text' as const,
+          text: `# Log: ${args.filename}\nSize: ${sizeKB}KB | Modified: ${stat.mtime.toISOString()}\n\n\`\`\`\n${content}\n\`\`\``
+        }]
+      };
+    } catch (err) {
+      return {
+        content: [{
+          type: 'text' as const,
+          text: `✗ Error reading log: ${err instanceof Error ? err.message : String(err)}`
+        }],
+        isError: true
+      };
+    }
+  }
+);
+
 // Start the stdio transport
 const transport = new StdioServerTransport();
 await server.connect(transport);

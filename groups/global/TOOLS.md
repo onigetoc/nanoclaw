@@ -2,6 +2,51 @@
 
 This file documents tools and capabilities available to EureClaw agents.
 
+## Logs and Debugging
+
+**Agent execution logs** are written to `groups/{group}/logs/`:
+- `direct-*.log` - Direct mode execution logs (Windows/Linux)
+- `container-*.log` - Container mode execution logs (macOS)
+
+Each log file contains:
+- Full stderr output (agent-runner logs with timestamps)
+- Full stdout output (agent responses)
+- Execution duration and exit code
+
+### Reading Logs with MCP Tools
+
+Use these MCP tools to access and debug logs:
+
+**list_logs** - List recent log files
+```typescript
+await use_mcp_tool('list_logs', {
+  limit: 20,           // Optional: max files to show (default: 20)
+  all_groups: false    // Optional: (main only) show logs from all groups
+});
+```
+
+**read_log** - Read a specific log file
+```typescript
+await use_mcp_tool('read_log', {
+  filename: 'direct-2026-02-23T12-00-00-000Z.log',
+  lines: 100,          // Optional: read last N lines only
+  group: 'work'        // Optional: (main only) read from another group
+});
+```
+
+### What to Look For in Logs
+
+To check if multi-agent system worked, look for:
+- `🧠 Complex task detected, using orchestrator agent`
+- `agent: orchestrator` in the response metadata
+- `step-start` and `step-finish` in parts types
+
+For debugging errors:
+- Look for stack traces and error messages
+- Check tool invocations and their results
+- Verify environment variables and paths
+- Check for timeout or memory issues
+
 ## Sending Images via Telegram/WhatsApp
 
 EureClaw can send images and files via messaging platforms using the `send_image` MCP tool.

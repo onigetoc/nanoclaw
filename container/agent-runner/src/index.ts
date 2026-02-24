@@ -311,6 +311,54 @@ function generateFallbackName(): string {
   return `conversation-${time.getHours().toString().padStart(2, '0')}${time.getMinutes().toString().padStart(2, '0')}`;
 }
 
+/**
+ * Detect if a task is complex and should use the orchestrator agent.
+ * Complex tasks benefit from multi-agent delegation and specialized subagents.
+ * 
+ * @param prompt - The user's prompt
+ * @returns true if task is complex, false for simple tasks
+ */
+function detectComplexTask(prompt: string): boolean {
+  const lowerPrompt = prompt.toLowerCase();
+  
+  // Keywords that indicate complex multi-step tasks
+  const complexKeywords = [
+    'recherche', 'search', 'find',
+    'analyse', 'analyze', 'compare',
+    'résume', 'summarize', 'synthétise',
+    'plusieurs', 'multiple', 'many',
+    'étapes', 'steps',
+    'plan', 'planifie',
+    'et', 'and', 'puis', 'then',
+    'créer un', 'create a',
+    'génère', 'generate',
+  ];
+  
+  // Count how many complex keywords are present
+  const matchCount = complexKeywords.filter(kw => lowerPrompt.includes(kw)).length;
+  
+  // If 2+ complex keywords, or specific multi-step patterns, use orchestrator
+  if (matchCount >= 2) {
+    return true;
+  }
+  
+  // Specific patterns that indicate multi-step tasks
+  const multiStepPatterns = [
+    /recherche.*et.*résume/i,
+    /search.*and.*summarize/i,
+    /find.*and.*create/i,
+    /analyse.*et.*compare/i,
+    /cherche.*puis.*fait/i,
+  ];
+  
+  if (multiStepPatterns.some(pattern => pattern.test(prompt))) {
+    return true;
+  }
+  
+  // Default to simple task (build agent)
+  return false;
+}
+
 interface ParsedMessage {
   role: 'user' | 'assistant';
   content: string;
@@ -690,12 +738,24 @@ async function runQuery(
     log(`Additional directories: ${extraDirs.join(', ')}`);
   }
 
+  // Determine which agent to use based on task complexity
+  // Complex tasks use 'orchestrator' which delegates to specialized subagents
+  // Simple tasks use 'build' for direct execution
+  const useOrchestrator = detectComplexTask(prompt);
+  const agentName = useOrchestrator ? 'orchestrator' : 'build';
+  
+  if (useOrchestrator) {
+    log(`🧠 Complex task detected, using orchestrator agent with subagent delegation`);
+  } else {
+    log(`⚡ Simple task detected, using build agent for direct execution`);
+  }
+
   // Send message and get response (Requirement 3.1)
   // session.prompt() is SYNCHRONOUS — it blocks until the AI responds and returns
   // the complete response in { data: { info: AssistantMessage, parts: Part[] } }
   const messageTimestamp = new Date().toISOString();
-  log(`Sending message to session ${currentSessionId}...`);
-  debugLog(`Message metadata: length=${prompt.length} chars, chatJid=${containerInput.chatJid}, timestamp=${messageTimestamp}`);
+  log(`Sending message to session ${currentSessionId} with agent: ${agentName}...`);
+  debugLog(`Message metadata: length=${prompt.length} chars, chatJid=${containerInput.chatJid}, timestamp=${messageTimestamp}, agent=${agentName}`);
 
   // Poll for _close sentinel during the blocking prompt call
   let closedDuringPrompt = false;
@@ -709,13 +769,16 @@ async function runQuery(
 
   // Helper: call session.prompt with a timeout (default 5 minutes)
   const PROMPT_TIMEOUT_MS = 5 * 60 * 1000;
-  const promptWithTimeout = async (sid: string, text: string) => {
+  const promptWithTimeout = async (sid: string, text: string, agent?: string) => {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), PROMPT_TIMEOUT_MS);
     try {
       const resp = await client.session.prompt({
         path: { id: sid },
-        body: { parts: [{ type: 'text', text }] },
+        body: { 
+          agent, // Use specified agent (orchestrator, build, etc.)
+          parts: [{ type: 'text', text }] 
+        },
         signal: controller.signal as any,
       });
       return resp;
@@ -729,7 +792,7 @@ async function runQuery(
     // Returns { data: { info: AssistantMessage, parts: Part[] }, request, response }
     let response: any;
     try {
-      response = await promptWithTimeout(currentSessionId, prompt);
+      response = await promptWithTimeout(currentSessionId, prompt, agentName);
     } catch (promptErr: any) {
       // If session might be stale/expired, retry with a fresh session
       const msg = promptErr?.message || String(promptErr);
@@ -745,7 +808,7 @@ async function runQuery(
           log(`✓ Created fresh session: ${currentSessionId}`);
           // Re-inject context into fresh session
           await injectContext(currentSessionId, systemAppend);
-          response = await promptWithTimeout(currentSessionId, prompt);
+          response = await promptWithTimeout(currentSessionId, prompt, agentName);
         } catch (retryErr: any) {
           log(`ERROR: Retry with fresh session also failed: ${retryErr?.message || String(retryErr)}`);
           throw retryErr;

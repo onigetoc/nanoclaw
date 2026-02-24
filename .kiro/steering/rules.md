@@ -37,6 +37,27 @@ This folder contains important reference documentation:
 
 Consult these files when working with OpenCode SDK, project tooling, or EureClaw internals.
 
+## EureClaw MCP Server
+
+**IMPORTANT:** EureClaw already has a built-in MCP server at `container/agent-runner/src/ipc-mcp-stdio.ts`
+
+When adding new tools for EureClaw:
+1. **DO NOT create a new MCP server** - add tools to the existing `ipc-mcp-stdio.ts`
+2. Add the tool using `server.tool()` in that file
+3. Run `bun run build` to compile
+4. Update `groups/global/TOOLS.md` with usage documentation
+
+See `docs/MCP-ARCHITECTURE.md` for detailed guide on adding tools.
+
+Existing tools include:
+- `send_message` - Send messages to users
+- `schedule_task`, `list_tasks`, `pause_task`, `resume_task`, `cancel_task` - Task scheduling
+- `register_group` - Register new WhatsApp/Telegram groups
+- `get_current_model`, `change_model`, `set_small_model`, `list_models` - Model management
+- `show_opencode_stats` - Usage statistics
+- `send_image` - Send images/files
+- `list_logs`, `read_log` - Read execution logs (for debugging)
+
 When users ask questions about EureClaw architecture, features, or how things work:
 - Consult `groups/global/DOCUMENTATION.md` first
 - This file contains comprehensive documentation covering:
