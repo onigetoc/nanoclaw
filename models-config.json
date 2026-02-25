@@ -3,7 +3,7 @@
   "model": "opencode/minimax-m2.5-free",
   "small_model": "google/gemini-2.5-flash-lite",
   "vision_model": "google/gemini-2.5-flash-lite",
-  "fallback_model": "opencode/glm-5-free",
+  "fallback_model": "opencode/trinity",
   "provider": {
     "opencode": {
       "options": {

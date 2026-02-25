@@ -502,8 +502,9 @@ async function runQuery(
   ipcBaseDir: string,
   globalDir: string | undefined,
   resumeAt?: string,
-  existingClient?: any
-): Promise<{ newSessionId?: string; lastAssistantUuid?: string; closedDuringQuery: boolean; client: any }> {
+  existingClient?: any,
+  contextAlreadyInjected?: boolean
+): Promise<{ newSessionId?: string; lastAssistantUuid?: string; closedDuringQuery: boolean; client: any; contextInjected: boolean }> {
   // Reuse existing OpenCode client or create a new one
   let client: any;
   
@@ -676,9 +677,6 @@ async function runQuery(
     envContext
   ].filter(Boolean).join('\n\n');
   
-  // Requirement 9.1, 9.5: Pass system prompt to OpenCode SDK session configuration
-  // Use session.prompt with noReply:true to inject context without triggering AI response
-  // (session.init is for analyzing the app and creating AGENTS.md, not for system prompts)
   // Helper: call noReply prompt with a 30s timeout
   const CONTEXT_TIMEOUT_MS = 30_000;
   const injectContext = async (sid: string, text: string) => {
@@ -694,32 +692,46 @@ async function runQuery(
       clearTimeout(timer);
     }
   };
-
-  try {
-    log(`Injecting system context into session ${currentSessionId} (${systemAppend.length} chars)...`);
-    const contextResp = await injectContext(currentSessionId, systemAppend);
-    log(`Context injection response: ${JSON.stringify(contextResp?.data ?? contextResp).slice(0, 300)}`);
-    log(`Session ${currentSessionId} context injected successfully`);
-  } catch (error) {
-    // Requirement 7.4, 7.5: Log errors with full context and return error status
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    const errorStack = error instanceof Error ? error.stack : undefined;
-    
-    log(`ERROR: Failed to inject system context: ${errorMessage}`);
-    if (errorStack) {
-      log(`Stack trace: ${errorStack}`);
+  
+  // Requirement 9.1, 9.5: Pass system prompt to OpenCode SDK session configuration
+  // Use session.prompt with noReply:true to inject context without triggering AI response
+  // (session.init is for analyzing the app and creating AGENTS.md, not for system prompts)
+  // 
+  // OPTIMIZATION: Only inject context once per session, not on every message.
+  // OpenCode sessions maintain full conversation memory automatically.
+  // Re-injecting context on every message causes 80k+ token cache reads and slows everything down.
+  let contextInjected = contextAlreadyInjected || false;
+  
+  if (!contextInjected) {
+    try {
+      log(`Injecting system context into session ${currentSessionId} (${systemAppend.length} chars)...`);
+      const contextResp = await injectContext(currentSessionId, systemAppend);
+      log(`Context injection response: ${JSON.stringify(contextResp?.data ?? contextResp).slice(0, 300)}`);
+      log(`Session ${currentSessionId} context injected successfully`);
+      contextInjected = true;
+    } catch (error) {
+      // Requirement 7.4, 7.5: Log errors with full context and return error status
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorStack = error instanceof Error ? error.stack : undefined;
+      
+      log(`ERROR: Failed to inject system context: ${errorMessage}`);
+      if (errorStack) {
+        log(`Stack trace: ${errorStack}`);
+      }
+      log(`Context: sessionId=${currentSessionId}, contextLength=${systemAppend.length}`);
+      
+      // Return error via container output protocol (Requirement 7.5)
+      writeOutput({
+        status: 'error',
+        result: null,
+        error: `Context injection failed: ${errorMessage}`,
+        newSessionId: currentSessionId
+      });
+      
+      throw error; // Re-throw to exit runQuery
     }
-    log(`Context: sessionId=${currentSessionId}, contextLength=${systemAppend.length}`);
-    
-    // Return error via container output protocol (Requirement 7.5)
-    writeOutput({
-      status: 'error',
-      result: null,
-      error: `Context injection failed: ${errorMessage}`,
-      newSessionId: currentSessionId
-    });
-    
-    throw error; // Re-throw to exit runQuery
+  } else {
+    log(`Skipping context injection (already injected for this session)`);
   }
 
   // Discover additional directories mounted at /workspace/extra/* (container mode)
@@ -917,7 +929,7 @@ async function runQuery(
   log(`Summary: events=${messageCount}, results=${resultCount}, lastAssistantUuid=${lastAssistantUuid || 'none'}, closedDuringQuery=${closedDuringQuery}`);
   debugLog(`Query statistics: sessionId=${currentSessionId}, groupFolder=${containerInput.groupFolder}, chatJid=${containerInput.chatJid}, timestamp=${new Date().toISOString()}`);
   
-  return { newSessionId, lastAssistantUuid, closedDuringQuery, client };
+  return { newSessionId, lastAssistantUuid, closedDuringQuery, client, contextInjected };
 }
 
 async function main(): Promise<void> {
@@ -1097,6 +1109,7 @@ async function main(): Promise<void> {
   let resumeAt: string | undefined;
   let clientInstance: any = preClient;
   let queryCount = 0;
+  let contextInjected = false; // Track if context has been injected for this session
   const ARCHIVE_INTERVAL = 10; // Archive every 10 queries
   
   log(`Starting query loop...`);
@@ -1109,12 +1122,17 @@ async function main(): Promise<void> {
       log(`Session: ${sessionId || 'new'}, ResumeAt: ${resumeAt || 'latest'}`);
       debugLog(`Query context: chatJid=${containerInput.chatJid}, groupFolder=${containerInput.groupFolder}, timestamp=${new Date().toISOString()}`);
 
-      const queryResult = await runQuery(prompt, sessionId, mcpServerPath, containerInput, sdkEnv, groupDir, ipcBaseDir, globalDir, resumeAt, clientInstance);
+      const queryResult = await runQuery(prompt, sessionId, mcpServerPath, containerInput, sdkEnv, groupDir, ipcBaseDir, globalDir, resumeAt, clientInstance, contextInjected);
       
       // Store OpenCode client for reuse across queries
       if (!clientInstance) {
         clientInstance = queryResult.client;
         log(`✓ OpenCode client initialized and will be reused for subsequent queries`);
+      }
+      
+      // Track context injection status
+      if (queryResult.contextInjected) {
+        contextInjected = true;
       }
       
       if (queryResult.newSessionId) {

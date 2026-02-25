@@ -53,13 +53,13 @@ export async function analyzeWithGemini(
             {
               parts: [
                 {
-                  text: 'Describe this image concisely in 1-2 sentences. Focus on the main subject and any text visible.',
+                  text: 'Analyze this image in detail. Extract ALL visible text, numbers, and data exactly as shown. If it contains tables, charts, or structured data, transcribe everything. If it\'s a photo or illustration, describe it thoroughly including colors, objects, people, actions, text, and context. Be comprehensive and precise.',
                 },
                 { inline_data: { mime_type: mimeType, data: base64Image } },
               ],
             },
           ],
-          generationConfig: { maxOutputTokens: 200 },
+          generationConfig: { maxOutputTokens: 1000 },
         }),
       },
     );
@@ -101,13 +101,13 @@ export async function analyzeWithOpenAI(
             content: [
               {
                 type: 'text',
-                text: 'Describe this image concisely in 1-2 sentences. Focus on the main subject and any text visible.',
+                text: 'Analyze this image in detail. Extract ALL visible text, numbers, and data exactly as shown. If it contains tables, charts, or structured data, transcribe everything. If it\'s a photo or illustration, describe it thoroughly including colors, objects, people, actions, text, and context. Be comprehensive and precise.',
               },
               { type: 'image_url', image_url: { url: dataUrl } },
             ],
           },
         ],
-        max_tokens: 200,
+        max_tokens: 1000,
       }),
     });
 

@@ -9,12 +9,158 @@
  */
 import { ChildProcess, spawn } from 'child_process';
 import http from 'http';
+import net from 'net';
 
 import { logger } from './logger.js';
 import { getOpenCodeEnv, getModelInfo } from './opencode-config.js';
 
-const OPENCODE_PORT = parseInt(process.env.OPENCODE_PORT || '4096', 10);
+let OPENCODE_PORT = parseInt(process.env.OPENCODE_PORT || '4100', 10);
 const OPENCODE_HOST = '127.0.0.1';
+
+/**
+ * Get the current OpenCode server port.
+ * This may change at runtime if the preferred port is occupied.
+ */
+export function getOpenCodePort(): number {
+  return OPENCODE_PORT;
+}
+
+/**
+ * Get the current OpenCode server host.
+ */
+export function getOpenCodeHost(): string {
+  return OPENCODE_HOST;
+}
+
+/**
+ * Check if a port is occupied by a zombie process (port in use but process doesn't exist).
+ * Returns true if it's a zombie, false otherwise.
+ */
+async function isZombiePort(port: number): Promise<boolean> {
+  if (process.platform !== 'win32') {
+    return false; // Only relevant on Windows
+  }
+  
+  try {
+    const { execSync } = await import('child_process');
+    
+    // Find PID listening on the port
+    const netstatOutput = execSync(`netstat -ano | findstr ":${port}.*LISTENING"`, {
+      encoding: 'utf-8',
+      timeout: 5000
+    }).trim();
+    
+    if (!netstatOutput) {
+      return false; // Port not in use
+    }
+    
+    // Extract PID from netstat output
+    const match = netstatOutput.match(/\s+(\d+)\s*$/);
+    if (!match) {
+      return false;
+    }
+    
+    const pid = match[1];
+    
+    // Check if process exists
+    try {
+      execSync(`tasklist /FI "PID eq ${pid}" | findstr "${pid}"`, {
+        encoding: 'utf-8',
+        timeout: 5000
+      });
+      return false; // Process exists, not a zombie
+    } catch {
+      logger.warn({ port, pid }, 'Detected zombie port (process does not exist)');
+      return true; // Process doesn't exist = zombie
+    }
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Check if any OpenCode server is already running by looking for the process.
+ * Returns the port it's listening on, or null if not found.
+ */
+async function findRunningOpenCodeServer(): Promise<number | null> {
+  try {
+    // Try to find opencode process and extract port from command line
+    const { execSync } = await import('child_process');
+    
+    // Windows: use wmic or Get-Process
+    if (process.platform === 'win32') {
+      try {
+        const output = execSync('powershell -Command "Get-Process opencode -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Id"', {
+          encoding: 'utf-8',
+          timeout: 5000
+        }).trim();
+        
+        if (output) {
+          // Found opencode process, try to find which port it's using
+          // Check common ports first
+          for (const port of [4096, 4097, 4098, 4099, 4100]) {
+            if (await pingServerOnPort(port)) {
+              logger.info({ port }, 'Found existing OpenCode server');
+              return port;
+            }
+          }
+        }
+      } catch {
+        // No opencode process found
+      }
+    } else {
+      // Unix: use pgrep
+      try {
+        const output = execSync('pgrep -f "opencode serve"', {
+          encoding: 'utf-8',
+          timeout: 5000
+        }).trim();
+        
+        if (output) {
+          // Found opencode process, try common ports
+          for (const port of [4096, 4097, 4098, 4099, 4100]) {
+            if (await pingServerOnPort(port)) {
+              logger.info({ port }, 'Found existing OpenCode server');
+              return port;
+            }
+          }
+        }
+      } catch {
+        // No opencode process found
+      }
+    }
+  } catch (err) {
+    logger.debug({ err }, 'Error checking for existing OpenCode server');
+  }
+  
+  return null;
+}
+
+/**
+ * Ping a specific port to check if OpenCode server is running there.
+ */
+function pingServerOnPort(port: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => {
+      req.destroy();
+      resolve(false);
+    }, 2000);
+
+    const req = http.get(
+      `http://${OPENCODE_HOST}:${port}/doc`,
+      (res) => {
+        clearTimeout(timer);
+        res.resume();
+        resolve(true);
+      },
+    );
+
+    req.on('error', () => {
+      clearTimeout(timer);
+      resolve(false);
+    });
+  });
+}
 const HEALTH_CHECK_INTERVAL_MS = 30_000; // Check every 30s
 const HEALTH_CHECK_TIMEOUT_MS = 5_000;   // 5s timeout per check
 const STARTUP_WAIT_MS = 4_000;           // Wait after spawning before first check
@@ -82,10 +228,16 @@ function spawnServer(): ChildProcess {
   // Merge models-config.json config with process.env
   const serverEnv = {
     ...process.env,
-    ...getOpenCodeEnv()
+    ...getOpenCodeEnv(),
+    OPENCODE_SERVER_PORT: OPENCODE_PORT.toString(),
+    OPENCODE_SERVER_HOST: OPENCODE_HOST
   };
 
-  const proc = spawn('opencode', ['serve'], {
+  const proc = spawn('opencode', [
+    'serve',
+    '--port', OPENCODE_PORT.toString(),
+    '--hostname', OPENCODE_HOST
+  ], {
     stdio: ['ignore', 'pipe', 'pipe'],
     shell: true,
     cwd: process.cwd(),
@@ -171,13 +323,41 @@ export async function startServer(): Promise<boolean> {
     serverProcess = null;
   }
 
-  // Check if an external process is already on the port
-  const portUsed = await isPortInUse();
-  if (portUsed) {
-    logger.info('OpenCode server already running (external process)');
+  // Check if there's already an OpenCode server running (any port)
+  const existingPort = await findRunningOpenCodeServer();
+  if (existingPort) {
+    logger.info({ port: existingPort }, 'Reusing existing OpenCode server');
+    OPENCODE_PORT = existingPort;
     lastHealthy = Date.now();
     restartCount = 0;
     return true;
+  }
+
+  // No existing server, start a new one on preferred port
+  const preferredPort = parseInt(process.env.OPENCODE_PORT || '4100', 10);
+  
+  // Check if preferred port is a zombie, if so use next available
+  if (await isZombiePort(preferredPort)) {
+    logger.warn(
+      { zombiePort: preferredPort },
+      'Preferred port is occupied by zombie process, trying alternative ports'
+    );
+    // Try next 10 ports
+    let foundPort = false;
+    for (let port = preferredPort + 1; port < preferredPort + 11; port++) {
+      if (!(await isZombiePort(port))) {
+        OPENCODE_PORT = port;
+        foundPort = true;
+        logger.info({ port }, 'Using alternative port');
+        break;
+      }
+    }
+    if (!foundPort) {
+      logger.error('Could not find available port, all ports appear to be zombies');
+      return false;
+    }
+  } else {
+    OPENCODE_PORT = preferredPort;
   }
 
   // Spawn new server

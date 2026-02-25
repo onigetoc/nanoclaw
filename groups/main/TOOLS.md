@@ -9,6 +9,38 @@ This document lists all tools, skills, and capabilities available to you. When y
 - `mcp__eureclaw__schedule_task` - Schedule tasks to run later or on a recurring basis
 - `mcp__eureclaw__register_group` - Register a new group/chat for the assistant
 
+### Model Management Tools
+
+**CRITICAL: Always use these MCP tools to change models, NEVER use OpenCode's native setModel() function!**
+
+- `mcp__eureclaw__get_current_model` - Get current model configuration
+- `mcp__eureclaw__change_model` - Change the primary model (requires restart)
+- `mcp__eureclaw__set_small_model` - Set lightweight model for simple tasks
+- `mcp__eureclaw__set_fallback_model` - Set fallback model if primary fails
+- `mcp__eureclaw__set_vision_model` - Set model for image/vision tasks
+- `mcp__eureclaw__list_models` - List available models (free and premium)
+
+**Why these tools?**
+- They modify `models-config.json` (the correct file)
+- OpenCode's native tools modify `opencode.json` (wrong file!)
+- EureClaw reads models from `models-config.json`, not `opencode.json`
+
+**Example usage:**
+```typescript
+// Check current model
+await mcp__eureclaw__get_current_model({});
+
+// Change to a different model
+await mcp__eureclaw__change_model({ 
+  model: "anthropic/claude-3-5-sonnet" 
+});
+
+// List available models
+await mcp__eureclaw__list_models({ category: "free" });
+```
+
+After changing models, the user needs to restart EureClaw for changes to take effect.
+
 ### File Operations
 - Read/write files in your workspace
 - Create and manage structured data files

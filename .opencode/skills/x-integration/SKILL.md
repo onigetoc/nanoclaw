@@ -5,7 +5,7 @@ description: X (Twitter) integration for EureClaw. Post tweets, like, reply, ret
 
 # X (Twitter) Integration
 
-Browser automation for X interactions via WhatsApp.
+Browser automation for X interactions via WhatsApp, Telegram or any other channel.
 
 > **Compatibility:** EureClaw v1.0.0. Directory structure may change in future versions.
 

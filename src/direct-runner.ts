@@ -11,6 +11,7 @@ import path from 'path';
 import { CONTAINER_MAX_OUTPUT_SIZE, CONTAINER_TIMEOUT, DATA_DIR, GROUPS_DIR } from './config.js';
 import { readEnvFile } from './env.js';
 import { logger } from './logger.js';
+import { getOpenCodePort, getOpenCodeHost } from './opencode-server.js';
 import { RegisteredGroup } from './types.js';
 import { ContainerInput, ContainerOutput } from './container-runner.js';
 
@@ -104,7 +105,12 @@ export async function runDirectAgent(
     // Add PROJECT_DIR so scripts can find the project root
     filteredEnv['PROJECT_DIR'] = process.cwd();
     
-    logger.debug({ group: group.name }, `Filtered env has ${Object.keys(filteredEnv).length} vars (secrets removed)`);
+    // Add OpenCode server connection info so agent can connect to the correct port
+    const opencodePort = getOpenCodePort();
+    const opencodeHost = getOpenCodeHost();
+    filteredEnv['OPENCODE_BASE_URL'] = `http://${opencodeHost}:${opencodePort}`;
+    
+    logger.debug({ group: group.name, opencodeUrl: filteredEnv['OPENCODE_BASE_URL'] }, `Filtered env has ${Object.keys(filteredEnv).length} vars (secrets removed)`);
     
     const agentProcess = spawn('node', ['--import', 'tsx/esm', agentRunnerPath], {
       stdio: ['pipe', 'pipe', 'pipe'],
@@ -166,11 +172,15 @@ export async function runDirectAgent(
 
           try {
             const parsed: ContainerOutput = JSON.parse(jsonStr);
+            logger.info({ group: group.name, result: parsed.result?.toString().slice(0, 100) }, 'Parsed output from agent');
             if (parsed.newSessionId) {
               newSessionId = parsed.newSessionId;
             }
             hadStreamingOutput = true;
-            outputChain = outputChain.then(() => onOutput(parsed));
+            outputChain = outputChain.then(() => {
+              logger.info({ group: group.name }, 'Calling onOutput callback');
+              return onOutput(parsed);
+            });
           } catch (err) {
             logger.warn({ group: group.name, error: err }, 'Failed to parse output');
           }
@@ -237,6 +247,13 @@ export async function runDirectAgent(
             status: 'success',
             result: null,
             newSessionId,
+          });
+        }).catch((err) => {
+          logger.error({ group: group.name, error: err }, 'Error in onOutput callback chain');
+          resolve({
+            status: 'error',
+            result: null,
+            error: `onOutput callback error: ${err instanceof Error ? err.message : String(err)}`,
           });
         });
         return;

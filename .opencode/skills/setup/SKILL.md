@@ -1,11 +1,11 @@
 ---
 name: setup
-description: Run initial EureClaw setup. Use when user wants to install dependencies, authenticate WhatsApp, register their main channel, or start the background services. Triggers on "setup", "install", "configure eureclaw", or first-time setup requests.
+description: Run initial EureClaw setup. Use when user wants to install dependencies, authenticate WhatsApp, Telegram, register their main channel, or start the background services. Triggers on "setup", "install", "configure eureclaw", or first-time setup requests.
 ---
 
 # EureClaw Setup
 
-Run setup scripts automatically. Only pause when user action is required (WhatsApp authentication, configuration choices). Scripts live in `.opencode/skills/setup/scripts/` and emit structured status blocks to stdout. Verbose logs go to `logs/setup.log`.
+Run setup scripts automatically. Only pause when user action is required (WhatsApp/Telegram authentication, configuration choices). Scripts live in `.opencode/skills/setup/scripts/` and emit structured status blocks to stdout. Verbose logs go to `logs/setup.log`.
 
 **Principle:** When something is broken or missing, fix it. Don't tell the user to go fix it themselves unless it genuinely requires their manual action (e.g. scanning a QR code, pasting a secret token). If a dependency is missing, install it. If a service won't start, diagnose and repair. Ask the user for permission when needed, then do the work.
 

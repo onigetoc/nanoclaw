@@ -188,7 +188,12 @@ export class TelegramChannel implements Channel {
 
       let content = '[Photo]';
 
+      console.log('[VISION DEBUG] isVisionEnabled():', isVisionEnabled());
+      console.log('[VISION DEBUG] Has photo:', !!ctx.message.photo);
+      console.log('[VISION DEBUG] GEMINI_API_KEY exists:', !!process.env.GEMINI_API_KEY);
+
       if (isVisionEnabled() && ctx.message.photo) {
+        console.log('[VISION DEBUG] Starting image analysis...');
         try {
           const photos = ctx.message.photo;
           const largestPhoto = photos[photos.length - 1];
@@ -197,8 +202,10 @@ export class TelegramChannel implements Channel {
             `https://api.telegram.org/file/bot${this.botToken}/${file.file_path}`,
           );
           const imageBuffer = Buffer.from(await fileInfo.arrayBuffer());
+          console.log('[VISION DEBUG] Image downloaded, size:', imageBuffer.length);
 
           const description = await analyzeImage(imageBuffer, 'image/jpeg');
+          console.log('[VISION DEBUG] Description received:', description ? description.slice(0, 50) : 'NULL');
           if (description) {
             content = `[Photo: ${description.trim()}]`;
             logger.info(
@@ -207,11 +214,14 @@ export class TelegramChannel implements Channel {
             );
           }
         } catch (err) {
+          console.error('[VISION DEBUG] Error:', err);
           logger.warn(
             { chatJid, err },
             'Photo vision failed, using placeholder',
           );
         }
+      } else {
+        console.log('[VISION DEBUG] Vision disabled or no photo');
       }
 
       this.opts.onMessage(chatJid, {

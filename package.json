@@ -17,7 +17,10 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "generate:context": "bun scripts/generate-context-files.js",
-    "setup": "bun scripts/auto-setup.js"
+    "setup": "bun scripts/auto-setup.js",
+    "monitor": "bun src/monitoring-cli.ts",
+    "monitor:stats": "bun src/monitoring-cli.ts --stats",
+    "monitor:logs": "bun src/monitoring-cli.ts --logs"
   },
   "dependencies": {
     "@whiskeysockets/baileys": "^7.0.0-rc.9",

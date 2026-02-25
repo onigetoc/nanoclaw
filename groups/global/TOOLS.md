@@ -2,6 +2,119 @@
 
 This file documents tools and capabilities available to EureClaw agents.
 
+## Model Management
+
+### change_model
+
+**CRITICAL:** Use this tool to change AI models. DO NOT edit `opencode.json` or `models-config.json` manually!
+
+**Usage:**
+```typescript
+await use_mcp_tool('change_model', {
+  model: 'google/gemini-2.5-flash-lite'
+});
+```
+
+**Returns:**
+```
+✓ Primary model changed to: google/gemini-2.5-flash-lite
+
+⚠️  Restart required for changes to take effect.
+
+/restart
+```
+
+**Important:**
+- Modifies `models-config.json` (NOT `opencode.json`)
+- Always returns `/restart` command for user to click
+- Requires restart to apply changes
+
+### set_small_model
+
+Change the lightweight model for simple tasks.
+
+**Usage:**
+```typescript
+await use_mcp_tool('set_small_model', {
+  model: 'google/gemini-2.5-flash-lite'
+});
+```
+
+### get_current_model
+
+Get current model configuration.
+
+**Usage:**
+```typescript
+await use_mcp_tool('get_current_model', {});
+```
+
+**Returns:**
+- Configured primary model
+- Configured small model
+- Configured fallback model
+- Currently running model
+- Whether models are in sync
+
+### list_models
+
+List available AI models.
+
+**Usage:**
+```typescript
+await use_mcp_tool('list_models', {
+  category: 'all'  // 'free', 'premium', or 'all'
+});
+```
+
+## System Monitoring and Status
+
+### show_system_status
+
+Show current system status including active agents, model configuration, OpenCode server status, and recent activity.
+
+**Usage:**
+```typescript
+await use_mcp_tool('show_system_status', {});
+```
+
+**Returns:**
+- Current model configuration (primary, small, fallback, vision)
+- OpenCode server status and port
+- Number of active agents
+- Number of registered groups
+- Sleep status
+- System uptime
+- Recent agent executions (last 10)
+
+**When to use:**
+- User asks "what's happening?" or "what are you doing?"
+- User wants to know which model is being used
+- Debugging system issues
+- Understanding current system load
+
+### show_execution_stats
+
+Show detailed statistics about agent executions including success rate, average duration, and breakdown by agent type and group.
+
+**Usage:**
+```typescript
+await use_mcp_tool('show_execution_stats', {});
+```
+
+**Returns:**
+- Total executions count
+- Success rate percentage
+- Average execution duration
+- Breakdown by agent type (orchestrator, researcher, etc.)
+- Breakdown by group
+
+**When to use:**
+- User asks about system performance
+- Analyzing which agents are used most
+- Understanding execution patterns
+- Performance troubleshooting
+
 ## Logs and Debugging
 
 **Agent execution logs** are written to `groups/{group}/logs/`:

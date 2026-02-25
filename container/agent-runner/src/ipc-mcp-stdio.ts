@@ -319,11 +319,30 @@ server.tool(
 
 server.tool(
   'change_model',
-  'Change the primary AI model used for complex reasoning tasks. Requires server restart.',
+  'Change the primary AI model. IMPORTANT: You MUST use list_models first to get valid model IDs. Do NOT guess model IDs.',
   {
-    model: z.string().describe('Model identifier (e.g., "anthropic/claude-3-5-sonnet", "google/gemini-2.0-flash-lite")')
+    model: z.string().describe('EXACT model identifier from list_models (e.g., "opencode/minimax-m2.5-free", "google/gemini-2.5-flash-lite"). MUST contain a "/" separator.')
   },
   async (args) => {
+    // Validate model ID format: must be "provider/model-name"
+    if (!args.model.includes('/')) {
+      return {
+        content: [{
+          type: 'text' as const,
+          text: `✗ Invalid model ID: "${args.model}"\n\n` +
+                `Model IDs must be in "provider/model-name" format.\n` +
+                `Use list_models to see valid model IDs.\n\n` +
+                `Common models:\n` +
+                `• opencode/minimax-m2.5-free (free)\n` +
+                `• opencode/minimax-m2.1-free (free)\n` +
+                `• opencode/glm-4.7-free (free)\n` +
+                `• google/gemini-2.5-flash-lite (free tier)\n` +
+                `• anthropic/claude-sonnet-4-5 (premium)`
+        }],
+        isError: true
+      };
+    }
+
     const projectDir = process.env.PROJECT_DIR || '/workspace/project';
     const configPath = path.join(projectDir, 'models-config.json');
     
@@ -342,8 +361,8 @@ server.tool(
         content: [{
           type: 'text' as const,
           text: `✓ Primary model changed to: ${args.model}\n\n` +
-                `⚠️  Restart required for changes to take effect.\n` +
-                `Wait a few seconds, then use /restart to apply the new model.`
+                `⚠️  Restart required for changes to take effect.\n\n` +
+                `/restart`
         }]
       };
     } catch (err) {
@@ -360,11 +379,21 @@ server.tool(
 
 server.tool(
   'set_small_model',
-  'Set the lightweight model for simple tasks (searches, summaries). Requires server restart.',
+  'Set the lightweight model for simple tasks. IMPORTANT: You MUST use list_models first to get valid model IDs.',
   {
-    model: z.string().describe('Model identifier for lightweight tasks (e.g., "google/gemini-2.0-flash-lite")')
+    model: z.string().describe('EXACT model identifier from list_models. MUST contain a "/" separator.')
   },
   async (args) => {
+    if (!args.model.includes('/')) {
+      return {
+        content: [{
+          type: 'text' as const,
+          text: `✗ Invalid model ID: "${args.model}"\n\nModel IDs must be in "provider/model-name" format.\nUse list_models to see valid IDs.`
+        }],
+        isError: true
+      };
+    }
+
     const projectDir = process.env.PROJECT_DIR || '/workspace/project';
     const configPath = path.join(projectDir, 'models-config.json');
     
@@ -383,8 +412,8 @@ server.tool(
         content: [{
           type: 'text' as const,
           text: `✓ Small model changed to: ${args.model}\n\n` +
-                `⚠️  Restart required for changes to take effect.\n` +
-                `Wait a few seconds, then use /restart to apply the new model.`
+                `⚠️  Restart required for changes to take effect.\n\n` +
+                `/restart`
         }]
       };
     } catch (err) {
@@ -401,7 +430,7 @@ server.tool(
 
 server.tool(
   'list_models',
-  'List popular AI models available for use',
+  'List AI models available for use. ALWAYS call this BEFORE change_model or set_small_model to get exact model IDs.',
   {
     category: z.enum(['free', 'premium', 'all']).optional().describe('Filter by category (default: all)')
   },
@@ -409,28 +438,42 @@ server.tool(
     const category = args.category || 'all';
     
     const freeModels = [
-      '• opencode/minimax-m2.5-free - MiniMax M2.5 Free (current default)',
-      '• opencode/glm-5-free - GLM-5 Free (good for Chinese)',
-      '• google/gemini-2.0-flash-lite - Gemini 2.0 Flash Lite (fast, lightweight)',
-      '• google/gemini-2.5-flash-lite - Gemini 2.5 Flash Lite (latest lite version)'
+      '• opencode/minimax-m2.5-free — MiniMax M2.5 (recommended free default)',
+      '• opencode/minimax-m2.1-free — MiniMax M2.1',
+      '• opencode/glm-5-free — GLM-5 Free',
+      '• opencode/glm-4.7-free — GLM-4.7 Free',
+      '• opencode/kimi-k2.5-free — Kimi K2.5 Free',
+      '• opencode/trinity-large-preview-free — Trinity Large Preview',
+      '• google/gemini-2.5-flash-lite — Gemini 2.5 Flash Lite',
+      '• google/gemini-2.0-flash-lite — Gemini 2.0 Flash Lite',
     ];
 
     const premiumModels = [
-      '• anthropic/claude-3-5-sonnet - Claude 3.5 Sonnet (balanced, excellent for code)',
-      '• anthropic/claude-3-opus - Claude 3 Opus (best reasoning)',
-      '• openai/gpt-4o - GPT-4 Omni (multimodal)',
-      '• openai/gpt-4-turbo - GPT-4 Turbo (fast GPT-4)',
-      '• google/gemini-2.0-pro - Gemini 2.0 Pro (Google\'s best)',
-      '• deepseek/deepseek-chat - DeepSeek Chat (very cheap, good quality)'
+      '• opencode/claude-sonnet-4-5 — Claude Sonnet 4.5 (excellent for code)',
+      '• opencode/claude-opus-4-5 — Claude Opus 4.5 (best reasoning)',
+      '• opencode/gpt-5 — GPT-5',
+      '• opencode/gpt-5.2 — GPT-5.2 (latest OpenAI)',
+      '• opencode/gemini-3-pro — Gemini 3 Pro',
+      '• opencode/kimi-k2.5 — Kimi K2.5',
+      '• opencode/minimax-m2.5 — MiniMax M2.5 (paid)',
+      '• google/gemini-2.5-flash — Gemini 2.5 Flash',
+      '• google/gemini-2.5-pro — Gemini 2.5 Pro',
+      '• anthropic/claude-sonnet-4-5-20250929 — Claude Sonnet 4.5',
+      '• deepseek/deepseek-chat — DeepSeek Chat (cheap, good quality)',
     ];
 
     let models = [];
     if (category === 'free' || category === 'all') {
-      models.push('## Free Models\n', ...freeModels);
+      models.push('## Free Models (no API key needed)\n', ...freeModels);
     }
     if (category === 'premium' || category === 'all') {
-      models.push('\n## Premium Models (require API key)\n', ...premiumModels);
+      models.push('\n## Premium Models (require API key or credits)\n', ...premiumModels);
     }
+
+    models.push(
+      '\n⚠️ IMPORTANT: Use the EXACT model ID shown above (e.g., "opencode/minimax-m2.5-free").',
+      'Do NOT invent or modify model IDs. They must contain a "/" separator.'
+    );
 
     return {
       content: [{
@@ -705,6 +748,154 @@ server.tool(
         content: [{
           type: 'text' as const,
           text: `✗ Error reading log: ${err instanceof Error ? err.message : String(err)}`
+        }],
+        isError: true
+      };
+    }
+  }
+);
+
+// Monitoring tools
+server.tool(
+  'show_system_status',
+  'Show current system status: active agents, model configuration, OpenCode server status, and recent activity. Use this to understand what is currently happening in the system.',
+  {},
+  async () => {
+    try {
+      const statusFile = path.join(IPC_DIR, 'system-status.json');
+      
+      if (!fs.existsSync(statusFile)) {
+        return {
+          content: [{
+            type: 'text' as const,
+            text: '⚠️ System status not available yet. The monitoring system may still be initializing.'
+          }]
+        };
+      }
+
+      const status = JSON.parse(fs.readFileSync(statusFile, 'utf-8'));
+      
+      let output = '# 📊 EureClaw System Status\n\n';
+      
+      // Model Configuration
+      output += '## 🧠 Model Configuration\n';
+      output += `- **Primary Model:** ${status.models.primary}\n`;
+      output += `- **Small Model:** ${status.models.small}\n`;
+      if (status.models.fallback) {
+        output += `- **Fallback Model:** ${status.models.fallback}\n`;
+      }
+      if (status.models.vision) {
+        output += `- **Vision Model:** ${status.models.vision}\n`;
+      }
+      output += '\n';
+      
+      // OpenCode Server
+      output += '## 🖥️ OpenCode Server\n';
+      output += `- **Status:** ${status.openCodeServer.status === 'running' ? '✅ Running' : '❌ Stopped'}\n`;
+      output += `- **Port:** ${status.openCodeServer.port}\n`;
+      output += '\n';
+      
+      // System State
+      output += '## 📈 System State\n';
+      output += `- **Active Agents:** ${status.activeAgents}\n`;
+      output += `- **Registered Groups:** ${status.registeredGroups}\n`;
+      output += `- **Sleeping:** ${status.isSleeping ? 'Yes' : 'No'}\n`;
+      output += `- **Uptime:** ${Math.floor(status.uptime / 60)} minutes\n`;
+      output += '\n';
+      
+      // Recent Activity
+      if (status.recentExecutions && status.recentExecutions.length > 0) {
+        output += '## 🚀 Recent Agent Executions (Last 10)\n\n';
+        output += '| Time | Group | Agent | Model | Status | Duration |\n';
+        output += '|------|-------|-------|-------|--------|----------|\n';
+        
+        for (const exec of status.recentExecutions.slice(0, 10)) {
+          const time = new Date(exec.timestamp).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+          const model = exec.model.split('/').pop() || exec.model;
+          const statusIcon = exec.status === 'completed' ? '✅' : exec.status === 'error' ? '❌' : '⏳';
+          const duration = exec.duration ? `${(exec.duration / 1000).toFixed(1)}s` : '-';
+          
+          output += `| ${time} | ${exec.groupFolder} | ${exec.agentType} | ${model} | ${statusIcon} | ${duration} |\n`;
+        }
+      } else {
+        output += '## 🚀 Recent Agent Executions\n\nNo recent executions.\n';
+      }
+      
+      return {
+        content: [{
+          type: 'text' as const,
+          text: output
+        }]
+      };
+    } catch (err) {
+      return {
+        content: [{
+          type: 'text' as const,
+          text: `✗ Error reading system status: ${err instanceof Error ? err.message : String(err)}`
+        }],
+        isError: true
+      };
+    }
+  }
+);
+
+server.tool(
+  'show_execution_stats',
+  'Show detailed statistics about agent executions: success rate, average duration, breakdown by agent type and group. Use this to understand system performance and usage patterns.',
+  {},
+  async () => {
+    try {
+      const statsFile = path.join(IPC_DIR, 'execution-stats.json');
+      
+      if (!fs.existsSync(statsFile)) {
+        return {
+          content: [{
+            type: 'text' as const,
+            text: '⚠️ Execution statistics not available yet.'
+          }]
+        };
+      }
+
+      const stats = JSON.parse(fs.readFileSync(statsFile, 'utf-8'));
+      
+      let output = '# 📊 Execution Statistics\n\n';
+      
+      output += '## Overall Performance\n';
+      output += `- **Total Executions:** ${stats.totalExecutions}\n`;
+      output += `- **Success Rate:** ${stats.successRate.toFixed(1)}%\n`;
+      output += `- **Average Duration:** ${(stats.averageDuration / 1000).toFixed(1)}s\n`;
+      output += '\n';
+      
+      if (Object.keys(stats.byAgent).length > 0) {
+        output += '## By Agent Type\n\n';
+        const sortedAgents = Object.entries(stats.byAgent).sort((a: any, b: any) => b[1] - a[1]);
+        for (const [agent, count] of sortedAgents) {
+          const bar = '█'.repeat(Math.min(Math.ceil((count as number) / 2), 20));
+          output += `- **${agent}:** ${count} ${bar}\n`;
+        }
+        output += '\n';
+      }
+      
+      if (Object.keys(stats.byGroup).length > 0) {
+        output += '## By Group\n\n';
+        const sortedGroups = Object.entries(stats.byGroup).sort((a: any, b: any) => b[1] - a[1]);
+        for (const [group, count] of sortedGroups) {
+          const bar = '█'.repeat(Math.min(Math.ceil((count as number) / 2), 20));
+          output += `- **${group}:** ${count} ${bar}\n`;
+        }
+      }
+      
+      return {
+        content: [{
+          type: 'text' as const,
+          text: output
+        }]
+      };
+    } catch (err) {
+      return {
+        content: [{
+          type: 'text' as const,
+          text: `✗ Error reading execution stats: ${err instanceof Error ? err.message : String(err)}`
         }],
         isError: true
       };

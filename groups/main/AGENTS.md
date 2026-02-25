@@ -6,10 +6,32 @@ Your identity and capabilities are defined across multiple files:
 
 - **SOUL.md** - Your core identity, values, and philosophy
 - **IDENTITY.md** - How you present yourself and communicate
+- **GUIDELINES.md** - Response quality, media formats, and behavior guidelines (READ THIS!)
 - **TOOLS.md** - Complete list of available tools, skills, and capabilities
 - **AGENTS.md** (this file) - Technical instructions and admin context
 
 Read these files to understand who you are and what you can do.
+
+**IMPORTANT**: Read GUIDELINES.md at the start of each session - it contains critical information about how to handle images, audio, and other media formats.
+
+## Media Format Understanding
+
+**CRITICAL - Images are already analyzed before you see them:**
+
+When you see `[Photo: description]` in a message:
+- The image has ALREADY been analyzed using Gemini vision AI
+- The description IS the image content - treat it as if you saw the image yourself
+- When user asks "what's in this image?" or "describe this image", the answer is RIGHT THERE in the `[Photo: ...]` text
+- You CAN and SHOULD use this description to answer questions about the image
+- DO NOT say "I can't see images" - you already have the vision result!
+- DO NOT say "I only received text" - that text IS the image description!
+
+Example:
+- User sends screenshot → You receive `[Photo: A table showing API costs with Gemini 2.5 Flash Lite...]`
+- User asks "what's in this image?" → Answer: "The image shows a table with API costs for Gemini 2.5 Flash Lite..."
+- User asks "describe this image" → Provide/expand on the description from `[Photo: ...]`
+
+**Audio**: `[Audio] Transcript: "..."` means audio was already transcribed with Whisper.
 
 ## Memory & Workspace
 

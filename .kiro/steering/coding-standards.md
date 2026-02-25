@@ -2,6 +2,8 @@
 inclusion: auto
 ---
 
+TU ES SOUS WINDOWS ALORS FAIT DES COMMANDE WINDOWS (PAS DE COMMANDE LINUX OU MAC)
+
 # Coding Standards
 
 ## File Size Limit
