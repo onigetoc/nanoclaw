@@ -1,0 +1,60 @@
+# Auto-generated Agent Registry
+# Generated: 2026-02-25T06:07:29.565Z
+# This file is automatically scanned by the orchestrator to discover available agents
+# Run 'bun run scripts/sync-agents-registry.ts' to regenerate
+
+agents:
+  - name: planner
+    file: planner.md
+    description: 'Agent: planner'
+    mode: subagent
+    trigger_keywords:
+      - planner
+      - plan
+      - create plan
+  - name: researcher
+    file: researcher.md
+    description: 'Agent: researcher'
+    mode: subagent
+    trigger_keywords:
+      - researcher
+      - research
+      - search
+      - find
+  - name: summarizer
+    file: summarizer.md
+    description: 'Agent: summarizer'
+    mode: subagent
+    trigger_keywords:
+      - summarizer
+      - summarize
+      - summary
+  - name: task-executor
+    file: task-executor.md
+    description: Executes task plans from groups/{group}/tasks/
+    mode: subagent
+    trigger_keywords:
+      - task-executor
+      - task executor
+      - task
+      - create task
+      - plan
+      - create plan
+      - execute
+      - run
+      - do
+  - name: task-planner
+    file: task-planner.md
+    description: Creates task plans in groups/{group}/tasks/
+    mode: subagent
+    trigger_keywords:
+      - task-planner
+      - task planner
+      - task
+      - create task
+      - plan
+      - create plan
+orchestrator:
+  auto_discover: true
+  registry_file: .opencode/agents-registry.yaml
+  fallback_agent: general

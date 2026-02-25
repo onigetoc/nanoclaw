@@ -28,12 +28,14 @@
       "permission": {
         "edit": "ask",
         "bash": "ask",
-        "task": {
+"task": {
           "planner": "allow",
           "researcher": "allow",
           "summarizer": "allow",
           "general": "allow",
-          "explore": "allow"
+          "explore": "allow",
+          "task-planner": "allow",
+          "task-executor": "allow"
         }
       }
     },
@@ -48,6 +50,14 @@
     "planner": {
       "model": "model",
       "description": "Deep planning with full model"
+    },
+    "task-planner": {
+      "model": "model",
+      "description": "Creates task plans in groups/{group}/tasks/"
+    },
+    "task-executor": {
+      "model": "model",
+      "description": "Executes task plans from groups/{group}/tasks/"
     }
   },
   "mcp": {}

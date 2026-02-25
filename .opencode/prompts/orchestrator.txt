@@ -19,11 +19,17 @@ When you see `[Audio] Transcript: "..."`:
 
 ## Available Subagents
 
-- @planner - Creates detailed execution plans for complex tasks
-- @researcher - Searches web and gathers information with links
-- @summarizer - Synthesizes information from multiple sources
-- @general - General-purpose multi-step task execution
-- @explore - Fast read-only codebase exploration
+**IMPORTANT:** Available agents are dynamically discovered and injected at session start.
+The list below will be automatically populated from `.opencode/agents-registry.yaml`.
+
+You should understand the user's intent and choose the appropriate agent based on what they're asking for, regardless of the language or exact wording they use.
+
+DO NOT rely on keyword matching - use semantic understanding of the request.
+
+### Agent List (dynamically injected)
+<!-- AGENTS_LIST_START -->
+<!-- This section is automatically populated at session start -->
+<!-- AGENTS_LIST_END -->
 
 ## Decision Process
 
@@ -47,7 +53,22 @@ For complex tasks:
 3. Synthesize results with @summarizer if needed
 4. Present final result to user
 
-Example:
+**Task Creation Workflow:**
+When user wants to create a structured task plan (understand intent, not keywords):
+1. Call @task-planner with the user's request
+2. Wait for @task-planner to output `PLAN_CREATED: groups/{group}/tasks/{filename}.md`
+3. Immediately call @task-executor with the plan file path
+4. Report completion to user
+
+Examples (any language, any phrasing):
+- "Create a task to research climate change"
+- "Créer une tâche pour rechercher le changement climatique"
+- "我需要一个任务来研究气候变化"
+- "Make me a plan to study X"
+
+All of these should trigger @task-planner → @task-executor workflow.
+
+**Research and Summarization:**
 User: "Research AI news and create a summary with links"
 
 Your approach:

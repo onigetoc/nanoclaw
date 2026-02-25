@@ -1,0 +1,29 @@
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔍 DEBUG Path Resolution - 2026-02-25T06:20:49.582Z
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📂 process.cwd()              : c:\Users\LENOVO\APPS\0-AI-Agents\nanoclaw
+📂 projectPath (hint from LLM): C:\Users\LENOVO\APPS\0-AI-Agents\nanoclaw
+📂 resolvedPath (final)       : C:\Users\LENOVO\APPS\0-AI-Agents\nanoclaw
+📂 Path source                : hint
+
+🔄 Comparisons:
+   cwd === hint?              : ❌ NO
+   cwd === resolved?          : ❌ NO
+   hint === resolved?         : ✅ YES
+
+🖥️  Platform Info:
+   OS Platform                : win32
+   Path separator             : \
+   Node.js version            : v24.3.0
+
+📦 Additional Info:
+{
+  "library": "opencode",
+  "topic": "skills API agents discovery find_skills use_skills",
+  "tokens": 5000,
+  "toolName": "add_project_context"
+}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

@@ -903,6 +903,78 @@ server.tool(
   }
 );
 
+server.tool(
+  'list_agents',
+  'List all available agents that can be invoked. Returns agent names, descriptions, and file paths.',
+  {},
+  async () => {
+    try {
+      const agentsDir = '/workspace/project/.opencode/agents';
+      
+      if (!fs.existsSync(agentsDir)) {
+        return {
+          content: [{
+            type: 'text' as const,
+            text: 'No agents directory found.'
+          }]
+        };
+      }
+
+      const agentFiles = fs.readdirSync(agentsDir).filter(f => f.endsWith('.md'));
+      const agents = [];
+
+      for (const file of agentFiles) {
+        const filePath = path.join(agentsDir, file);
+        const content = fs.readFileSync(filePath, 'utf-8');
+        
+        // Extract frontmatter description if available
+        const frontmatterMatch = content.match(/^---\n([\s\S]*?)\n---/);
+        let description = 'No description available';
+        
+        if (frontmatterMatch) {
+          const descMatch = frontmatterMatch[1].match(/description:\s*(.+)/);
+          if (descMatch) {
+            description = descMatch[1].trim().replace(/^["']|["']$/g, '');
+          }
+        }
+        
+        // If no frontmatter description, try to get first non-heading line
+        if (description === 'No description available') {
+          const lines = content.replace(/^---\n[\s\S]*?\n---\n/, '').split('\n');
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (trimmed && !trimmed.startsWith('#')) {
+              description = trimmed.slice(0, 150);
+              break;
+            }
+          }
+        }
+
+        agents.push({
+          name: path.basename(file, '.md'),
+          description,
+          file
+        });
+      }
+
+      return {
+        content: [{
+          type: 'text' as const,
+          text: JSON.stringify(agents, null, 2)
+        }]
+      };
+    } catch (err) {
+      return {
+        content: [{
+          type: 'text' as const,
+          text: `Error listing agents: ${err instanceof Error ? err.message : String(err)}`
+        }],
+        isError: true
+      };
+    }
+  }
+);
+
 // Start the stdio transport
 const transport = new StdioServerTransport();
 await server.connect(transport);
