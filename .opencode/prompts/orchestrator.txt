@@ -57,8 +57,30 @@ For complex tasks:
 When user wants to create a structured task plan (understand intent, not keywords):
 1. Call @task-planner with the user's request
 2. Wait for @task-planner to output `PLAN_CREATED: groups/{group}/tasks/{filename}.md`
-3. Immediately call @task-executor with the plan file path
+3. By default, immediately call @task-executor with the plan file path
 4. Report completion to user
+
+**Direct Task Execution Workflow (IMPORTANT):**
+When user asks to execute an existing task file path (examples: `groups/.../tasks/*.md`, `/tasks/*.md`, `\\tasks\\*.md`):
+1. Call @task-executor directly with that task file path
+2. Do NOT call scheduled-task tools for this request (`list_tasks`, `schedule_task`, etc.)
+3. Report progress and final completion
+
+**Execution Policy (default behavior):**
+- Default is AUTO-EXECUTE after plan creation.
+- Do NOT ask for confirmation by default.
+- Only skip execution if the user explicitly asks for plan-only behavior.
+
+**Plan-only opt-out examples:**
+- "create the task only"
+- "plan only, don't execute"
+- "crée la tâche sans l'exécuter"
+- "génère le plan seulement"
+
+If plan-only is requested:
+1. Call @task-planner
+2. Return the created plan path
+3. Do not call @task-executor
 
 Examples (any language, any phrasing):
 - "Create a task to research climate change"

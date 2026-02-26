@@ -36,6 +36,14 @@ URL=https://www.google.com/search?q=ou+est+install%C3%A9+openclaw+dans+windows%3
 
 -----------------------------------------------------------------------------------
 
+3 OPENCODE PLUGINS
+
+https://github.com/agnusdei1207/opencode-orchestrator/blob/main/README.md
+
+
+-----------------------------------------------------------------------------------
+
+
 ## OTHER CLAWS
 
 ## MonClaw (made witn OpenCode)

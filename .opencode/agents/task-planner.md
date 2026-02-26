@@ -1,6 +1,7 @@
 ---
 description: Creates task plans in groups/{group}/tasks/
 mode: subagent
+model: opencode/trinity-large-preview-free
 temperature: 0.1
 tools:
   write: true

@@ -4,17 +4,14 @@
 import { execSync } from 'child_process';
 import os from 'os';
 import path from 'path';
+import fs from 'fs';
 
-import {
-  ASSISTANT_NAME,
-  TELEGRAM_ONLY,
-} from './config.js';
+import { ASSISTANT_NAME, TELEGRAM_ONLY } from './config.js';
 import { readEnvFile } from './env.js';
 import { WhatsAppChannel } from './channels/whatsapp.js';
 import { TelegramChannel } from './channels/telegram.js';
-import {
-  writeGroupsSnapshot,
-} from './container-runner.js';
+import { WebUIChannel } from './channels/webui.js';
+import { writeGroupsSnapshot } from './container-runner.js';
 import {
   initDatabase,
   storeMessage,
@@ -37,7 +34,11 @@ import {
 import { scanAndGetApiKeys, logApiKeysReport } from './api-key-scanner.js';
 import { executeCommand } from './commands/index.js';
 import './commands/builtin-commands.js';
-import { loadSleepState, isSleeping, setOnWakeCallback } from './commands/sleep-manager.js';
+import {
+  loadSleepState,
+  isSleeping,
+  setOnWakeCallback,
+} from './commands/sleep-manager.js';
 import { initMonitoring } from './monitoring.js';
 import {
   loadState,
@@ -45,15 +46,31 @@ import {
   getSessions,
   reloadRegisteredGroups,
 } from './state.js';
-import { registerGroup, getAvailableGroups, isPrivateChat } from './group-manager.js';
+import {
+  registerGroup,
+  getAvailableGroups,
+  isPrivateChat,
+} from './group-manager.js';
+import {
+  startApiServer,
+  stopApiServer,
+  setSendMessageFunction,
+  setProcessApiMessageFn,
+  broadcastToToken,
+} from './api-server.js';
 import { processGroupMessages } from './message-processor.js';
 import { startMessageLoop, recoverPendingMessages } from './message-loop.js';
 
 export function ensureContainerSystemRunning(): void {
   if (os.platform() !== 'darwin') {
-    logger.info({ platform: os.platform() }, 'Running in direct mode (no container isolation)');
+    logger.info(
+      { platform: os.platform() },
+      'Running in direct mode (no container isolation)',
+    );
     console.log('\n⚠️  Running in DIRECT MODE (no container isolation)');
-    console.log('   This is less secure but works on Windows/Linux without Docker.\n');
+    console.log(
+      '   This is less secure but works on Windows/Linux without Docker.\n',
+    );
     return;
   }
 
@@ -101,17 +118,26 @@ export function ensureContainerSystemRunning(): void {
       stdio: ['pipe', 'pipe', 'pipe'],
       encoding: 'utf-8',
     });
-    const containers: { status: string; configuration: { id: string } }[] = JSON.parse(output || '[]');
+    const containers: { status: string; configuration: { id: string } }[] =
+      JSON.parse(output || '[]');
     const orphans = containers
-      .filter((c) => c.status === 'running' && c.configuration.id.startsWith('eureclaw-'))
+      .filter(
+        (c) =>
+          c.status === 'running' && c.configuration.id.startsWith('eureclaw-'),
+      )
       .map((c) => c.configuration.id);
     for (const name of orphans) {
       try {
         execSync(`container stop ${name}`, { stdio: 'pipe' });
-      } catch { /* already stopped */ }
+      } catch {
+        /* already stopped */
+      }
     }
     if (orphans.length > 0) {
-      logger.info({ count: orphans.length, names: orphans }, 'Stopped orphaned containers');
+      logger.info(
+        { count: orphans.length, names: orphans },
+        'Stopped orphaned containers',
+      );
     }
   } catch (err) {
     logger.warn({ err }, 'Failed to clean up orphaned containers');
@@ -119,6 +145,179 @@ export function ensureContainerSystemRunning(): void {
 }
 
 export async function main(): Promise<void> {
+  const instanceLockPath = path.join(
+    process.cwd(),
+    '.runtime',
+    'eureclaw.instance.lock',
+  );
+  const releaseInstanceLock = () => {
+    try {
+      if (fs.existsSync(instanceLockPath)) {
+        const content = fs.readFileSync(instanceLockPath, 'utf-8');
+        const lock = JSON.parse(content) as { pid?: number };
+        if (lock?.pid === process.pid) {
+          fs.unlinkSync(instanceLockPath);
+        }
+      }
+    } catch {
+      // Non-blocking diagnostics only
+    }
+  };
+
+  const isPidAlive = (pid: number): boolean => {
+    try {
+      process.kill(pid, 0);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  /**
+   * Vérifie que le PID correspond bien à un processus EureClaw (Node/Bun)
+   * pour éviter les faux positifs liés à la réutilisation de PID par l'OS.
+   */
+  const isEureClawProcess = (pid: number): boolean => {
+    try {
+      let cmdLine = '';
+      if (os.platform() === 'win32') {
+        cmdLine = execSync(
+          `wmic process where "ProcessId=${pid}" get CommandLine /value`,
+          { encoding: 'utf-8', timeout: 3000, stdio: ['pipe', 'pipe', 'pipe'] },
+        );
+      } else {
+        cmdLine = execSync(`ps -p ${pid} -o args=`, {
+          encoding: 'utf-8',
+          timeout: 3000,
+          stdio: ['pipe', 'pipe', 'pipe'],
+        });
+      }
+      return /src[/\\]index|start-with-opencode|run-with-restart/i.test(
+        cmdLine,
+      );
+    } catch {
+      return true; // Impossible de vérifier → on suppose que c'est EureClaw (prudence)
+    }
+  };
+
+  /**
+   * Tente de terminer un processus EureClaw résiduel.
+   * Retourne true si le processus est mort dans le délai imparti.
+   */
+  const terminateStalePid = async (pid: number): Promise<boolean> => {
+    try {
+      process.kill(pid, 'SIGTERM');
+    } catch {
+      return true; // Déjà mort
+    }
+    // Attendre jusqu'à 6 secondes
+    const deadline = Date.now() + 6000;
+    while (isPidAlive(pid) && Date.now() < deadline) {
+      await new Promise((r) => setTimeout(r, 300));
+    }
+    if (isPidAlive(pid)) {
+      try {
+        process.kill(pid, 'SIGKILL');
+        await new Promise((r) => setTimeout(r, 500));
+      } catch {
+        /* ignore */
+      }
+    }
+    return !isPidAlive(pid);
+  };
+
+  // Single-instance guard: prevent duplicate bot responders and Telegram 409 conflicts.
+  fs.mkdirSync(path.dirname(instanceLockPath), { recursive: true });
+  if (fs.existsSync(instanceLockPath)) {
+    try {
+      const raw = fs.readFileSync(instanceLockPath, 'utf-8');
+      const lock = JSON.parse(raw) as { pid?: number; startedAt?: string };
+      if (lock?.pid && lock.pid !== process.pid && isPidAlive(lock.pid)) {
+        if (isEureClawProcess(lock.pid)) {
+          // Processus EureClaw résiduel : on tente de le terminer proprement
+          logger.warn(
+            { existingPid: lock.pid, startedAt: lock.startedAt },
+            'Detected stale EureClaw instance — attempting auto-termination...',
+          );
+          const killed = await terminateStalePid(lock.pid);
+          if (killed) {
+            logger.info(
+              { pid: lock.pid },
+              'Stale EureClaw instance terminated — proceeding with startup',
+            );
+          } else {
+            logger.error(
+              { existingPid: lock.pid, startedAt: lock.startedAt },
+              'Another EureClaw instance is already running and could not be terminated',
+            );
+            throw new Error(
+              `Another EureClaw instance is already running (PID ${lock.pid}) and could not be stopped. Kill it manually.`,
+            );
+          }
+        } else {
+          // PID vivant mais appartient à un autre processus → verrou obsolète
+          logger.warn(
+            { stalePid: lock.pid },
+            'Lock file refers to a non-EureClaw PID (OS reuse) — cleaning up stale lock',
+          );
+        }
+      }
+      // Nettoyer le verrou obsolète
+      try {
+        fs.unlinkSync(instanceLockPath);
+      } catch {
+        /* ignore */
+      }
+    } catch (err) {
+      if (
+        err instanceof Error &&
+        err.message.includes('could not be stopped')
+      ) {
+        throw err;
+      }
+      try {
+        fs.unlinkSync(instanceLockPath);
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+  fs.writeFileSync(
+    instanceLockPath,
+    JSON.stringify(
+      { pid: process.pid, startedAt: new Date().toISOString() },
+      null,
+      2,
+    ),
+    'utf-8',
+  );
+
+  const heartbeatPath = path.join(process.cwd(), 'HEARTBEAT.md');
+  const writeHeartbeat = (
+    state: 'starting' | 'running' | 'stopping' | 'exited',
+    details?: string,
+  ) => {
+    try {
+      const now = new Date().toISOString();
+      const lines = [
+        '# EureClaw Heartbeat',
+        '',
+        `- Timestamp: ${now}`,
+        `- State: ${state}`,
+        `- PID: ${process.pid}`,
+        `- UptimeSec: ${Math.floor(process.uptime())}`,
+      ];
+      if (details) {
+        lines.push(`- Details: ${details}`);
+      }
+      fs.writeFileSync(heartbeatPath, `${lines.join('\n')}\n`, 'utf-8');
+    } catch {
+      // Non-blocking diagnostics only
+    }
+  };
+
+  writeHeartbeat('starting');
+
   const apiKeys = scanAndGetApiKeys();
   logApiKeysReport(apiKeys);
 
@@ -153,14 +352,21 @@ export async function main(): Promise<void> {
 
   // Graceful shutdown
   const shutdown = async (signal: string) => {
+    writeHeartbeat('stopping', `signal=${signal}`);
     logger.info({ signal }, 'Shutdown signal received');
     await stopServer();
+    await stopApiServer();
     await queue.shutdown(10000);
     for (const ch of channels) await ch.disconnect();
+    releaseInstanceLock();
     process.exit(0);
   };
   process.on('SIGTERM', () => shutdown('SIGTERM'));
   process.on('SIGINT', () => shutdown('SIGINT'));
+  process.on('exit', (code) => {
+    releaseInstanceLock();
+    writeHeartbeat('exited', `exitCode=${code}`);
+  });
 
   // Channel callbacks
   const channelOpts = {
@@ -219,7 +425,10 @@ export async function main(): Promise<void> {
       }
 
       if (isSleeping()) {
-        logger.debug({ chatJid, sender: msg.sender_name }, 'Message ignored (bot sleeping)');
+        logger.debug(
+          { chatJid, sender: msg.sender_name },
+          'Message ignored (bot sleeping)',
+        );
         return;
       }
 
@@ -231,14 +440,27 @@ export async function main(): Promise<void> {
   };
 
   // Load secrets
-  const secrets = readEnvFile(['TELEGRAM_BOT_TOKEN', 'GEMINI_API_KEY', 'GOOGLE_API_KEY', 'OPENAI_API_KEY']);
+  const secrets = readEnvFile([
+    'TELEGRAM_BOT_TOKEN',
+    'GEMINI_API_KEY',
+    'GOOGLE_API_KEY',
+    'OPENAI_API_KEY',
+  ]);
   const telegramToken = secrets.TELEGRAM_BOT_TOKEN || '';
 
-  if (secrets.GEMINI_API_KEY) process.env.GEMINI_API_KEY = secrets.GEMINI_API_KEY;
-  if (secrets.GOOGLE_API_KEY) process.env.GOOGLE_API_KEY = secrets.GOOGLE_API_KEY;
-  if (secrets.OPENAI_API_KEY) process.env.OPENAI_API_KEY = secrets.OPENAI_API_KEY;
+  if (secrets.GEMINI_API_KEY)
+    process.env.GEMINI_API_KEY = secrets.GEMINI_API_KEY;
+  if (secrets.GOOGLE_API_KEY)
+    process.env.GOOGLE_API_KEY = secrets.GOOGLE_API_KEY;
+  if (secrets.OPENAI_API_KEY)
+    process.env.OPENAI_API_KEY = secrets.OPENAI_API_KEY;
 
   // Create and connect channels
+  // WebUI channel first - handles messages from OpenCode Web UI
+  const webui = new WebUIChannel();
+  channels.push(webui);
+  await webui.connect();
+
   if (!TELEGRAM_ONLY) {
     whatsapp = new WhatsAppChannel(channelOpts);
     channels.push(whatsapp);
@@ -251,6 +473,25 @@ export async function main(): Promise<void> {
     await telegram.connect();
   }
 
+  // Start API server for web UI
+  setSendMessageFunction(async (jid: string, text: string) => {
+    // Don't send to Telegram if message came from Web UI (web: prefix)
+    if (!jid.startsWith('web:')) {
+      const channel = findChannel(channels, jid);
+      if (channel) {
+        await sendDeduped(channel, jid, text);
+      }
+    }
+  });
+
+  // Trigger message processing when API receives a message
+  setProcessApiMessageFn((jid: string) => {
+    queue.sendMessage(jid, '');
+  });
+
+  const apiPort = await startApiServer();
+  console.log(`\n🌐 API Server: http://127.0.0.1:${apiPort}\n`);
+
   // Start subsystems
   startSchedulerLoop({
     registeredGroups: () => getRegisteredGroups(),
@@ -259,37 +500,72 @@ export async function main(): Promise<void> {
     onProcess: (groupJid, proc, containerName, groupFolder) =>
       queue.registerProcess(groupJid, proc, containerName, groupFolder),
     sendMessage: async (jid, rawText) => {
-      const channel = findChannel(channels, jid);
-      if (!channel) return;
       const text = formatOutbound(rawText);
-      if (text) {
-        await channel.sendMessage(jid, text);
-        storeMessageDirect({
-          id: `bot_${Date.now()}_${Math.random().toString(36).substring(7)}`,
-          chat_jid: jid,
-          sender: 'bot',
-          sender_name: ASSISTANT_NAME,
-          content: text,
-          timestamp: new Date().toISOString(),
-          is_from_me: true,
-          is_bot_message: true,
-        });
+      if (!text) return;
+
+      const isWebUI = jid.startsWith('web:');
+      const targetJid = isWebUI ? jid.slice(4) : jid; // Remove web: prefix for storage/broadcast
+
+      // If message came from WebUI, only send via SSE (not to other channels like Telegram)
+      if (isWebUI) {
+        const webuiChannel = channels.find((c) => c.name === 'webui');
+        if (webuiChannel) {
+          await webuiChannel.sendMessage(jid, text);
+        }
+      } else {
+        // Regular channel routing for non-WebUI messages
+        const channel = findChannel(channels, jid);
+        if (channel) {
+          await channel.sendMessage(jid, text);
+        }
       }
+
+      const msgId = `bot_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+      const timestamp = new Date().toISOString();
+      storeMessageDirect({
+        id: msgId,
+        chat_jid: targetJid,
+        sender: 'bot',
+        sender_name: ASSISTANT_NAME,
+        content: text,
+        timestamp,
+        is_from_me: true,
+        is_bot_message: true,
+      });
+      broadcastToToken(targetJid, {
+        id: msgId,
+        content: text,
+        sender_name: ASSISTANT_NAME,
+        timestamp,
+        is_from_me: true,
+        is_bot_message: true,
+      });
     },
   });
 
   startIpcWatcher({
     sendMessage: async (jid, text) => {
       const channel = findChannel(channels, jid);
-      if (!channel) throw new Error(`No channel for JID: ${jid}`);
-      await sendDeduped(channel, jid, text);
+      if (channel) {
+        await sendDeduped(channel, jid, text);
+      }
+      const msgId = `bot_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+      const timestamp = new Date().toISOString();
       storeMessageDirect({
-        id: `bot_${Date.now()}_${Math.random().toString(36).substring(7)}`,
+        id: msgId,
         chat_jid: jid,
         sender: 'bot',
         sender_name: ASSISTANT_NAME,
         content: text,
-        timestamp: new Date().toISOString(),
+        timestamp,
+        is_from_me: true,
+        is_bot_message: true,
+      });
+      broadcastToToken(jid, {
+        id: msgId,
+        content: text,
+        sender_name: ASSISTANT_NAME,
+        timestamp,
         is_from_me: true,
         is_bot_message: true,
       });
@@ -303,17 +579,31 @@ export async function main(): Promise<void> {
       } else {
         const fallbackText = `📎 Image: ${filePath}${options?.caption ? `\n${options.caption}` : ''}`;
         await sendDeduped(channel, jid, fallbackText);
-        logger.warn({ jid, channel: channel.name }, 'Channel does not support sendMedia, sent path as text');
+        logger.warn(
+          { jid, channel: channel.name },
+          'Channel does not support sendMedia, sent path as text',
+        );
       }
     },
     registeredGroups: () => getRegisteredGroups(),
     registerGroup,
-    syncGroupMetadata: (force) => whatsapp?.syncGroupMetadata(force) ?? Promise.resolve(),
+    syncGroupMetadata: (force) =>
+      whatsapp?.syncGroupMetadata(force) ?? Promise.resolve(),
     getAvailableGroups,
-    writeGroupsSnapshot: (gf, im, ag, rj) => writeGroupsSnapshot(gf, im, ag, rj),
+    writeGroupsSnapshot: (gf, im, ag, rj) =>
+      writeGroupsSnapshot(gf, im, ag, rj),
   });
 
-  queue.setProcessMessagesFn((chatJid) => processGroupMessages(chatJid, queue, channels));
+  queue.setProcessMessagesFn((chatJid) =>
+    processGroupMessages(chatJid, queue, channels),
+  );
   recoverPendingMessages(queue);
   startMessageLoop(queue, channels, ASSISTANT_NAME);
+
+  writeHeartbeat('running');
+  const heartbeatInterval = setInterval(
+    () => writeHeartbeat('running'),
+    30_000,
+  );
+  heartbeatInterval.unref();
 }

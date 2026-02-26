@@ -24,6 +24,26 @@ import { Channel, NewMessage } from './types.js';
 import { logger } from './logger.js';
 import { isSleeping } from './commands/sleep-manager.js';
 
+function resolveGroupJid(
+  chatJid: string,
+  registeredGroups: Record<string, unknown>,
+): string | null {
+  // Direct lookup first
+  if (registeredGroups[chatJid]) {
+    return chatJid;
+  }
+
+  // If starts with web: prefix, try without prefix (WebUI channel)
+  if (chatJid.startsWith('web:')) {
+    const originalJid = chatJid.slice(4);
+    if (registeredGroups[originalJid]) {
+      return originalJid;
+    }
+  }
+
+  return null;
+}
+
 /**
  * Start the main message polling loop.
  * Polls for new messages and dispatches them to the queue.
@@ -50,7 +70,11 @@ export async function startMessageLoop(
 
       const registeredGroups = getRegisteredGroups();
       const jids = Object.keys(registeredGroups);
-      const { messages, newTimestamp } = getNewMessages(jids, getLastTimestamp(), ASSISTANT_NAME);
+      const { messages, newTimestamp } = getNewMessages(
+        jids,
+        getLastTimestamp(),
+        ASSISTANT_NAME,
+      );
 
       if (messages.length > 0) {
         logger.info({ count: messages.length }, 'New messages');
@@ -70,8 +94,10 @@ export async function startMessageLoop(
         }
 
         for (const [chatJid, groupMessages] of messagesByGroup) {
-          const group = registeredGroups[chatJid];
-          if (!group) continue;
+          const resolvedJid = resolveGroupJid(chatJid, registeredGroups);
+          if (!resolvedJid) continue;
+
+          const group = registeredGroups[resolvedJid];
 
           const isMainGroup = group.folder === MAIN_GROUP_FOLDER;
           const needsTrigger = !isMainGroup && group.requiresTrigger !== false;
@@ -84,20 +110,22 @@ export async function startMessageLoop(
           }
 
           const allPending = getMessagesSince(
-            chatJid,
-            getLastAgentTimestampForJid(chatJid),
+            resolvedJid,
+            getLastAgentTimestampForJid(resolvedJid),
             ASSISTANT_NAME,
           );
-          const messagesToSend = allPending.length > 0 ? allPending : groupMessages;
+          const messagesToSend =
+            allPending.length > 0 ? allPending : groupMessages;
           const formatted = formatMessages(messagesToSend);
 
-          if (queue.sendMessage(chatJid, formatted)) {
+          // Use chatJid (may have web: prefix) for channel routing, not resolvedJid
+          if (queue.sendMessage(resolvedJid, formatted)) {
             logger.debug(
-              { chatJid, count: messagesToSend.length },
+              { chatJid: resolvedJid, count: messagesToSend.length },
               'Piped messages to active container',
             );
             setLastAgentTimestampForJid(
-              chatJid,
+              resolvedJid,
               messagesToSend[messagesToSend.length - 1].timestamp,
             );
             saveState();
@@ -106,7 +134,7 @@ export async function startMessageLoop(
               channel.setTyping?.(chatJid, true);
             }
           } else {
-            queue.enqueueMessageCheck(chatJid);
+            queue.enqueueMessageCheck(resolvedJid);
           }
         }
       }

@@ -320,6 +320,26 @@ function generateFallbackName(): string {
  */
 function detectComplexTask(prompt: string): boolean {
   const lowerPrompt = prompt.toLowerCase();
+
+  // Language-agnostic explicit agent mention (e.g. @planner, @researcher, @task-executor).
+  // If user mentions a specific agent (other than @build), route through orchestrator.
+  const explicitAgentMention = prompt.match(/(^|\s)@([a-z0-9][a-z0-9_-]{1,63})\b/i)?.[2]?.toLowerCase();
+  if (explicitAgentMention && explicitAgentMention !== 'build') {
+    return true;
+  }
+
+  // Always treat explicit task-workflow signals as complex.
+  // Use structural markers / fixed agent IDs (language-agnostic) instead of natural-language keywords.
+  if (
+    lowerPrompt.includes('/tasks/') ||
+    lowerPrompt.includes('\\tasks\\') ||
+    lowerPrompt.includes('/groups/') ||
+    lowerPrompt.includes('\\groups\\') ||
+    lowerPrompt.includes('plan_created') ||
+    /-\s*\[\s?[x ]\s?\]/i.test(prompt)
+  ) {
+    return true;
+  }
   
   // Keywords that indicate complex multi-step tasks
   const complexKeywords = [
@@ -357,6 +377,33 @@ function detectComplexTask(prompt: string): boolean {
   
   // Default to simple task (build agent)
   return false;
+}
+
+/**
+ * Add deterministic path hints for common virtual paths used by users.
+ * Example: /tasks/foo.md should resolve to {groupDir}/tasks/foo.md for the current group.
+ */
+function applyPathHints(prompt: string, groupDir: string): string {
+  const mentionsTasksPath =
+    prompt.includes('/tasks/') ||
+    prompt.includes('\\tasks\\') ||
+    /(^|\s)(\.?[\\/])?tasks[\\/]/i.test(prompt);
+
+  if (!mentionsTasksPath) {
+    return prompt;
+  }
+
+  const groupTasksPath = path.join(groupDir, 'tasks').replace(/\\/g, '/');
+  const hint = [
+    '',
+    '[SYSTEM PATH HINT]',
+    `If the user references /tasks/... it maps to ${groupTasksPath}/... for this group.`,
+    'This refers to FILE TASKS (markdown files in group/tasks), not scheduled tasks in IPC/DB.',
+    'When user asks about /tasks files, inspect the filesystem first (group/tasks) before using any scheduled-task tool.',
+    'Do not search project root for these task files unless explicitly requested.',
+  ].join('\n');
+
+  return `${prompt}\n${hint}`;
 }
 
 interface ParsedMessage {
@@ -505,6 +552,8 @@ async function runQuery(
   existingClient?: any,
   contextAlreadyInjected?: boolean
 ): Promise<{ newSessionId?: string; lastAssistantUuid?: string; closedDuringQuery: boolean; client: any; contextInjected: boolean }> {
+  const effectivePrompt = applyPathHints(prompt, groupDir);
+
   // Reuse existing OpenCode client or create a new one
   let client: any;
   
@@ -666,19 +715,70 @@ async function runQuery(
     `- IPC directory: ${ipcBaseDir}`,
     ``,
     `Use these paths for file operations and database queries.`,
-    `For group management, prefer MCP tools (mcp__eureclaw__register_group, mcp__eureclaw__list_tasks, etc.).`,
+    `For group management, prefer MCP tools (mcp__eureclaw__register_group, etc.).`,
+    `IMPORTANT: mcp__eureclaw__list_tasks shows SCHEDULED tasks (alarms/cron), not markdown task files under group/tasks.`,
+    `If the user mentions /tasks/... path or a .md task file, treat it as filesystem task file lookup in group/tasks.`,
   ].join('\n');
 
-  // Determine which agent to use based on task complexity
-  // Complex tasks use 'orchestrator' which delegates to specialized subagents
-  // Simple tasks use 'build' for direct execution
-  const useOrchestrator = detectComplexTask(prompt);
-  const agentName = useOrchestrator ? 'orchestrator' : 'build';
-  
-  if (useOrchestrator) {
-    log(`🧠 Complex task detected, using orchestrator agent with subagent delegation`);
+  // Determine which agent to use.
+  // Priority order:
+  // 1) Explicit user override in prompt (@orchestrator / @build)
+  // 2) Explicit mention of any known subagent (@researcher, @email, etc.)
+  // 2) Environment default (EURECLAW_DEFAULT_AGENT=orchestrator|build)
+  // 3) Heuristic complexity detection
+  const promptLower = effectivePrompt.toLowerCase();
+  const envDefaultAgent = (process.env.EURECLAW_DEFAULT_AGENT || '').toLowerCase();
+
+  // Discover available subagent names dynamically from .opencode/agents
+  // so newly added agents work without code changes.
+  const agentsDirForRouting = isDirectMode
+    ? path.join(containerInput.directMode!.projectDir!, '.opencode', 'agents')
+    : '/workspace/project/.opencode/agents';
+  let knownAgentNames = new Set<string>();
+  try {
+    if (fs.existsSync(agentsDirForRouting)) {
+      const files = fs.readdirSync(agentsDirForRouting).filter(f => f.endsWith('.md'));
+      knownAgentNames = new Set(files.map(f => path.basename(f, '.md').toLowerCase()));
+    }
+  } catch (err) {
+    log(`⚠ Failed to discover agents for routing: ${err instanceof Error ? err.message : String(err)}`);
+  }
+
+  // Extract explicit @agent mentions from user prompt.
+  const mentionedAgents = Array.from(
+    new Set(
+      [...promptLower.matchAll(/(^|\s)@([a-z0-9][a-z0-9_-]{1,63})\b/g)].map(m => m[2])
+    )
+  );
+  const mentionedKnownSubagent = mentionedAgents.find(
+    a => a !== 'build' && a !== 'orchestrator' && knownAgentNames.has(a)
+  );
+
+  let agentName: 'orchestrator' | 'build';
+  let routingReason = '';
+
+  if (promptLower.includes('@orchestrator')) {
+    agentName = 'orchestrator';
+    routingReason = 'explicit @orchestrator override in prompt';
+  } else if (promptLower.includes('@build')) {
+    agentName = 'build';
+    routingReason = 'explicit @build override in prompt';
+  } else if (mentionedKnownSubagent) {
+    agentName = 'orchestrator';
+    routingReason = `explicit @${mentionedKnownSubagent} mention (known subagent)`;
+  } else if (envDefaultAgent === 'orchestrator' || envDefaultAgent === 'build') {
+    agentName = envDefaultAgent as 'orchestrator' | 'build';
+    routingReason = `EURECLAW_DEFAULT_AGENT=${envDefaultAgent}`;
   } else {
-    log(`⚡ Simple task detected, using build agent for direct execution`);
+    const useOrchestrator = detectComplexTask(effectivePrompt);
+    agentName = useOrchestrator ? 'orchestrator' : 'build';
+    routingReason = useOrchestrator ? 'complexity heuristic' : 'simple-task heuristic';
+  }
+
+  if (agentName === 'orchestrator') {
+    log(`🧠 Using orchestrator agent (${routingReason})`);
+  } else {
+    log(`⚡ Using build agent (${routingReason})`);
   }
 
   // Load session context (agents and skills available)
@@ -701,7 +801,7 @@ async function runQuery(
 
   // Discover agents and skills dynamically for orchestrator
   let agentsAndSkillsContext = '';
-  if (useOrchestrator) {
+  if (agentName === 'orchestrator') {
     try {
       log('🔍 Discovering available agents and skills...');
       
@@ -907,7 +1007,7 @@ Use the Task tool to invoke agents when appropriate.
   // the complete response in { data: { info: AssistantMessage, parts: Part[] } }
   const messageTimestamp = new Date().toISOString();
   log(`Sending message to session ${currentSessionId} with agent: ${agentName}...`);
-  debugLog(`Message metadata: length=${prompt.length} chars, chatJid=${containerInput.chatJid}, timestamp=${messageTimestamp}, agent=${agentName}`);
+  debugLog(`Message metadata: length=${effectivePrompt.length} chars, chatJid=${containerInput.chatJid}, timestamp=${messageTimestamp}, agent=${agentName}`);
 
   // Poll for _close sentinel during the blocking prompt call
   let closedDuringPrompt = false;
@@ -919,8 +1019,9 @@ Use the Task tool to invoke agents when appropriate.
     }
   }, IPC_POLL_MS);
 
-  // Helper: call session.prompt with a timeout (default 5 minutes)
-  const PROMPT_TIMEOUT_MS = 5 * 60 * 1000;
+  // Helper: call session.prompt with a timeout (default 10 minutes)
+  // Keep this aligned with provider timeout expectations (often 600000 ms).
+  const PROMPT_TIMEOUT_MS = Number(process.env.PROMPT_TIMEOUT_MS || 10 * 60 * 1000);
   const promptWithTimeout = async (sid: string, text: string, agent?: string) => {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), PROMPT_TIMEOUT_MS);
@@ -944,7 +1045,7 @@ Use the Task tool to invoke agents when appropriate.
     // Returns { data: { info: AssistantMessage, parts: Part[] }, request, response }
     let response: any;
     try {
-      response = await promptWithTimeout(currentSessionId, prompt, agentName);
+      response = await promptWithTimeout(currentSessionId, effectivePrompt, agentName);
     } catch (promptErr: any) {
       // If session might be stale/expired, retry with a fresh session
       const msg = promptErr?.message || String(promptErr);
@@ -960,7 +1061,7 @@ Use the Task tool to invoke agents when appropriate.
           log(`✓ Created fresh session: ${currentSessionId}`);
           // Re-inject context into fresh session
           await injectContext(currentSessionId, systemAppend);
-          response = await promptWithTimeout(currentSessionId, prompt, agentName);
+          response = await promptWithTimeout(currentSessionId, effectivePrompt, agentName);
         } catch (retryErr: any) {
           log(`ERROR: Retry with fresh session also failed: ${retryErr?.message || String(retryErr)}`);
           throw retryErr;
@@ -1053,7 +1154,7 @@ Use the Task tool to invoke agents when appropriate.
     if (errorStack) {
       log(`Stack trace: ${errorStack}`);
     }
-    log(`Context: sessionId=${currentSessionId}, promptLength=${prompt.length}`);
+    log(`Context: sessionId=${currentSessionId}, promptLength=${effectivePrompt.length}`);
 
     writeOutput({
       status: 'error',
