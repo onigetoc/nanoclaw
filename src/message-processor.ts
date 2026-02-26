@@ -15,7 +15,12 @@ import {
   writeTasksSnapshot,
 } from './container-runner.js';
 import { runDirectAgent } from './direct-runner.js';
-import { getAllTasks, getMessagesSince, storeMessageDirect } from './db.js';
+import {
+  getAllTasks,
+  getMessagesSince,
+  getMessagesSinceLinked,
+  storeMessageDirect,
+} from './db.js';
 import { GroupQueue } from './group-queue.js';
 import { findChannel, formatMessages, sendDeduped } from './router.js';
 import {
@@ -48,7 +53,9 @@ export async function processGroupMessages(
 
   const isMainGroup = group.folder === MAIN_GROUP_FOLDER;
   const sinceTimestamp = getLastAgentTimestampForJid(chatJid);
-  const missedMessages = getMessagesSince(chatJid, sinceTimestamp, ASSISTANT_NAME);
+  const missedMessages = chatJid.startsWith('web:')
+    ? getMessagesSinceLinked(chatJid, sinceTimestamp, ASSISTANT_NAME)
+    : getMessagesSince(chatJid, sinceTimestamp, ASSISTANT_NAME);
 
   if (missedMessages.length === 0) return true;
 

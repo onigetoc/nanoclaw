@@ -14,7 +14,7 @@ import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import { logger } from './logger.js';
-import { getAllChats, getMessagesSince, getAllMessagesSince, storeMessageDirect, storeChatMetadata, setRegisteredGroup, insertApiToken, getAllApiTokens, updateApiTokenLastUsed, deactivateApiToken, getApiTokenChatMappings, addApiTokenChat, deleteApiTokenChats } from './db.js';
+import { getAllChats, getMessagesSince, getAllMessagesSinceLinked, storeMessageDirect, storeChatMetadata, setRegisteredGroup, insertApiToken, getAllApiTokens, updateApiTokenLastUsed, deactivateApiToken, getApiTokenChatMappings, addApiTokenChat, deleteApiTokenChats } from './db.js';
 import { getRegisteredGroups, reloadRegisteredGroups, getSessions } from './state.js';
 import { ASSISTANT_NAME, GROUPS_DIR, TRIGGER_PATTERN } from './config.js';
 import { NewMessage, RegisteredGroup } from './types.js';
@@ -247,17 +247,32 @@ fastify.get('/chats', { preHandler: authenticate }, async () => {
   ensureWebGroupsRegistered();
 
   const groups = getRegisteredGroups();
+  const knownChats = getAllChats();
 
-  // Return only web: JID groups for the web UI
+  // Return web: groups, but with last activity derived from all JIDs sharing the same folder
   const webChats = Object.entries(groups)
     .filter(([jid]) => jid.startsWith('web:'))
-    .map(([jid, group]) => ({
-      jid,
-      name: group.name,
-      last_message_time: new Date().toISOString(),
-      isRegistered: true,
-      groupInfo: group,
-    }));
+    .map(([jid, group]) => {
+      const linkedJids = Object.entries(groups)
+        .filter(([, g]) => g.folder === group.folder)
+        .map(([linkedJid]) => linkedJid);
+
+      const linkedActivity = knownChats
+        .filter((c) => linkedJids.includes(c.jid))
+        .map((c) => c.last_message_time)
+        .filter(Boolean)
+        .sort()
+        .pop();
+
+      return {
+        jid,
+        name: group.name,
+        last_message_time: linkedActivity || new Date(0).toISOString(),
+        isRegistered: true,
+        groupInfo: group,
+      };
+    })
+    .sort((a, b) => b.last_message_time.localeCompare(a.last_message_time));
 
   return { chats: webChats };
 });
@@ -271,8 +286,8 @@ fastify.get(
     const query = request.query as Record<string, string>;
     const since = query.since || '0';
 
-    // For web UI, fetch messages including bot responses
-    const messages = getAllMessagesSince(jid, since);
+    // For web UI chats, include messages from all linked channel JIDs sharing the same folder
+    const messages = getAllMessagesSinceLinked(jid, since);
     messages.sort((a, b) => a.timestamp.localeCompare(b.timestamp));
 
     return { messages };

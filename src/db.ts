@@ -68,7 +68,7 @@ function createSchema(database: Database.Database): void {
     CREATE TABLE IF NOT EXISTS registered_groups (
       jid TEXT PRIMARY KEY,
       name TEXT NOT NULL,
-      folder TEXT NOT NULL UNIQUE,
+      folder TEXT NOT NULL,
       trigger_pattern TEXT NOT NULL,
       added_at TEXT NOT NULL,
       container_config TEXT,
@@ -166,6 +166,7 @@ function migrateDropFolderUnique(database: Database.Database): void {
 export function _initTestDatabase(): void {
   db = new Database(':memory:');
   createSchema(db);
+  migrateDropFolderUnique(db);
 }
 
 /**
@@ -350,6 +351,47 @@ export function getMessagesSince(
     .all(chatJid, sinceTimestamp, `${botPrefix}:%`) as NewMessage[];
 }
 
+function getLinkedChatJids(chatJid: string): string[] {
+  if (!chatJid.startsWith('web:')) return [chatJid];
+
+  const folderRow = db
+    .prepare('SELECT folder FROM registered_groups WHERE jid = ?')
+    .get(chatJid) as { folder: string } | undefined;
+
+  if (!folderRow?.folder) return [chatJid];
+
+  const linked = db
+    .prepare('SELECT jid FROM registered_groups WHERE folder = ?')
+    .all(folderRow.folder) as Array<{ jid: string }>;
+
+  const jids = linked.map((r) => r.jid);
+  return jids.length > 0 ? jids : [chatJid];
+}
+
+/**
+ * Get non-bot messages since a timestamp for all chat JIDs linked to the same folder.
+ * For non-web JIDs, this is equivalent to getMessagesSince.
+ */
+export function getMessagesSinceLinked(
+  chatJid: string,
+  sinceTimestamp: string,
+  botPrefix: string,
+): NewMessage[] {
+  const linkedJids = getLinkedChatJids(chatJid);
+  const placeholders = linkedJids.map(() => '?').join(',');
+  const sql = `
+    SELECT id, chat_jid, sender, sender_name, content, timestamp
+    FROM messages
+    WHERE chat_jid IN (${placeholders}) AND timestamp > ?
+      AND is_bot_message = 0 AND content NOT LIKE ?
+    ORDER BY timestamp
+  `;
+
+  return db
+    .prepare(sql)
+    .all(...linkedJids, sinceTimestamp, `${botPrefix}:%`) as NewMessage[];
+}
+
 /**
  * Get all messages since a timestamp, INCLUDING bot responses.
  * Used by the web UI API to show full conversation history.
@@ -424,6 +466,28 @@ export function getAllMessagesSince(
   return db
     .prepare(sql)
     .all(chatJid, sinceTimestamp) as NewMessage[];
+}
+
+/**
+ * Get all messages since a timestamp for all chat JIDs linked to the same folder.
+ * Includes bot responses. For non-web JIDs, this is equivalent to getAllMessagesSince.
+ */
+export function getAllMessagesSinceLinked(
+  chatJid: string,
+  sinceTimestamp: string,
+): NewMessage[] {
+  const linkedJids = getLinkedChatJids(chatJid);
+  const placeholders = linkedJids.map(() => '?').join(',');
+  const sql = `
+    SELECT id, chat_jid, sender, sender_name, content, timestamp, is_from_me, is_bot_message
+    FROM messages
+    WHERE chat_jid IN (${placeholders}) AND timestamp > ?
+    ORDER BY timestamp
+  `;
+
+  return db
+    .prepare(sql)
+    .all(...linkedJids, sinceTimestamp) as NewMessage[];
 }
 
 /**

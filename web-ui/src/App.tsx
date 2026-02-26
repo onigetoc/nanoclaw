@@ -70,6 +70,14 @@ function App() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [state.messages]);
 
+  const openExternalLink = (href?: string) => {
+    if (!href) return;
+    const url = href.trim();
+    const isAllowed = /^(https?:\/\/|mailto:|tel:)/i.test(url);
+    if (!isAllowed) return;
+    window.open(url, '_blank', 'noopener,noreferrer');
+  };
+
   const loadChats = async () => {
     try {
       const chats = await apiService.getChats();
@@ -354,7 +362,24 @@ function App() {
                           </div>
                         )}
                         <div className="message-text">
-                          <ReactMarkdown>{msg.content}</ReactMarkdown>
+                          <ReactMarkdown
+                            components={{
+                              a: ({ node: _node, href, ...props }) => (
+                                <a
+                                  {...props}
+                                  href={href}
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    openExternalLink(href);
+                                  }}
+                                  rel="noopener noreferrer"
+                                  target="_blank"
+                                />
+                              ),
+                            }}
+                          >
+                            {msg.content}
+                          </ReactMarkdown>
                         </div>
                         <div className="message-time">
                           {formatTime(msg.timestamp)}

@@ -2,12 +2,15 @@ import { describe, it, expect, beforeEach } from 'vitest';
 
 import {
   _initTestDatabase,
+  getAllMessagesSinceLinked,
   createTask,
   deleteTask,
   getAllChats,
   getMessagesSince,
+  getMessagesSinceLinked,
   getNewMessages,
   getTaskById,
+  setRegisteredGroup,
   storeChatMetadata,
   storeMessage,
   updateTask,
@@ -176,6 +179,73 @@ describe('getMessagesSince', () => {
     });
     const msgs = getMessagesSince('group@g.us', '2024-01-01T00:00:04.000Z', 'TestBot');
     expect(msgs).toHaveLength(0);
+  });
+});
+
+describe('linked web chat message reads', () => {
+  beforeEach(() => {
+    setRegisteredGroup('web:main', {
+      name: 'Main',
+      folder: 'main',
+      trigger: '@TestBot',
+      added_at: '2024-01-01T00:00:00.000Z',
+      requiresTrigger: false,
+    });
+    setRegisteredGroup('tg:123', {
+      name: 'Main Telegram',
+      folder: 'main',
+      trigger: '@TestBot',
+      added_at: '2024-01-01T00:00:00.000Z',
+      requiresTrigger: true,
+    });
+
+    storeChatMetadata('web:main', '2024-01-01T00:00:00.000Z', 'Main');
+    storeChatMetadata('tg:123', '2024-01-01T00:00:00.000Z', 'Main Telegram');
+
+    store({
+      id: 'tg-1',
+      chat_jid: 'tg:123',
+      sender: 'tg-user',
+      sender_name: 'Alice',
+      content: 'from telegram',
+      timestamp: '2024-01-01T00:00:01.000Z',
+    });
+
+    store({
+      id: 'web-1',
+      chat_jid: 'web:main',
+      sender: 'web-user',
+      sender_name: 'Web User',
+      content: 'from web',
+      timestamp: '2024-01-01T00:00:02.000Z',
+    });
+
+    storeMessage({
+      id: 'bot-1',
+      chat_jid: 'tg:123',
+      sender: 'bot',
+      sender_name: 'TestBot',
+      content: 'bot reply',
+      timestamp: '2024-01-01T00:00:03.000Z',
+      is_bot_message: true,
+    });
+  });
+
+  it('getMessagesSinceLinked inclut les messages non-bot des JIDs liés', () => {
+    const msgs = getMessagesSinceLinked(
+      'web:main',
+      '2024-01-01T00:00:00.000Z',
+      'TestBot',
+    );
+    expect(msgs.map((m) => m.id)).toEqual(['tg-1', 'web-1']);
+  });
+
+  it('getAllMessagesSinceLinked inclut aussi les réponses bot', () => {
+    const msgs = getAllMessagesSinceLinked(
+      'web:main',
+      '2024-01-01T00:00:00.000Z',
+    );
+    expect(msgs.map((m) => m.id)).toEqual(['tg-1', 'web-1', 'bot-1']);
   });
 });
 
