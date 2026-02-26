@@ -154,7 +154,11 @@ class ApiService {
     const result = await this.request<{ messages: Message[] }>(
       `/chats/${encodeURIComponent(chatJid)}/messages${query}`,
     );
-    return result.messages;
+    return result.messages.map((m) => ({
+      ...m,
+      is_from_me: !!m.is_from_me,
+      is_bot_message: !!m.is_bot_message,
+    }));
   }
 
   async sendMessage(
