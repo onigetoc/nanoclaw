@@ -58,6 +58,7 @@ function App() {
 
   useEffect(() => {
     localStorage.setItem(THEME_STORAGE_KEY, theme);
+    document.documentElement.setAttribute('data-theme', theme);
   }, [theme]);
 
   useEffect(() => {
