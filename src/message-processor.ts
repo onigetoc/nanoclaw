@@ -31,6 +31,7 @@ import { RegisteredGroup, Channel } from './types.js';
 import { logger } from './logger.js';
 import { ensureServerHealthy } from './opencode-server.js';
 import { getMonitoring } from './monitoring.js';
+import { broadcastToToken } from './api-server.js';
 
 /**
  * Process all pending messages for a group.
@@ -103,7 +104,8 @@ export async function processGroupMessages(
       const text = raw.replace(/<internal>[\s\S]*?<\/internal>/g, '').trim();
       logger.info({ group: group.name }, `Agent output: ${raw.slice(0, 200)}`);
       if (text) {
-        await sendDeduped(channel, chatJid, text);
+        const wasSent = await sendDeduped(channel, chatJid, text);
+        if (!wasSent) return; // Duplicate — skip store & broadcast
         outputSentToUser = true;
         monitoring.markOutputSent(executionId);
 
@@ -117,6 +119,21 @@ export async function processGroupMessages(
           is_from_me: true,
           is_bot_message: true,
         });
+
+        // Cross-channel sync: broadcast to web UI SSE clients
+        // Only broadcast if the message did NOT originate from the web channel,
+        // because web-channel messages are already sent via WebUIChannel.sendMessage()
+        // which calls broadcastToToken internally (avoids duplicate SSE events).
+        if (!chatJid.startsWith('web:')) {
+          broadcastToToken(chatJid, {
+            id: `sse_${Date.now()}_${Math.random().toString(36).substring(7)}`,
+            content: text,
+            sender_name: ASSISTANT_NAME,
+            timestamp: new Date().toISOString(),
+            is_from_me: true,
+            is_bot_message: true,
+          });
+        }
       }
       resetIdleTimer();
     }

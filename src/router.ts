@@ -41,16 +41,17 @@ function isDuplicate(jid: string, text: string): boolean {
  * Use this instead of calling channel.sendMessage() directly to prevent
  * duplicate messages from streaming callback + IPC paths.
  */
-export function sendDeduped(
+export async function sendDeduped(
   channel: Channel,
   jid: string,
   text: string,
-): Promise<void> {
+): Promise<boolean> {
   if (isDuplicate(jid, text)) {
     logger.info({ jid }, 'Suppressed duplicate outbound message');
-    return Promise.resolve();
+    return false;
   }
-  return channel.sendMessage(jid, text);
+  await channel.sendMessage(jid, text);
+  return true;
 }
 
 export function escapeXml(s: string): string {

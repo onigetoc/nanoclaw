@@ -3,6 +3,7 @@ import fs from 'fs';
 import path from 'path';
 
 import { ASSISTANT_NAME, DATA_DIR, STORE_DIR } from './config.js';
+import { logger } from './logger.js';
 import { NewMessage, RegisteredGroup, ScheduledTask, TaskRunLog } from './types.js';
 
 let db: Database.Database;
@@ -73,6 +74,20 @@ function createSchema(database: Database.Database): void {
       container_config TEXT,
       requires_trigger INTEGER DEFAULT 1
     );
+    CREATE TABLE IF NOT EXISTS api_tokens (
+      id TEXT PRIMARY KEY,
+      token_hash TEXT NOT NULL UNIQUE,
+      name TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      last_used TEXT,
+      active INTEGER DEFAULT 1
+    );
+    CREATE TABLE IF NOT EXISTS api_token_chats (
+      token_id TEXT NOT NULL,
+      chat_jid TEXT NOT NULL,
+      PRIMARY KEY (token_id, chat_jid),
+      FOREIGN KEY (token_id) REFERENCES api_tokens(id)
+    );
   `);
 
   // Add context_mode column if it doesn't exist (migration for existing DBs)
@@ -105,8 +120,46 @@ export function initDatabase(): void {
   db = new Database(dbPath);
   createSchema(db);
 
+  // Remove UNIQUE constraint on folder in registered_groups.
+  // Multiple JIDs (e.g. tg:123 and web:main) can legitimately share the same folder.
+  migrateDropFolderUnique(db);
+
   // Migrate from JSON files if they exist
   migrateJsonState();
+}
+
+/**
+ * Migration: remove the UNIQUE constraint on `folder` in registered_groups.
+ * SQLite doesn't support ALTER TABLE DROP CONSTRAINT, so we recreate the table.
+ */
+function migrateDropFolderUnique(database: Database.Database): void {
+  try {
+    // Check if the UNIQUE index on folder still exists
+    const idx = database
+      .prepare(
+        `SELECT 1 FROM sqlite_master WHERE type='index' AND tbl_name='registered_groups' AND sql LIKE '%UNIQUE%' AND sql LIKE '%folder%'`,
+      )
+      .get();
+    if (!idx) return; // Already migrated
+
+    database.exec(`
+      CREATE TABLE IF NOT EXISTS registered_groups_new (
+        jid TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        folder TEXT NOT NULL,
+        trigger_pattern TEXT NOT NULL,
+        added_at TEXT NOT NULL,
+        container_config TEXT,
+        requires_trigger INTEGER DEFAULT 1
+      );
+      INSERT OR IGNORE INTO registered_groups_new SELECT * FROM registered_groups;
+      DROP TABLE registered_groups;
+      ALTER TABLE registered_groups_new RENAME TO registered_groups;
+    `);
+    logger.info('Migrated registered_groups: removed UNIQUE constraint on folder');
+  } catch (err) {
+    logger.warn({ err }, 'Failed to migrate registered_groups UNIQUE constraint (may already be done)');
+  }
 }
 
 /** @internal - for tests only. Creates a fresh in-memory database. */
@@ -295,6 +348,82 @@ export function getMessagesSince(
   return db
     .prepare(sql)
     .all(chatJid, sinceTimestamp, `${botPrefix}:%`) as NewMessage[];
+}
+
+/**
+ * Get all messages since a timestamp, INCLUDING bot responses.
+ * Used by the web UI API to show full conversation history.
+ */
+// ---- API Token persistence ----
+
+export interface DbApiToken {
+  id: string;
+  token_hash: string;
+  name: string;
+  created_at: string;
+  last_used: string | null;
+  active: boolean;
+}
+
+export function insertApiToken(id: string, tokenHash: string, name: string): void {
+  db.prepare(
+    `INSERT INTO api_tokens (id, token_hash, name, created_at, active) VALUES (?, ?, ?, ?, 1)`,
+  ).run(id, tokenHash, name, new Date().toISOString());
+}
+
+export function getAllApiTokens(): DbApiToken[] {
+  const rows = db.prepare(`SELECT * FROM api_tokens`).all() as any[];
+  return rows.map((r) => ({
+    id: r.id,
+    token_hash: r.token_hash,
+    name: r.name,
+    created_at: r.created_at,
+    last_used: r.last_used,
+    active: !!r.active,
+  }));
+}
+
+export function updateApiTokenLastUsed(id: string): void {
+  db.prepare(`UPDATE api_tokens SET last_used = ? WHERE id = ?`).run(
+    new Date().toISOString(),
+    id,
+  );
+}
+
+export function deactivateApiToken(id: string): void {
+  db.prepare(`UPDATE api_tokens SET active = 0 WHERE id = ?`).run(id);
+}
+
+export function getApiTokenChatMappings(tokenId: string): string[] {
+  const rows = db.prepare(
+    `SELECT chat_jid FROM api_token_chats WHERE token_id = ?`,
+  ).all(tokenId) as any[];
+  return rows.map((r) => r.chat_jid);
+}
+
+export function addApiTokenChat(tokenId: string, chatJid: string): void {
+  db.prepare(
+    `INSERT OR IGNORE INTO api_token_chats (token_id, chat_jid) VALUES (?, ?)`,
+  ).run(tokenId, chatJid);
+}
+
+export function deleteApiTokenChats(tokenId: string): void {
+  db.prepare(`DELETE FROM api_token_chats WHERE token_id = ?`).run(tokenId);
+}
+
+export function getAllMessagesSince(
+  chatJid: string,
+  sinceTimestamp: string,
+): NewMessage[] {
+  const sql = `
+    SELECT id, chat_jid, sender, sender_name, content, timestamp, is_from_me, is_bot_message
+    FROM messages
+    WHERE chat_jid = ? AND timestamp > ?
+    ORDER BY timestamp
+  `;
+  return db
+    .prepare(sql)
+    .all(chatJid, sinceTimestamp) as NewMessage[];
 }
 
 /**
@@ -537,9 +666,21 @@ export function setRegisteredGroup(
   jid: string,
   group: RegisteredGroup,
 ): void {
+  // Use ON CONFLICT(jid) instead of INSERT OR REPLACE to avoid
+  // silently deleting other JIDs that share the same folder.
+  // The UNIQUE constraint on folder can cause INSERT OR REPLACE to
+  // delete a different row (e.g. tg: JID) when inserting a web: JID
+  // with the same folder name.
   db.prepare(
-    `INSERT OR REPLACE INTO registered_groups (jid, name, folder, trigger_pattern, added_at, container_config, requires_trigger)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO registered_groups (jid, name, folder, trigger_pattern, added_at, container_config, requires_trigger)
+     VALUES (?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(jid) DO UPDATE SET
+       name = excluded.name,
+       folder = excluded.folder,
+       trigger_pattern = excluded.trigger_pattern,
+       added_at = excluded.added_at,
+       container_config = excluded.container_config,
+       requires_trigger = excluded.requires_trigger`,
   ).run(
     jid,
     group.name,

@@ -18,8 +18,7 @@ export class WebUIChannel implements Channel {
   }
 
   async sendMessage(jid: string, text: string): Promise<void> {
-    const chatJid = jid.replace(/^web:/, '');
-
+    // Broadcast with the full JID (e.g. web:main) so the frontend can match it
     const message = {
       id: `bot_${Date.now()}_${Math.random().toString(36).substring(7)}`,
       sender: 'bot',
@@ -30,9 +29,9 @@ export class WebUIChannel implements Channel {
       is_bot_message: true,
     };
 
-    broadcastToToken(chatJid, message);
+    broadcastToToken(jid, message);
     logger.debug(
-      { chatJid, textLength: text.length },
+      { jid, textLength: text.length },
       'WebUI message sent via SSE',
     );
   }
@@ -52,8 +51,7 @@ export class WebUIChannel implements Channel {
   }
 
   async setTyping(jid: string, isTyping: boolean): Promise<void> {
-    const chatJid = jid.replace(/^web:/, '');
-    broadcastToToken(chatJid, {
+    broadcastToToken(jid, {
       id: `typing_${Date.now()}`,
       content: isTyping ? 'typing' : '',
       sender_name: 'EureClaw',

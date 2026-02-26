@@ -1049,7 +1049,7 @@ Use the Task tool to invoke agents when appropriate.
     } catch (promptErr: any) {
       // If session might be stale/expired, retry with a fresh session
       const msg = promptErr?.message || String(promptErr);
-      const isSessionError = msg.includes('fetch failed') || msg.includes('abort') || msg.includes('timeout') || msg.includes('404') || msg.includes('not found');
+      const isSessionError = msg.includes('fetch failed') || msg.includes('abort') || msg.includes('timeout') || msg.includes('404') || msg.includes('not found') || msg.includes('ContextOverflow') || msg.includes('context_length') || msg.includes('context window') || msg.includes('maximum context length');
       if (isSessionError && sessionId) {
         log(`⚠ Prompt failed (${msg}), recreating client and retrying with fresh session...`);
         try {
@@ -1086,11 +1086,50 @@ Use the Task tool to invoke agents when appropriate.
     }
 
     // Extract response data — handle both responseStyle 'fields' and 'data'
-    const responseData = response.data ?? response;
-    const parts = responseData.parts || [];
+    let responseData = response.data ?? response;
+    let parts = responseData.parts || [];
     
     log(`Extracted parts count: ${parts.length}, parts types: ${parts.map((p: any) => p.type).join(', ')}`);
 
+    // Detect ContextOverflowError — the SDK returns HTTP 200 with the error
+    // embedded in responseData.info.error, not as a thrown exception.
+    // When this happens, the session is saturated and we must start fresh.
+    const infoError = responseData.info?.error;
+    const errorName = infoError?.name || infoError?.type || '';
+    const errorMessage2 = infoError?.message || '';
+    if (errorName.includes('ContextOverflow') || errorName.includes('context_length') || 
+        errorMessage2.includes('context window') || errorMessage2.includes('token limit') ||
+        errorMessage2.includes('maximum context length')) {
+      log(`⚠ ContextOverflowError detected: ${errorName} — ${errorMessage2}`);
+      log(`Session ${currentSessionId} is saturated, creating fresh session and retrying...`);
+      
+      try {
+        client = await createOpencodeClient(sdkEnv);
+        const freshSession = await client.session.create();
+        currentSessionId = freshSession.data?.id ?? freshSession.id;
+        newSessionId = currentSessionId;
+        log(`✓ Created fresh session after overflow: ${currentSessionId}`);
+        
+        // Re-inject context into fresh session
+        await injectContext(currentSessionId, systemAppend);
+        
+        // Retry the prompt
+        const retryResponse = await promptWithTimeout(currentSessionId, effectivePrompt, agentName);
+        const retryData = retryResponse.data ?? retryResponse;
+        responseData = retryData;
+        parts = retryData.parts || [];
+        log(`✓ Retry response received, parts: ${parts.length}`);
+      } catch (overflowRetryErr: any) {
+        log(`ERROR: Retry after ContextOverflow failed: ${overflowRetryErr?.message || String(overflowRetryErr)}`);
+        writeOutput({
+          status: 'error',
+          result: null,
+          error: `Context overflow — session was reset but retry failed: ${overflowRetryErr?.message || String(overflowRetryErr)}`,
+          newSessionId: currentSessionId,
+        });
+        throw overflowRetryErr;
+      }
+    }
     // Extract text from response parts
     const textParts = parts
       .filter((p: any) => p.type === 'text')

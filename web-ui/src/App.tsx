@@ -26,6 +26,7 @@ function App() {
   const [tokenInput, setTokenInput] = useState('');
   const [showTokenSetup, setShowTokenSetup] = useState(false);
   const [newToken, setNewToken] = useState<ApiToken | null>(null);
+  const [, forceUpdate] = useState(0); // used to re-render after clearing token
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -76,6 +77,12 @@ function App() {
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : 'Failed to connect';
       console.error('Failed to load chats:', err);
+      // If token is invalid/expired, clear it and show login
+      if (errorMsg.includes('Invalid or inactive token') || errorMsg.includes('Not authenticated')) {
+        apiService.clearToken();
+        setToken(null);
+        return;
+      }
       setState((s) => ({ ...s, connected: false, error: errorMsg }));
     }
   };
@@ -123,9 +130,21 @@ function App() {
     const userInput = inputValue.trim();
     setInputValue('');
 
+    // Optimistic UI: show the message immediately
+    const optimisticMsg: Message = {
+      id: `local_${Date.now()}`,
+      chat_jid: state.selectedChat.jid,
+      sender: 'me',
+      sender_name: 'You',
+      content: userInput,
+      timestamp: new Date().toISOString(),
+      is_from_me: false,
+      is_bot_message: false,
+    };
+    setState((s) => ({ ...s, messages: [...s.messages, optimisticMsg] }));
+
     try {
       await apiService.sendMessage(state.selectedChat.jid, userInput);
-      await loadMessages(state.selectedChat.jid);
     } catch (err) {
       console.error('Failed to send message:', err);
     }
@@ -163,6 +182,37 @@ function App() {
   });
 
   if (!token && !showTokenSetup) {
+    const savedToken = apiService.getToken();
+
+    // If a token is already saved in localStorage, show a simple Connect button
+    if (savedToken) {
+      return (
+        <div className="login-container">
+          <div className="login-box">
+            <h1>EureClaw</h1>
+            <p>Disconnected</p>
+            <button
+              className="primary"
+              onClick={() => setToken(savedToken)}
+              autoFocus
+            >
+              Connect
+            </button>
+            <button
+              className="secondary"
+              onClick={() => {
+                apiService.clearToken();
+                forceUpdate((n) => n + 1);
+              }}
+            >
+              Forget Token
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    // No saved token: show login form
     return (
       <div className="login-container">
         <div className="login-box">
@@ -259,7 +309,7 @@ function App() {
               <div className="chat-info">
                 <div className="chat-name">{chat.name || chat.jid}</div>
                 <div className="chat-preview">
-                  {chat.isRegistered ? '✓ Registered' : chat.jid}
+                  {chat.groupInfo ? `📁 ${chat.groupInfo.folder}` : chat.jid}
                 </div>
               </div>
             </div>
@@ -270,7 +320,7 @@ function App() {
             className="secondary"
             onClick={() => {
               setToken(null);
-              apiService.clearToken();
+              // Keep token in localStorage so user can reconnect easily
             }}
           >
             Disconnect
@@ -295,10 +345,10 @@ function App() {
                   {group.messages.map((msg) => (
                     <div
                       key={msg.id}
-                      className={`message ${msg.is_from_me ? 'sent' : 'received'}`}
+                      className={`message ${msg.is_bot_message ? 'received' : 'sent'}`}
                     >
                       <div className="message-content">
-                        {!msg.is_from_me && (
+                        {msg.is_bot_message && (
                           <div className="message-sender">
                             {msg.sender_name}
                           </div>

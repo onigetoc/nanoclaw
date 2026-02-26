@@ -11,11 +11,14 @@
 import Fastify, { FastifyRequest, FastifyReply } from 'fastify';
 import cors from '@fastify/cors';
 import crypto from 'crypto';
+import fs from 'fs';
+import path from 'path';
 import { logger } from './logger.js';
-import { getAllChats, getMessagesSince, storeMessageDirect } from './db.js';
-import { getRegisteredGroups, getSessions } from './state.js';
-import { ASSISTANT_NAME } from './config.js';
-import { NewMessage } from './types.js';
+import { getAllChats, getMessagesSince, getAllMessagesSince, storeMessageDirect, storeChatMetadata, setRegisteredGroup, insertApiToken, getAllApiTokens, updateApiTokenLastUsed, deactivateApiToken, getApiTokenChatMappings, addApiTokenChat, deleteApiTokenChats } from './db.js';
+import { getRegisteredGroups, reloadRegisteredGroups, getSessions } from './state.js';
+import { ASSISTANT_NAME, GROUPS_DIR, TRIGGER_PATTERN } from './config.js';
+import { NewMessage, RegisteredGroup } from './types.js';
+import { registerGroup } from './group-manager.js';
 
 const API_PORT = parseInt(process.env.API_PORT || '4300', 10);
 
@@ -28,13 +31,6 @@ interface ApiToken {
   active: boolean;
 }
 
-interface ChatMapping {
-  tokenId: string;
-  chatJid: string;
-}
-
-const tokens: Map<string, ApiToken> = new Map();
-const tokenToChatMappings: Map<string, ChatMapping[]> = new Map();
 const sseConnections: Map<string, Set<(data: string) => void>> = new Map();
 
 function generateToken(): string {
@@ -79,8 +75,9 @@ async function authenticate(
   const token = authHeader.slice(7);
   const tokenHash = hashToken(token);
 
-  const foundToken = Array.from(tokens.values()).find(
-    (t) => t.token === tokenHash && t.active,
+  const allTokens = getAllApiTokens();
+  const foundToken = allTokens.find(
+    (t) => t.token_hash === tokenHash && t.active,
   );
 
   if (!foundToken) {
@@ -88,12 +85,12 @@ async function authenticate(
     return;
   }
 
-  foundToken.lastUsed = new Date().toISOString();
+  updateApiTokenLastUsed(foundToken.id);
   request.tokenId = foundToken.id;
 
-  const mappings = tokenToChatMappings.get(foundToken.id);
-  if (mappings && mappings.length > 0) {
-    request.chatJid = mappings[0].chatJid;
+  const mappings = getApiTokenChatMappings(foundToken.id);
+  if (mappings.length > 0) {
+    request.chatJid = mappings[0];
   }
 }
 
@@ -111,10 +108,13 @@ fastify.get(
       return;
     }
 
+    const origin = request.headers.origin || '*';
     reply.raw.writeHead(200, {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',
       Connection: 'keep-alive',
+      'Access-Control-Allow-Origin': origin,
+      'Access-Control-Allow-Credentials': 'true',
     });
 
     const sendEvent = (data: string) => {
@@ -139,36 +139,27 @@ fastify.post(
     const id = generateTokenId();
     const rawToken = generateToken();
     const tokenHash = hashToken(rawToken);
+    const tokenName = name || `Token ${id.slice(0, 6)}`;
 
-    const apiToken: ApiToken = {
-      id,
-      token: tokenHash,
-      name: name || `Token ${id.slice(0, 6)}`,
-      createdAt: new Date().toISOString(),
-      lastUsed: null,
-      active: true,
-    };
+    insertApiToken(id, tokenHash, tokenName);
 
-    tokens.set(id, apiToken);
-    tokenToChatMappings.set(id, []);
-
-    logger.info({ tokenId: id, name: apiToken.name }, 'Created new API token');
+    logger.info({ tokenId: id, name: tokenName }, 'Created new API token');
 
     reply.code(201).send({
-      id: apiToken.id,
-      name: apiToken.name,
+      id,
+      name: tokenName,
       token: rawToken,
-      createdAt: apiToken.createdAt,
+      createdAt: new Date().toISOString(),
     });
   },
 );
 
 fastify.get('/tokens', { preHandler: authenticate }, async () => {
-  const allTokens = Array.from(tokens.values()).map((t) => ({
+  const allTokens = getAllApiTokens().map((t) => ({
     id: t.id,
     name: t.name,
-    createdAt: t.createdAt,
-    lastUsed: t.lastUsed,
+    createdAt: t.created_at,
+    lastUsed: t.last_used,
     active: t.active,
   }));
   return { tokens: allTokens };
@@ -180,15 +171,16 @@ fastify.delete(
   async (request: FastifyRequest, reply: FastifyReply) => {
     const params = request.params as Record<string, string>;
     const id = params.id;
-    const token = tokens.get(id);
+    const allTokens = getAllApiTokens();
+    const foundToken = allTokens.find((t) => t.id === id);
 
-    if (!token) {
+    if (!foundToken) {
       reply.code(404).send({ error: 'Token not found' });
       return;
     }
 
-    token.active = false;
-    tokenToChatMappings.delete(id);
+    deactivateApiToken(id);
+    deleteApiTokenChats(id);
 
     logger.info({ tokenId: id }, 'Revoked API token');
 
@@ -210,18 +202,14 @@ fastify.post(
       return;
     }
 
-    const token = tokens.get(id);
-    if (!token) {
+    const allTokens = getAllApiTokens();
+    const foundToken = allTokens.find((t) => t.id === id);
+    if (!foundToken) {
       reply.code(404).send({ error: 'Token not found' });
       return;
     }
 
-    const mappings = tokenToChatMappings.get(id) || [];
-
-    if (!mappings.find((m) => m.chatJid === chatJid)) {
-      mappings.push({ tokenId: id, chatJid });
-      tokenToChatMappings.set(id, mappings);
-    }
+    addApiTokenChat(id, chatJid);
 
     logger.info({ tokenId: id, chatJid }, 'Added chat to token');
 
@@ -235,18 +223,18 @@ fastify.get(
   async (request: FastifyRequest) => {
     const params = request.params as Record<string, string>;
     const id = params.id;
-    const mappings = tokenToChatMappings.get(id) || [];
+    const chatJids = getApiTokenChatMappings(id);
     const allChats = getAllChats();
     const groups = getRegisteredGroups();
 
-    const chatsWithGroups = mappings.map((m) => {
-      const chat = allChats.find((c) => c.jid === m.chatJid);
+    const chatsWithGroups = chatJids.map((chatJid) => {
+      const chat = allChats.find((c) => c.jid === chatJid);
       return {
-        jid: m.chatJid,
-        name: chat?.name || m.chatJid,
+        jid: chatJid,
+        name: chat?.name || chatJid,
         last_message_time: chat?.last_message_time || '',
-        isRegistered: !!groups[m.chatJid],
-        groupInfo: groups[m.chatJid] || null,
+        isRegistered: !!groups[chatJid],
+        groupInfo: groups[chatJid] || null,
       };
     });
 
@@ -255,18 +243,23 @@ fastify.get(
 );
 
 fastify.get('/chats', { preHandler: authenticate }, async () => {
-  const chats = getAllChats();
+  // Auto-discover and register web groups for existing group folders
+  ensureWebGroupsRegistered();
+
   const groups = getRegisteredGroups();
 
-  const chatsWithGroups = chats.map((chat) => ({
-    jid: chat.jid,
-    name: chat.name,
-    last_message_time: chat.last_message_time,
-    isRegistered: !!groups[chat.jid],
-    groupInfo: groups[chat.jid] || null,
-  }));
+  // Return only web: JID groups for the web UI
+  const webChats = Object.entries(groups)
+    .filter(([jid]) => jid.startsWith('web:'))
+    .map(([jid, group]) => ({
+      jid,
+      name: group.name,
+      last_message_time: new Date().toISOString(),
+      isRegistered: true,
+      groupInfo: group,
+    }));
 
-  return { chats: chatsWithGroups };
+  return { chats: webChats };
 });
 
 fastify.get(
@@ -278,11 +271,9 @@ fastify.get(
     const query = request.query as Record<string, string>;
     const since = query.since || '0';
 
-    // Also check for web: prefixed JID (messages from WebUI)
-    const webJid = `web:${jid}`;
-    const messages = getMessagesSince(jid, since, ASSISTANT_NAME).concat(
-      getMessagesSince(webJid, since, ASSISTANT_NAME),
-    );
+    // For web UI, fetch messages including bot responses
+    const messages = getAllMessagesSince(jid, since);
+    messages.sort((a, b) => a.timestamp.localeCompare(b.timestamp));
 
     return { messages };
   },
@@ -345,10 +336,117 @@ export function setProcessApiMessageFn(fn: (jid: string) => void): void {
   processApiMessage = fn;
 }
 
+/**
+ * Scan the groups/ directory and auto-register web: JIDs for existing group folders.
+ * This ensures the web UI works standalone without any other channel.
+ * Safe: uses ON CONFLICT(jid) in setRegisteredGroup, never deletes other channel JIDs.
+ */
+function ensureWebGroupsRegistered(): void {
+  const registeredGroups = getRegisteredGroups();
+  const SKIP_FOLDERS = new Set(['templates', 'global']);
+
+  try {
+    const entries = fs.readdirSync(GROUPS_DIR, { withFileTypes: true });
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+      if (SKIP_FOLDERS.has(entry.name)) continue;
+      if (entry.name.startsWith('.')) continue;
+
+      const webJid = `web:${entry.name}`;
+
+      // Skip if already registered as a web group
+      if (registeredGroups[webJid]) continue;
+
+      // Find existing group config for this folder (from any channel)
+      const existingGroup = Object.values(registeredGroups).find(
+        (g) => g.folder === entry.name,
+      );
+
+      const groupConfig: RegisteredGroup = {
+        name: existingGroup?.name || entry.name.charAt(0).toUpperCase() + entry.name.slice(1),
+        folder: entry.name,
+        trigger: existingGroup?.trigger || `@${ASSISTANT_NAME}`,
+        added_at: new Date().toISOString(),
+        requiresTrigger: false, // Web UI messages don't need trigger prefix
+      };
+
+      try {
+        setRegisteredGroup(webJid, groupConfig);
+        storeChatMetadata(webJid, new Date().toISOString(), groupConfig.name);
+        logger.info({ webJid, folder: entry.name }, 'Auto-registered web group');
+      } catch (err) {
+        // If folder UNIQUE constraint still exists, log and skip gracefully
+        logger.warn({ webJid, folder: entry.name, err }, 'Could not register web group (folder may conflict)');
+      }
+    }
+
+    // Reload the in-memory cache so the message loop and processor see the new groups
+    reloadRegisteredGroups();
+  } catch (err) {
+    logger.error({ err }, 'Failed to scan groups directory for web registration');
+  }
+}
+
 fastify.get('/groups', { preHandler: authenticate }, async () => {
+  ensureWebGroupsRegistered();
   const groups = getRegisteredGroups();
   return { groups };
 });
+
+/**
+ * Create a new group from the web UI.
+ */
+fastify.post(
+  '/groups',
+  { preHandler: authenticate },
+  async (request: FastifyRequest, reply: FastifyReply) => {
+    const body = request.body as Record<string, unknown> | undefined;
+    const name = body?.name as string;
+    const folder = body?.folder as string;
+
+    if (!name || !folder) {
+      reply.code(400).send({ error: 'name and folder are required' });
+      return;
+    }
+
+    // Validate folder name (alphanumeric, hyphens, underscores)
+    if (!/^[a-zA-Z0-9_-]+$/.test(folder)) {
+      reply.code(400).send({ error: 'folder must be alphanumeric with hyphens/underscores only' });
+      return;
+    }
+
+    const webJid = `web:${folder}`;
+    const registeredGroups = getRegisteredGroups();
+
+    // Check if already exists
+    if (registeredGroups[webJid]) {
+      reply.code(409).send({ error: 'Group already exists' });
+      return;
+    }
+
+    const groupConfig: RegisteredGroup = {
+      name,
+      folder,
+      trigger: `@${ASSISTANT_NAME}`,
+      added_at: new Date().toISOString(),
+      requiresTrigger: false,
+    };
+
+    // Register and create folder structure
+    registerGroup(webJid, groupConfig);
+    storeChatMetadata(webJid, new Date().toISOString(), name);
+    reloadRegisteredGroups(); // Sync in-memory cache
+
+    logger.info({ webJid, name, folder }, 'Created new web group');
+
+    reply.code(201).send({
+      success: true,
+      jid: webJid,
+      name,
+      folder,
+    });
+  },
+);
 
 fastify.get('/sessions', { preHandler: authenticate }, async () => {
   const sessions = getSessions();
@@ -384,8 +482,8 @@ export function broadcastToToken(
   const messageStr = JSON.stringify({ type: 'message', chatJid, ...message });
 
   for (const [tokenId, connections] of sseConnections.entries()) {
-    const mappings = tokenToChatMappings.get(tokenId) || [];
-    const hasChat = mappings.some((m) => m.chatJid === chatJid);
+    const mappings = getApiTokenChatMappings(tokenId);
+    const hasChat = mappings.includes(chatJid);
 
     if (hasChat || mappings.length === 0) {
       for (const sendEvent of connections) {

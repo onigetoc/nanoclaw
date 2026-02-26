@@ -167,7 +167,7 @@ class ApiService {
       timestamp: string;
     }>(`/chats/${encodeURIComponent(chatJid)}/messages`, {
       method: 'POST',
-      body: JSON.stringify({ content }),
+      body: JSON.stringify({ content, channel: 'web' }),
     });
     return result;
   }
@@ -177,6 +177,22 @@ class ApiService {
       groups: Record<string, RegisteredGroup>;
     }>('/groups');
     return result.groups;
+  }
+
+  async createGroup(
+    name: string,
+    folder: string,
+  ): Promise<{ success: boolean; jid: string; name: string; folder: string }> {
+    const result = await this.request<{
+      success: boolean;
+      jid: string;
+      name: string;
+      folder: string;
+    }>('/groups', {
+      method: 'POST',
+      body: JSON.stringify({ name, folder }),
+    });
+    return result;
   }
 
   async getSessions(): Promise<Record<string, string>> {
@@ -229,7 +245,7 @@ class ApiService {
             if (line.startsWith('data: ')) {
               try {
                 const data = JSON.parse(line.slice(6));
-                if (data.type === 'message') {
+                if (data.type === 'message' && data.is_bot_message && data.content && !data.id?.startsWith('typing_')) {
                   const message: Message = {
                     id: data.id,
                     chat_jid: data.chatJid,

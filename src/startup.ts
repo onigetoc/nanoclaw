@@ -464,7 +464,17 @@ export async function main(): Promise<void> {
   if (!TELEGRAM_ONLY) {
     whatsapp = new WhatsAppChannel(channelOpts);
     channels.push(whatsapp);
-    await whatsapp.connect();
+    try {
+      await Promise.race([
+        whatsapp.connect(),
+        new Promise<void>((_, reject) =>
+          setTimeout(() => reject(new Error('timeout')), 30_000),
+        ),
+      ]);
+    } catch {
+      logger.warn('WhatsApp connection timed out or failed — continuing startup without WhatsApp');
+      console.log('⚠️  WhatsApp not connected (no credentials?) — will retry in background');
+    }
   }
 
   if (telegramToken) {
@@ -485,8 +495,12 @@ export async function main(): Promise<void> {
   });
 
   // Trigger message processing when API receives a message
+  // web: JIDs (e.g. web:main) are registered natively in registered_groups,
+  // so the pipeline handles them like any other channel JID.
   setProcessApiMessageFn((jid: string) => {
-    queue.sendMessage(jid, '');
+    if (!queue.sendMessage(jid, '')) {
+      queue.enqueueMessageCheck(jid);
+    }
   });
 
   const apiPort = await startApiServer();
@@ -504,7 +518,6 @@ export async function main(): Promise<void> {
       if (!text) return;
 
       const isWebUI = jid.startsWith('web:');
-      const targetJid = isWebUI ? jid.slice(4) : jid; // Remove web: prefix for storage/broadcast
 
       // If message came from WebUI, only send via SSE (not to other channels like Telegram)
       if (isWebUI) {
@@ -524,7 +537,7 @@ export async function main(): Promise<void> {
       const timestamp = new Date().toISOString();
       storeMessageDirect({
         id: msgId,
-        chat_jid: targetJid,
+        chat_jid: jid, // Use full JID (web:main, tg:123, etc.) consistently
         sender: 'bot',
         sender_name: ASSISTANT_NAME,
         content: text,
@@ -532,14 +545,17 @@ export async function main(): Promise<void> {
         is_from_me: true,
         is_bot_message: true,
       });
-      broadcastToToken(targetJid, {
-        id: msgId,
-        content: text,
-        sender_name: ASSISTANT_NAME,
-        timestamp,
-        is_from_me: true,
-        is_bot_message: true,
-      });
+      // Broadcast for non-web channels (web channel already broadcasts via sendMessage above)
+      if (!isWebUI) {
+        broadcastToToken(jid, {
+          id: msgId,
+          content: text,
+          sender_name: ASSISTANT_NAME,
+          timestamp,
+          is_from_me: true,
+          is_bot_message: true,
+        });
+      }
     },
   });
 
