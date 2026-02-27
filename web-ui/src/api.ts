@@ -255,16 +255,16 @@ class ApiService {
             if (line.startsWith('data: ')) {
               try {
                 const data = JSON.parse(line.slice(6));
-                if (data.type === 'message' && data.is_bot_message && data.content && !data.id?.startsWith('typing_')) {
+                if (data.type === 'message' && data.content && !data.id?.startsWith('typing_')) {
                   const message: Message = {
                     id: data.id,
                     chat_jid: data.chatJid,
-                    sender: 'bot',
+                    sender: data.is_bot_message ? 'bot' : (data.sender || 'user'),
                     sender_name: data.sender_name,
                     content: data.content,
                     timestamp: data.timestamp,
-                    is_from_me: data.is_from_me,
-                    is_bot_message: data.is_bot_message,
+                    is_from_me: data.is_from_me ?? false,
+                    is_bot_message: data.is_bot_message ?? false,
                   };
                   this.messageListeners.forEach((listener) =>
                     listener(message),

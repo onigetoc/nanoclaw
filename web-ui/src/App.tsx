@@ -300,6 +300,8 @@ function App() {
       const unsubscribe = apiService.onMessage((message) => {
         setState((s) => {
           if (s.selectedChat?.jid === message.chat_jid) {
+            // Deduplicate: don't add if message ID already exists
+            if (s.messages.some((m) => m.id === message.id)) return s;
             return { ...s, messages: [...s.messages, message] };
           }
           return s;
@@ -450,7 +452,7 @@ function App() {
     }
   };
 
-  const PAGE_SIZE = 50;
+  const PAGE_SIZE = 30;
 
   const loadMessages = async (chatJid: string) => {
     try {
@@ -461,6 +463,12 @@ function App() {
           return { ...s, messages };
         }
         return s;
+      });
+      // Scroll to bottom after initial load — use two rAFs to ensure DOM is painted
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
+        });
       });
     } catch (err) {
       console.error('Failed to load messages:', err);
@@ -526,10 +534,10 @@ function App() {
   const selectChat = (chat: ChatInfo) => {
     setState((s) => ({ ...s, selectedChat: chat, messages: [] }));
     setHasMoreMessages(false);
+    setIsNearBottom(true);
     localStorage.setItem(SELECTED_CHAT_STORAGE_KEY, chat.jid);
     setShowScrollToBottom(false);
     inputRef.current?.focus();
-    setTimeout(() => scrollToBottom('auto'), 0);
   };
 
   const sendMessage = async (content: string) => {

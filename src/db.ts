@@ -352,8 +352,6 @@ export function getMessagesSince(
 }
 
 export function getLinkedChatJids(chatJid: string): string[] {
-  if (!chatJid.startsWith('web:')) return [chatJid];
-
   const folderRow = db
     .prepare('SELECT folder FROM registered_groups WHERE jid = ?')
     .get(chatJid) as { folder: string } | undefined;

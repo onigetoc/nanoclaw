@@ -433,6 +433,16 @@ export async function main(): Promise<void> {
       }
 
       storeMessage(msg);
+
+      // Broadcast incoming messages to web UI so they appear live
+      broadcastToToken(chatJid, {
+        id: msg.id,
+        content: msg.content,
+        sender_name: msg.sender_name,
+        timestamp: msg.timestamp,
+        is_from_me: false,
+        is_bot_message: false,
+      });
     },
     onChatMetadata: (chatJid: string, timestamp: string, name?: string) =>
       storeChatMetadata(chatJid, timestamp, name),
