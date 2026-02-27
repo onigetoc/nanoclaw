@@ -11,6 +11,7 @@ import {
   type KeyboardEvent,
 } from 'react';
 import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import {
   ArrowDown,
   Bot,
@@ -688,24 +689,30 @@ function App() {
                         </summary>
                         <div className="mt-2 space-y-1">
                           {sources.map((source) => (
-                            <button
+                            <a
                               key={source.href}
-                              type="button"
-                              onClick={() => openExternalLink(source.href)}
-                              className="block truncate text-left text-emerald-400 underline underline-offset-2 hover:text-emerald-300"
+                              href={source.href}
+                              onClick={(e) => {
+                                e.preventDefault();
+                                openExternalLink(source.href);
+                              }}
+                              rel="noopener noreferrer"
+                              target="_blank"
+                              className="block cursor-pointer truncate text-left text-emerald-400 underline underline-offset-2 hover:text-emerald-300"
                               title={source.href}
                             >
                               {source.title}
-                            </button>
+                            </a>
                           ))}
                         </div>
                       </details>
                     )}
 
-                    <div className={`break-words text-[15px] leading-relaxed [&_a]:text-emerald-300 [&_a]:underline [&_a]:underline-offset-2 [&_code]:rounded [&_code]:bg-black/30 [&_code]:px-1.5 [&_code]:py-0.5 [&_ol]:my-2 [&_ol]:list-inside [&_ol]:list-decimal [&_ol]:pl-1 [&_p]:mb-2 [&_p:last-child]:mb-0 [&_pre]:my-2 [&_pre]:overflow-x-auto [&_pre]:rounded-lg [&_pre]:bg-black/30 [&_pre]:p-3 [&_ul]:my-2 [&_ul]:list-inside [&_ul]:list-disc [&_ul]:pl-1 [&_li]:my-0.5 ${isDark ? 'text-zinc-300' : 'text-zinc-800'}`}>
+                    <div className={`break-words text-[15px] leading-relaxed [&_a]:cursor-pointer [&_a]:text-emerald-300 [&_a]:underline [&_a]:underline-offset-2 [&_a:hover]:text-emerald-200 [&_code]:rounded [&_code]:bg-black/30 [&_code]:px-1.5 [&_code]:py-0.5 [&_ol]:my-2 [&_ol]:list-inside [&_ol]:list-decimal [&_ol]:pl-1 [&_p]:mb-2 [&_p:last-child]:mb-0 [&_pre]:my-2 [&_pre]:overflow-x-auto [&_pre]:rounded-lg [&_pre]:bg-black/30 [&_pre]:p-3 [&_ul]:my-2 [&_ul]:list-inside [&_ul]:list-disc [&_ul]:pl-1 [&_li]:my-0.5 ${isDark ? 'text-zinc-300' : 'text-zinc-800'}`}>
                       <ReactMarkdown
+                        remarkPlugins={[remarkGfm]}
                         components={{
-                          a: ({ node: _node, href, ...props }) => (
+                          a: ({ node: _node, href, children, ...props }) => (
                             <a
                               {...props}
                               href={href}
@@ -715,7 +722,10 @@ function App() {
                               }}
                               rel="noopener noreferrer"
                               target="_blank"
-                            />
+                              className="cursor-pointer"
+                            >
+                              {children}
+                            </a>
                           ),
                         }}
                       >
