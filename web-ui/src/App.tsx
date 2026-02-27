@@ -20,11 +20,11 @@ import {
   Globe,
   Image as ImageIcon,
   MessageCircle,
-  Mic,
+  AudioLines,
   Moon,
   Paperclip,
   Power,
-  SendHorizontal,
+  CornerDownLeft,
   Sun,
 } from 'lucide-react';
 import { apiService, type ChatInfo, type Message, type ApiToken } from './api';
@@ -140,6 +140,8 @@ function App() {
   const [, forceUpdate] = useState(0);
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
   const [isNearBottom, setIsNearBottom] = useState(true);
+  const [hasMoreMessages, setHasMoreMessages] = useState(false);
+  const [isLoadingOlder, setIsLoadingOlder] = useState(false);
   const [useWebSearch, setUseWebSearch] = useState(false);
   const [useMicrophone, setUseMicrophone] = useState(false);
   const [modelMenuOpen, setModelMenuOpen] = useState(false);
@@ -149,6 +151,7 @@ function App() {
   const [attachments, setAttachments] = useState<File[]>([]);
   const [isComposerDragActive, setIsComposerDragActive] = useState(false);
   const [modelQuery, setModelQuery] = useState('');
+  const [textareaRows, setTextareaRows] = useState(2);
 
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -159,6 +162,7 @@ function App() {
   const modelMenuContainerRef = useRef<HTMLDivElement>(null);
   const scrollRafRef = useRef<number | null>(null);
   const composerDragCounterRef = useRef(0);
+  const loadOlderRef = useRef<() => void>(() => {});
 
   const addAttachments = useCallback((files: File[]) => {
     if (!files.length) return;
@@ -330,6 +334,11 @@ function App() {
     return () => observer.disconnect();
   }, []);
 
+  useEffect(() => {
+    const lines = inputValue.split('\n').length;
+    setTextareaRows(Math.min(Math.max(2, lines), 8));
+  }, [inputValue]);
+
   const scrollToBottom = (behavior: ScrollBehavior = 'smooth') => {
     messagesEndRef.current?.scrollIntoView({ behavior });
   };
@@ -346,6 +355,11 @@ function App() {
       const nearBottom = distanceFromBottom < 140;
       setIsNearBottom(nearBottom);
       setShowScrollToBottom(!nearBottom);
+
+      // Infinite scroll: load older messages when near top
+      if (container.scrollTop < 100) {
+        loadOlderRef.current();
+      }
     });
   }, []);
 
@@ -435,9 +449,12 @@ function App() {
     }
   };
 
+  const PAGE_SIZE = 50;
+
   const loadMessages = async (chatJid: string) => {
     try {
-      const messages = await apiService.getMessages(chatJid);
+      const { messages, hasMore } = await apiService.getMessages(chatJid, { limit: PAGE_SIZE });
+      setHasMoreMessages(!!hasMore);
       setState((s) => {
         if (s.selectedChat?.jid === chatJid) {
           return { ...s, messages };
@@ -448,6 +465,45 @@ function App() {
       console.error('Failed to load messages:', err);
     }
   };
+
+  const loadOlderMessages = async () => {
+    if (isLoadingOlder || !hasMoreMessages || !state.selectedChat) return;
+    const oldest = state.messages[0];
+    if (!oldest) return;
+
+    setIsLoadingOlder(true);
+    try {
+      const { messages: older, hasMore } = await apiService.getMessages(
+        state.selectedChat.jid,
+        { limit: PAGE_SIZE, before: oldest.timestamp },
+      );
+      setHasMoreMessages(!!hasMore);
+      if (older.length > 0) {
+        // Save scroll position so we can restore after prepending
+        const container = messagesContainerRef.current;
+        const prevScrollHeight = container?.scrollHeight ?? 0;
+
+        setState((s) => ({
+          ...s,
+          messages: [...older, ...s.messages],
+        }));
+
+        // Restore scroll position after DOM update
+        requestAnimationFrame(() => {
+          if (container) {
+            const newScrollHeight = container.scrollHeight;
+            container.scrollTop += newScrollHeight - prevScrollHeight;
+          }
+        });
+      }
+    } catch (err) {
+      console.error('Failed to load older messages:', err);
+    } finally {
+      setIsLoadingOlder(false);
+    }
+  };
+
+  loadOlderRef.current = loadOlderMessages;
 
   const handleLogin = (e: FormEvent) => {
     e.preventDefault();
@@ -468,6 +524,7 @@ function App() {
 
   const selectChat = (chat: ChatInfo) => {
     setState((s) => ({ ...s, selectedChat: chat, messages: [] }));
+    setHasMoreMessages(false);
     localStorage.setItem(SELECTED_CHAT_STORAGE_KEY, chat.jid);
     setShowScrollToBottom(false);
     inputRef.current?.focus();
@@ -514,6 +571,7 @@ function App() {
 
     await sendMessage(outgoingText);
     setInputValue('');
+    setTextareaRows(2);
     setAttachments([]);
   };
 
@@ -529,6 +587,7 @@ function App() {
         : `Sent with attachments (${attachments.length} file${attachments.length > 1 ? 's' : ''})`;
       await sendMessage(outgoingText);
       setInputValue('');
+      setTextareaRows(2);
       setAttachments([]);
     }
   };
@@ -593,19 +652,21 @@ function App() {
               return (
                 <div
                   key={msg.id}
-                  className={`flex ${isAssistant ? 'justify-start' : 'justify-end'}`}
+                  className={`flex w-full ${isAssistant ? 'justify-start' : 'justify-end'}`}
                 >
                   <div
-                    className={`max-w-[88%] md:max-w-[78%] ${isAssistant
-                      ? isDark
-                        ? 'rounded-2xl rounded-bl-md border border-zinc-800 bg-zinc-900'
-                        : 'rounded-2xl rounded-bl-md border border-zinc-300 bg-white'
-                      : 'rounded-2xl rounded-br-md bg-emerald-600 text-white'} px-4 py-3 shadow-sm`}
+                    className={`${isAssistant
+                      ? 'w-full px-4 py-3'
+                      : `max-w-[88%] md:max-w-[78%] rounded-2xl rounded-br-md px-5 py-4 ${
+                          isDark
+                            ? 'bg-zinc-800 text-zinc-100'
+                            : 'bg-zinc-200 text-zinc-900'
+                        }`}`}
                   >
                     {isAssistant && (
                       <div className="mb-2 flex items-center gap-1.5 text-xs text-emerald-400">
                         <Bot className="h-3.5 w-3.5" />
-                        <span className="font-medium">{msg.sender_name || 'Assistant'}</span>
+                        <span className="font-medium uppercase tracking-wider">{msg.sender_name || 'Assistant'}</span>
                       </div>
                     )}
 
@@ -641,7 +702,7 @@ function App() {
                       </details>
                     )}
 
-                    <div className="break-words text-[15px] leading-relaxed [&_a]:text-emerald-300 [&_a]:underline [&_a]:underline-offset-2 [&_code]:rounded [&_code]:bg-black/30 [&_code]:px-1.5 [&_code]:py-0.5 [&_ol]:my-2 [&_ol]:list-inside [&_ol]:list-decimal [&_ol]:pl-1 [&_p]:mb-2 [&_p:last-child]:mb-0 [&_pre]:my-2 [&_pre]:overflow-x-auto [&_pre]:rounded-lg [&_pre]:bg-black/30 [&_pre]:p-3 [&_ul]:my-2 [&_ul]:list-inside [&_ul]:list-disc [&_ul]:pl-1 [&_li]:my-0.5">
+                    <div className={`break-words text-[15px] leading-relaxed [&_a]:text-emerald-300 [&_a]:underline [&_a]:underline-offset-2 [&_code]:rounded [&_code]:bg-black/30 [&_code]:px-1.5 [&_code]:py-0.5 [&_ol]:my-2 [&_ol]:list-inside [&_ol]:list-decimal [&_ol]:pl-1 [&_p]:mb-2 [&_p:last-child]:mb-0 [&_pre]:my-2 [&_pre]:overflow-x-auto [&_pre]:rounded-lg [&_pre]:bg-black/30 [&_pre]:p-3 [&_ul]:my-2 [&_ul]:list-inside [&_ul]:list-disc [&_ul]:pl-1 [&_li]:my-0.5 ${isDark ? 'text-zinc-300' : 'text-zinc-800'}`}>
                       <ReactMarkdown
                         components={{
                           a: ({ node: _node, href, ...props }) => (
@@ -662,7 +723,7 @@ function App() {
                       </ReactMarkdown>
                     </div>
 
-                    <div className={`mt-2 text-right text-[11px] ${isAssistant ? (isDark ? 'text-zinc-400' : 'text-zinc-500') : 'text-white/80'}`}>
+                    <div className={`mt-2 text-right text-[11px] ${isAssistant ? (isDark ? 'text-zinc-500' : 'text-zinc-500') : (isDark ? 'text-zinc-500' : 'text-zinc-400')}`}>
                       {formatTime(msg.timestamp)}
                     </div>
                   </div>
@@ -794,9 +855,9 @@ function App() {
 
   return (
     <div className={`flex h-screen ${isDark ? 'bg-zinc-950 text-zinc-100' : 'bg-zinc-100 text-zinc-900'}`}>
-      <aside className={`flex w-80 shrink-0 flex-col border-r ${isDark ? 'border-zinc-800 bg-zinc-900' : 'border-zinc-300 bg-white'}`}>
+      <aside className={`flex w-80 shrink-0 flex-col border-r ${isDark ? 'border-zinc-800 bg-zinc-950' : 'border-zinc-200 bg-zinc-50'}`}>
         <div className={`flex h-16 items-center justify-between border-b px-5 ${isDark ? 'border-zinc-800' : 'border-zinc-300'}`}>
-          <h1 className="text-xl font-semibold">EureClaw</h1>
+          <h1 className="text-xl font-semibold">EureClaw !</h1>
           <div className="flex items-center gap-2">
             <button
               type="button"
@@ -868,10 +929,10 @@ function App() {
         </div>
       </aside>
 
-      <main className={`relative flex min-w-0 flex-1 flex-col ${isDark ? 'bg-zinc-950' : 'bg-zinc-50'}`}>
+      <main className={`relative flex min-w-0 flex-1 flex-col ${isDark ? 'bg-zinc-900' : 'bg-white'}`}>
         {state.selectedChat ? (
           <>
-            <header className={`flex h-16 items-center justify-between border-b px-4 md:px-6 ${isDark ? 'border-zinc-800 bg-zinc-900/80' : 'border-zinc-300 bg-white/90'}`}>
+            <header className={`flex h-16 items-center justify-between border-b px-4 md:px-6 ${isDark ? 'border-zinc-800 bg-zinc-950/90' : 'border-zinc-200 bg-zinc-50/90'}`}>
               <div className="min-w-0">
                 <h2 className="truncate text-base font-semibold md:text-lg">
                   {state.selectedChat.name || state.selectedChat.jid}
@@ -888,6 +949,11 @@ function App() {
               className="flex-1 overflow-y-auto px-3 py-4 md:px-6"
             >
               <div className="mx-auto w-full max-w-4xl">
+                {isLoadingOlder && (
+                  <div className="flex justify-center py-3">
+                    <div className="h-5 w-5 animate-spin rounded-full border-2 border-zinc-400 border-t-transparent" />
+                  </div>
+                )}
                 {renderedMessageGroups}
                 <div ref={messagesEndRef} />
               </div>
@@ -901,7 +967,7 @@ function App() {
                   setShowScrollToBottom(false);
                 }}
                 style={{ bottom: composerHeight + 10 }}
-                className={`absolute left-1/2 z-20 -translate-x-1/2 rounded-full border p-3 shadow-lg backdrop-blur transition ${isDark ? 'border-zinc-700 bg-zinc-900/90 text-zinc-200 hover:bg-zinc-800' : 'border-zinc-300 bg-white/95 text-zinc-700 hover:bg-zinc-100'}`}
+                className={`absolute left-1/2 z-20 -translate-x-1/2 rounded-full border p-3 shadow-lg backdrop-blur transition ${isDark ? 'border-zinc-700 bg-zinc-800/90 text-zinc-200 hover:bg-zinc-700' : 'border-zinc-300 bg-white/95 text-zinc-700 hover:bg-zinc-100'}`}
                 title="Scroll to bottom"
               >
                 <ArrowDown className="h-5 w-5" />
@@ -922,7 +988,7 @@ function App() {
                       onClick={() => {
                         void handleSuggestionClick(suggestion);
                       }}
-                      className={`rounded-full border px-3 py-1.5 text-xs transition ${isDark ? 'border-zinc-700 bg-zinc-800 text-zinc-300 hover:bg-zinc-700' : 'border-zinc-300 bg-zinc-100 text-zinc-700 hover:bg-zinc-200'}`}
+                      className={`rounded-full px-3 py-1.5 text-xs transition ${isDark ? 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700' : 'border border-zinc-300 bg-zinc-100 text-zinc-700 hover:bg-zinc-200'}`}
                     >
                       {suggestion}
                     </button>
@@ -930,13 +996,13 @@ function App() {
                 </div>
 
                 <div
-                  className={`rounded-2xl border p-2.5 transition ${isComposerDragActive
+                  className={`rounded-2xl p-2.5 transition ${isComposerDragActive
                     ? isDark
-                      ? 'border-emerald-500 bg-zinc-900'
-                      : 'border-emerald-500 bg-emerald-50'
+                      ? 'border border-emerald-500 bg-zinc-800'
+                      : 'border border-emerald-500 bg-emerald-50'
                     : isDark
-                      ? 'border-zinc-700 bg-zinc-900'
-                      : 'border-zinc-300 bg-white'}`}
+                      ? 'bg-zinc-800'
+                      : 'border border-zinc-300 bg-zinc-50'}`}
                   onDragEnter={handleComposerDragEnter}
                   onDragOver={handleComposerDragOver}
                   onDragLeave={handleComposerDragLeave}
@@ -983,9 +1049,9 @@ function App() {
                     onKeyDown={(e) => {
                       void handleInputKeyDown(e);
                     }}
-                    placeholder="Écris un message… (tu peux coller une image/fichier avec Ctrl+V)"
+                    placeholder="Écris un message… (Shift+Entrée pour sauter une ligne)"
                     disabled={!state.connected}
-                    rows={2}
+                    rows={textareaRows}
                     className={`w-full resize-none border-0 bg-transparent px-2 py-1 text-sm outline-none placeholder:text-zinc-500 disabled:cursor-not-allowed disabled:opacity-50 ${isDark ? 'text-zinc-100' : 'text-zinc-900'}`}
                   />
 
@@ -1002,7 +1068,7 @@ function App() {
 
                         <button
                           type="button"
-                          className={`inline-flex h-9 w-9 items-center justify-center rounded-lg border transition ${isDark ? 'border-zinc-700 bg-zinc-800 text-zinc-300 hover:bg-zinc-700' : 'border-zinc-300 bg-zinc-100 text-zinc-700 hover:bg-zinc-200'}`}
+                          className="inline-flex h-9 w-9 cursor-pointer items-center justify-center rounded-lg text-zinc-400 transition hover:text-emerald-500"
                           title="Attachments"
                           onClick={() => setAttachMenuOpen((v) => !v)}
                         >
@@ -1026,23 +1092,19 @@ function App() {
                       <button
                         type="button"
                         onClick={() => setUseMicrophone((v) => !v)}
-                        className={`inline-flex h-9 w-9 items-center justify-center rounded-lg border transition ${useMicrophone
-                          ? 'border-emerald-500/60 bg-emerald-500/20 text-emerald-300'
-                          : isDark
-                            ? 'border-zinc-700 bg-zinc-800 text-zinc-300 hover:bg-zinc-700'
-                            : 'border-zinc-300 bg-zinc-100 text-zinc-700 hover:bg-zinc-200'}`}
+                        className={`inline-flex h-9 w-9 cursor-pointer items-center justify-center rounded-lg transition ${useMicrophone
+                          ? 'text-emerald-500'
+                          : 'text-zinc-400 hover:text-emerald-500'}`}
                         title="Microphone (UI)"
                       >
-                        <Mic className="h-4 w-4" />
+                        <AudioLines className="h-4 w-4" />
                       </button>
                       <button
                         type="button"
                         onClick={() => setUseWebSearch((v) => !v)}
-                        className={`inline-flex h-9 items-center gap-1 rounded-lg border px-2.5 text-xs transition ${useWebSearch
-                          ? 'border-emerald-500/60 bg-emerald-500/20 text-emerald-300'
-                          : isDark
-                            ? 'border-zinc-700 bg-zinc-800 text-zinc-300 hover:bg-zinc-700'
-                            : 'border-zinc-300 bg-zinc-100 text-zinc-700 hover:bg-zinc-200'}`}
+                        className={`inline-flex h-9 cursor-pointer items-center gap-1 rounded-lg px-2.5 text-xs transition ${useWebSearch
+                          ? 'text-emerald-500'
+                          : 'text-zinc-400 hover:text-emerald-500'}`}
                         title="Web search (UI)"
                       >
                         <Globe className="h-4 w-4" />
@@ -1052,7 +1114,7 @@ function App() {
                       <div className="relative" ref={modelMenuContainerRef}>
                         <button
                           type="button"
-                          className={`inline-flex h-9 items-center gap-2 rounded-lg border px-2.5 text-xs transition ${isDark ? 'border-zinc-700 bg-zinc-800 text-zinc-300 hover:bg-zinc-700' : 'border-zinc-300 bg-zinc-100 text-zinc-700 hover:bg-zinc-200'}`}
+                          className="inline-flex h-9 cursor-pointer items-center gap-2 rounded-lg px-2.5 text-xs text-zinc-400 transition hover:text-zinc-200"
                           onClick={() => setModelMenuOpen((open) => !open)}
                         >
                           <span className={`inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-sm ${isDark ? 'bg-zinc-700' : 'bg-zinc-200'}`}>
@@ -1141,10 +1203,10 @@ function App() {
                     <button
                       type="submit"
                       disabled={(!inputValue.trim() && attachments.length === 0) || !state.connected}
-                      className="inline-flex h-9 items-center gap-2 rounded-lg bg-emerald-600 px-3.5 text-sm font-medium text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-50"
+                      className="inline-flex h-10 w-10 cursor-pointer items-center justify-center rounded-xl bg-emerald-600 border border-emerald-500 text-white shadow-sm transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-50"
+                      title="Envoyer"
                     >
-                      <SendHorizontal className="h-4 w-4" />
-                      Send
+                      <CornerDownLeft className="h-5 w-5" />
                     </button>
                   </div>
                 </div>

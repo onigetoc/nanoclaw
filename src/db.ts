@@ -351,7 +351,7 @@ export function getMessagesSince(
     .all(chatJid, sinceTimestamp, `${botPrefix}:%`) as NewMessage[];
 }
 
-function getLinkedChatJids(chatJid: string): string[] {
+export function getLinkedChatJids(chatJid: string): string[] {
   if (!chatJid.startsWith('web:')) return [chatJid];
 
   const folderRow = db
@@ -488,6 +488,45 @@ export function getAllMessagesSinceLinked(
   return db
     .prepare(sql)
     .all(...linkedJids, sinceTimestamp) as NewMessage[];
+}
+
+/**
+ * Get a page of messages for the web UI with cursor-based pagination.
+ * Returns the most recent `limit` messages before the given `before` timestamp.
+ * Results are ordered ascending (oldest first) for display.
+ * Includes messages from all linked JIDs sharing the same folder.
+ */
+export function getMessagesPage(
+  chatJid: string,
+  limit: number,
+  before?: string,
+): { messages: NewMessage[]; hasMore: boolean } {
+  const linkedJids = getLinkedChatJids(chatJid);
+  const placeholders = linkedJids.map(() => '?').join(',');
+
+  const whereClause = before
+    ? `WHERE chat_jid IN (${placeholders}) AND timestamp < ?`
+    : `WHERE chat_jid IN (${placeholders})`;
+
+  const params = before ? [...linkedJids, before] : [...linkedJids];
+
+  // Fetch limit + 1 to know if there are more older messages
+  const sql = `
+    SELECT id, chat_jid, sender, sender_name, content, timestamp, is_from_me, is_bot_message
+    FROM messages
+    ${whereClause}
+    ORDER BY timestamp DESC
+    LIMIT ?
+  `;
+
+  const rows = db.prepare(sql).all(...params, limit + 1) as NewMessage[];
+  const hasMore = rows.length > limit;
+  const page = hasMore ? rows.slice(0, limit) : rows;
+
+  // Reverse to get ascending order (oldest first) for display
+  page.reverse();
+
+  return { messages: page, hasMore };
 }
 
 /**

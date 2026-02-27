@@ -147,18 +147,24 @@ class ApiService {
     return result.chats;
   }
 
-  async getMessages(chatJid: string, since?: string): Promise<Message[]> {
+  async getMessages(
+    chatJid: string,
+    options?: { since?: string; limit?: number; before?: string },
+  ): Promise<{ messages: Message[]; hasMore?: boolean }> {
     const params = new URLSearchParams();
-    if (since) params.set('since', since);
+    if (options?.since) params.set('since', options.since);
+    if (options?.limit) params.set('limit', String(options.limit));
+    if (options?.before) params.set('before', options.before);
     const query = params.toString() ? `?${params.toString()}` : '';
-    const result = await this.request<{ messages: Message[] }>(
+    const result = await this.request<{ messages: Message[]; hasMore?: boolean }>(
       `/chats/${encodeURIComponent(chatJid)}/messages${query}`,
     );
-    return result.messages.map((m) => ({
+    const messages = result.messages.map((m) => ({
       ...m,
       is_from_me: !!m.is_from_me,
       is_bot_message: !!m.is_bot_message,
     }));
+    return { messages, hasMore: result.hasMore };
   }
 
   async sendMessage(

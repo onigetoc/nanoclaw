@@ -14,7 +14,7 @@ import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import { logger } from './logger.js';
-import { getAllChats, getMessagesSince, getAllMessagesSinceLinked, storeMessageDirect, storeChatMetadata, setRegisteredGroup, insertApiToken, getAllApiTokens, updateApiTokenLastUsed, deactivateApiToken, getApiTokenChatMappings, addApiTokenChat, deleteApiTokenChats } from './db.js';
+import { getAllChats, getMessagesSince, getAllMessagesSinceLinked, getMessagesPage, getLinkedChatJids, storeMessageDirect, storeChatMetadata, setRegisteredGroup, insertApiToken, getAllApiTokens, updateApiTokenLastUsed, deactivateApiToken, getApiTokenChatMappings, addApiTokenChat, deleteApiTokenChats } from './db.js';
 import { getRegisteredGroups, reloadRegisteredGroups, getSessions } from './state.js';
 import { ASSISTANT_NAME, GROUPS_DIR, TRIGGER_PATTERN } from './config.js';
 import { NewMessage, RegisteredGroup } from './types.js';
@@ -284,10 +284,18 @@ fastify.get(
     const params = request.params as Record<string, string>;
     const jid = params.jid;
     const query = request.query as Record<string, string>;
-    const since = query.since || '0';
+    const since = query.since;
+    const before = query.before;
+    const limit = query.limit ? parseInt(query.limit, 10) : undefined;
 
-    // For web UI chats, include messages from all linked channel JIDs sharing the same folder
-    const messages = getAllMessagesSinceLinked(jid, since);
+    // If limit is specified, use cursor-based pagination
+    if (limit && limit > 0) {
+      const { messages, hasMore } = getMessagesPage(jid, limit, before || undefined);
+      return { messages, hasMore };
+    }
+
+    // Legacy: return all messages since timestamp
+    const messages = getAllMessagesSinceLinked(jid, since || '0');
     messages.sort((a, b) => a.timestamp.localeCompare(b.timestamp));
 
     return { messages };
@@ -494,18 +502,27 @@ export function broadcastToToken(
     is_bot_message: boolean;
   },
 ): void {
-  const messageStr = JSON.stringify({ type: 'message', chatJid, ...message });
+  // Resolve linked JIDs so web UI clients watching web:main also see
+  // bot responses sent to tg:1382389542 (same folder).
+  const linkedJids = getLinkedChatJids(chatJid);
+  // If chatJid itself isn't in the linked list (non-web), include it
+  if (!linkedJids.includes(chatJid)) linkedJids.push(chatJid);
 
   for (const [tokenId, connections] of sseConnections.entries()) {
     const mappings = getApiTokenChatMappings(tokenId);
-    const hasChat = mappings.includes(chatJid);
 
-    if (hasChat || mappings.length === 0) {
-      for (const sendEvent of connections) {
-        try {
-          sendEvent(messageStr);
-        } catch (e) {
-          connections.delete(sendEvent);
+    const hasChat = mappings.length === 0 || linkedJids.some((jid) => mappings.includes(jid));
+
+    if (hasChat) {
+      // Broadcast once per linked JID so the web UI can match on its own JID
+      for (const targetJid of linkedJids) {
+        const messageStr = JSON.stringify({ type: 'message', chatJid: targetJid, ...message });
+        for (const sendEvent of connections) {
+          try {
+            sendEvent(messageStr);
+          } catch (e) {
+            connections.delete(sendEvent);
+          }
         }
       }
     }
