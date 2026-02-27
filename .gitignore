@@ -16,6 +16,8 @@ groups/*/
 !groups/templates/
 !groups/TEMPLATES-README.md
 
+HEARTBEAT.md
+
 # Secrets
 *.keys.json
 .env
