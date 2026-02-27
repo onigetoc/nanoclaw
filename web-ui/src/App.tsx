@@ -4,7 +4,10 @@ import {
   useRef,
   useMemo,
   useCallback,
+  type ChangeEvent,
   type FormEvent,
+  type ClipboardEvent as ReactClipboardEvent,
+  type DragEvent as ReactDragEvent,
   type KeyboardEvent,
 } from 'react';
 import ReactMarkdown from 'react-markdown';
@@ -144,6 +147,7 @@ function App() {
   const [composerHeight, setComposerHeight] = useState(176);
   const [attachMenuOpen, setAttachMenuOpen] = useState(false);
   const [attachments, setAttachments] = useState<File[]>([]);
+  const [isComposerDragActive, setIsComposerDragActive] = useState(false);
   const [modelQuery, setModelQuery] = useState('');
 
   const messagesContainerRef = useRef<HTMLDivElement>(null);
@@ -154,6 +158,107 @@ function App() {
   const attachmentMenuContainerRef = useRef<HTMLDivElement>(null);
   const modelMenuContainerRef = useRef<HTMLDivElement>(null);
   const scrollRafRef = useRef<number | null>(null);
+  const composerDragCounterRef = useRef(0);
+
+  const addAttachments = useCallback((files: File[]) => {
+    if (!files.length) return;
+
+    setAttachments((prev) => {
+      const next = [...prev];
+      for (const file of files) {
+        const exists = next.some(
+          (current) =>
+            current.name === file.name &&
+            current.size === file.size &&
+            current.lastModified === file.lastModified,
+        );
+        if (!exists) {
+          next.push(file);
+        }
+      }
+      return next;
+    });
+  }, []);
+
+  const transferHasFiles = (transfer: DataTransfer | null): boolean => {
+    if (!transfer) return false;
+    if (transfer.files.length > 0) return true;
+    return Array.from(transfer.types).includes('Files');
+  };
+
+  const handleAttachmentInputFiles = useCallback(
+    (event: ChangeEvent<HTMLInputElement>) => {
+      const files = Array.from(event.target.files ?? []);
+      if (!files.length) return;
+      addAttachments(files);
+      event.currentTarget.value = '';
+      setAttachMenuOpen(false);
+    },
+    [addAttachments],
+  );
+
+  const handleComposerDragEnter = useCallback((event: ReactDragEvent<HTMLDivElement>) => {
+    if (!state.connected) return;
+    if (!transferHasFiles(event.dataTransfer)) return;
+    event.preventDefault();
+    composerDragCounterRef.current += 1;
+    setIsComposerDragActive(true);
+  }, [state.connected]);
+
+  const handleComposerDragOver = useCallback((event: ReactDragEvent<HTMLDivElement>) => {
+    if (!state.connected) return;
+    if (!transferHasFiles(event.dataTransfer)) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'copy';
+    setIsComposerDragActive(true);
+  }, [state.connected]);
+
+  const handleComposerDragLeave = useCallback((event: ReactDragEvent<HTMLDivElement>) => {
+    if (!transferHasFiles(event.dataTransfer)) return;
+    event.preventDefault();
+    composerDragCounterRef.current = Math.max(0, composerDragCounterRef.current - 1);
+    if (composerDragCounterRef.current === 0) {
+      setIsComposerDragActive(false);
+    }
+  }, []);
+
+  const handleComposerDrop = useCallback(
+    (event: ReactDragEvent<HTMLDivElement>) => {
+      if (!state.connected) return;
+      if (!transferHasFiles(event.dataTransfer)) return;
+      event.preventDefault();
+      composerDragCounterRef.current = 0;
+      setIsComposerDragActive(false);
+      const droppedFiles = Array.from(event.dataTransfer.files ?? []);
+      addAttachments(droppedFiles);
+    },
+    [addAttachments, state.connected],
+  );
+
+  const handleInputPaste = useCallback(
+    (event: ReactClipboardEvent<HTMLTextAreaElement>) => {
+      if (!state.connected) return;
+
+      const files: File[] = [];
+      const clipboard = event.clipboardData;
+
+      for (const item of Array.from(clipboard.items)) {
+        if (item.kind !== 'file') continue;
+        const file = item.getAsFile();
+        if (file) files.push(file);
+      }
+
+      if (!files.length && clipboard.files.length > 0) {
+        files.push(...Array.from(clipboard.files));
+      }
+
+      if (!files.length) return;
+
+      event.preventDefault();
+      addAttachments(files);
+    },
+    [addAttachments, state.connected],
+  );
 
   const selectedModel = UI_MODELS.find((m) => m.id === selectedModelId) ?? UI_MODELS[0];
   const filteredModels = useMemo(() => {
@@ -824,7 +929,25 @@ function App() {
                   ))}
                 </div>
 
-                <div className={`rounded-2xl border p-2.5 ${isDark ? 'border-zinc-700 bg-zinc-900' : 'border-zinc-300 bg-white'}`}>
+                <div
+                  className={`rounded-2xl border p-2.5 transition ${isComposerDragActive
+                    ? isDark
+                      ? 'border-emerald-500 bg-zinc-900'
+                      : 'border-emerald-500 bg-emerald-50'
+                    : isDark
+                      ? 'border-zinc-700 bg-zinc-900'
+                      : 'border-zinc-300 bg-white'}`}
+                  onDragEnter={handleComposerDragEnter}
+                  onDragOver={handleComposerDragOver}
+                  onDragLeave={handleComposerDragLeave}
+                  onDrop={handleComposerDrop}
+                >
+                  {isComposerDragActive && (
+                    <div className={`mb-2 rounded-lg border border-dashed px-2 py-1.5 text-xs ${isDark ? 'border-emerald-500/60 bg-emerald-500/10 text-emerald-300' : 'border-emerald-500/70 bg-emerald-100 text-emerald-700'}`}>
+                      Dépose les images/fichiers ici
+                    </div>
+                  )}
+
                   {attachments.length > 0 && (
                     <div className="mb-2 flex flex-wrap gap-2 px-2">
                       {attachments.map((file) => (
@@ -856,10 +979,11 @@ function App() {
                     ref={inputRef}
                     value={inputValue}
                     onChange={(e) => setInputValue(e.target.value)}
+                    onPaste={handleInputPaste}
                     onKeyDown={(e) => {
                       void handleInputKeyDown(e);
                     }}
-                    placeholder="Écris un message…"
+                    placeholder="Écris un message… (tu peux coller une image/fichier avec Ctrl+V)"
                     disabled={!state.connected}
                     rows={2}
                     className={`w-full resize-none border-0 bg-transparent px-2 py-1 text-sm outline-none placeholder:text-zinc-500 disabled:cursor-not-allowed disabled:opacity-50 ${isDark ? 'text-zinc-100' : 'text-zinc-900'}`}
@@ -873,25 +997,7 @@ function App() {
                           type="file"
                           multiple
                           className="hidden"
-                          onChange={(e) => {
-                            const files = Array.from(e.target.files ?? []);
-                            if (!files.length) return;
-                            setAttachments((prev) => {
-                              const next = [...prev];
-                              for (const f of files) {
-                                const exists = next.some(
-                                  (x) =>
-                                    x.name === f.name &&
-                                    x.size === f.size &&
-                                    x.lastModified === f.lastModified,
-                                );
-                                if (!exists) next.push(f);
-                              }
-                              return next;
-                            });
-                            e.currentTarget.value = '';
-                            setAttachMenuOpen(false);
-                          }}
+                          onChange={handleAttachmentInputFiles}
                         />
 
                         <button
