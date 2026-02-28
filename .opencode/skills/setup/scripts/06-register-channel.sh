@@ -19,7 +19,7 @@ NAME=""
 TRIGGER=""
 FOLDER=""
 REQUIRES_TRIGGER="true"
-ASSISTANT_NAME="Andy"
+c
 
 while [[ $# -gt 0 ]]; do
   case $1 in
