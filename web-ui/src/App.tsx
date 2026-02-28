@@ -28,7 +28,7 @@ import {
   CornerDownLeft,
   Sun,
 } from 'lucide-react';
-import { apiService, type ChatInfo, type Message, type ApiToken } from './api';
+import { apiService, type ChatInfo, type Message, type ApiToken, type ConnectionStatus } from './api';
 
 const SELECTED_CHAT_STORAGE_KEY = 'eureclaw_selected_chat_jid';
 const THEME_STORAGE_KEY = 'eureclaw_theme';
@@ -82,6 +82,32 @@ function getProviderBadgeColor(provider: UiModel['provider'], isDark: boolean): 
   return isDark
     ? 'bg-sky-500/15 text-sky-300 border-sky-500/25'
     : 'bg-sky-100 text-sky-700 border-sky-200';
+}
+
+/**
+ * Convert @mentions and /commands into markdown links with special schemes
+ * so ReactMarkdown renders them as clickable elements.
+ */
+function linkifyMentionsAndCommands(text: string): string {
+  // Protect code blocks, inline code, and existing markdown links from replacement
+  const protectedParts: [string, string][] = [];
+  let idx = 0;
+  let processed = text.replace(/(```[\s\S]*?```|`[^`\n]+`|\[[^\]]*\]\([^)]*\))/g, (match) => {
+    const placeholder = `\x00P${idx++}\x00`;
+    protectedParts.push([placeholder, match]);
+    return placeholder;
+  });
+
+  // @mentions: @word at start of line or after whitespace/punctuation
+  processed = processed.replace(/(^|[\s(])@(\w+)/gm, '$1[@$2](mention:$2)');
+  // /commands: /word or /word-word at start of line or after whitespace
+  processed = processed.replace(/(^|[\s(])\/(\w[\w-]*)/gm, '$1[/$2](command:$2)');
+
+  // Restore protected content
+  for (const [placeholder, original] of protectedParts) {
+    processed = processed.replace(placeholder, original);
+  }
+  return processed;
 }
 
 function extractReasoning(content: string): { visibleContent: string; reasoning: string | null } {
@@ -138,6 +164,10 @@ function App() {
     const saved = localStorage.getItem(THEME_STORAGE_KEY);
     return saved === 'light' ? 'light' : 'dark';
   });
+  const [serverStatus, setServerStatus] = useState<ConnectionStatus>({
+    serverOnline: false,
+    sseConnected: false,
+  });
   const [, forceUpdate] = useState(0);
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
   const [isNearBottom, setIsNearBottom] = useState(true);
@@ -164,6 +194,7 @@ function App() {
   const scrollRafRef = useRef<number | null>(null);
   const composerDragCounterRef = useRef(0);
   const loadOlderRef = useRef<() => void>(() => {});
+  const sendMessageRef = useRef<((content: string) => Promise<void>) | undefined>(undefined);
 
   const addAttachments = useCallback((files: File[]) => {
     if (!files.length) return;
@@ -296,8 +327,9 @@ function App() {
       apiService.setToken(token);
       void loadChats();
       apiService.connectToEvents();
+      apiService.startHealthMonitor();
 
-      const unsubscribe = apiService.onMessage((message) => {
+      const unsubscribeMsg = apiService.onMessage((message) => {
         setState((s) => {
           if (s.selectedChat?.jid === message.chat_jid) {
             // Deduplicate: don't add if message ID already exists
@@ -308,9 +340,26 @@ function App() {
         });
       });
 
+      const unsubscribeConn = apiService.onConnectionChange((status) => {
+        setServerStatus(status);
+        // When server comes back online, reload chats & reconnect SSE
+        if (status.serverOnline && !status.sseConnected) {
+          void loadChats();
+          apiService.connectToEvents();
+        }
+        // Sync connected state
+        setState((s) => ({
+          ...s,
+          connected: status.serverOnline,
+          error: status.serverOnline ? null : s.error,
+        }));
+      });
+
       return () => {
-        unsubscribe();
+        unsubscribeMsg();
+        unsubscribeConn();
         apiService.disconnectFromEvents();
+        apiService.stopHealthMonitor();
       };
     }
 
@@ -566,6 +615,7 @@ function App() {
       console.error('Failed to send message:', err);
     }
   };
+  sendMessageRef.current = sendMessage;
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -720,24 +770,53 @@ function App() {
                       <ReactMarkdown
                         remarkPlugins={[remarkGfm]}
                         components={{
-                          a: ({ node: _node, href, children, ...props }) => (
-                            <a
-                              {...props}
-                              href={href}
-                              onClick={(e) => {
-                                e.preventDefault();
-                                openExternalLink(href);
-                              }}
-                              rel="noopener noreferrer"
-                              target="_blank"
-                              className="cursor-pointer"
-                            >
-                              {children}
-                            </a>
-                          ),
+                          a: ({ node: _node, href, children, ...props }) => {
+                            const isMention = href?.startsWith('mention:');
+                            const isCommand = href?.startsWith('command:');
+
+                            if (isMention || isCommand) {
+                              return (
+                                <span
+                                  {...props}
+                                  role="button"
+                                  tabIndex={0}
+                                  className={`cursor-pointer rounded-sm px-0.5 font-semibold no-underline ${
+                                    isMention
+                                      ? 'text-blue-400 hover:bg-blue-500/20 hover:text-blue-300'
+                                      : 'text-amber-400 hover:bg-amber-500/20 hover:text-amber-300'
+                                  }`}
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    if (isCommand) {
+                                      const cmd = href?.split(':')[1] ?? '';
+                                      sendMessageRef.current?.(`/${cmd}`);
+                                    }
+                                  }}
+                                >
+                                  {children}
+                                </span>
+                              );
+                            }
+
+                            return (
+                              <a
+                                {...props}
+                                href={href}
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  openExternalLink(href);
+                                }}
+                                rel="noopener noreferrer"
+                                target="_blank"
+                                className="cursor-pointer"
+                              >
+                                {children}
+                              </a>
+                            );
+                          },
                         }}
                       >
-                        {visibleContent}
+                        {linkifyMentionsAndCommands(visibleContent)}
                       </ReactMarkdown>
                     </div>
 
@@ -876,29 +955,24 @@ function App() {
       <aside className={`flex w-80 shrink-0 flex-col border-r ${isDark ? 'border-zinc-800 bg-zinc-950' : 'border-zinc-200 bg-zinc-50'}`}>
         <div className={`flex h-16 items-center justify-between border-b px-5 ${isDark ? 'border-zinc-800' : 'border-zinc-300'}`}>
           <h1 className="text-xl font-semibold">EureClaw !</h1>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))}
-              className={`inline-flex h-9 w-9 items-center justify-center rounded-full border ${isDark ? 'border-zinc-700 bg-zinc-800 text-zinc-200 hover:bg-zinc-700' : 'border-zinc-300 bg-zinc-100 text-zinc-700 hover:bg-zinc-200'}`}
-              title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-            >
-              {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-            </button>
-            <span
-              className={`inline-flex h-9 min-w-9 items-center justify-center rounded-full border px-2 text-sm font-bold ${state.connected
-                ? 'border-emerald-400/40 bg-emerald-500/20 text-emerald-300'
-                : 'border-rose-400/40 bg-rose-500/20 text-rose-300'}`}
-              title={state.connected ? 'Connected' : 'Disconnected'}
-            >
-              ●
-            </span>
-          </div>
+          <span
+            className={`h-2.5 w-2.5 shrink-0 rounded-full ${state.connected
+              ? 'bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.5)]'
+              : 'bg-rose-400 shadow-[0_0_6px_rgba(251,113,133,0.5)]'}`}
+            title={state.connected ? 'Connected' : 'Disconnected'}
+          />
         </div>
 
         {state.error && (
           <div className="border-b border-rose-800 bg-rose-500/15 px-4 py-2 text-sm text-rose-300">
             {state.error}
+          </div>
+        )}
+
+        {token && !serverStatus.serverOnline && (
+          <div className="flex items-center gap-2 border-b border-amber-700/50 bg-amber-500/10 px-4 py-2.5 text-sm text-amber-300">
+            <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-amber-400" />
+            <span>EureClaw server is not running</span>
           </div>
         )}
 
@@ -959,6 +1033,14 @@ function App() {
                   {state.selectedChat.jid}
                 </p>
               </div>
+              <button
+                type="button"
+                onClick={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))}
+                className={`ml-4 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border ${isDark ? 'border-zinc-700 bg-zinc-800 text-zinc-200 hover:bg-zinc-700' : 'border-zinc-300 bg-zinc-100 text-zinc-700 hover:bg-zinc-200'}`}
+                title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+              >
+                {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+              </button>
             </header>
 
             <div

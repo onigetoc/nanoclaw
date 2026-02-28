@@ -26,6 +26,11 @@ export interface Message {
   is_bot_message?: boolean;
 }
 
+export interface ConnectionStatus {
+  serverOnline: boolean;
+  sseConnected: boolean;
+}
+
 export interface ApiConfig {
   assistantName: string;
   apiPort: number;
@@ -224,6 +229,78 @@ class ApiService {
 
   private abortController: AbortController | null = null;
   private messageListeners: ((message: Message) => void)[] = [];
+  private connectionListeners: ((status: ConnectionStatus) => void)[] = [];
+  private healthInterval: ReturnType<typeof setInterval> | null = null;
+  private _serverOnline = false;
+  private _sseConnected = false;
+
+  /** Current server online status */
+  get serverOnline(): boolean {
+    return this._serverOnline;
+  }
+
+  /** Start periodic health checks (call once after setting token) */
+  startHealthMonitor(): void {
+    this.stopHealthMonitor();
+    // Immediate first check
+    void this.performHealthCheck();
+    // Poll every 5 seconds
+    this.healthInterval = setInterval(() => void this.performHealthCheck(), 5000);
+  }
+
+  stopHealthMonitor(): void {
+    if (this.healthInterval) {
+      clearInterval(this.healthInterval);
+      this.healthInterval = null;
+    }
+  }
+
+  private async performHealthCheck(): Promise<void> {
+    try {
+      const resp = await fetch(`${API_BASE}/health`, { signal: AbortSignal.timeout(4000) });
+      if (resp.ok) {
+        this.setServerOnline(true);
+      } else {
+        this.setServerOnline(false);
+      }
+    } catch {
+      this.setServerOnline(false);
+    }
+  }
+
+  private setServerOnline(online: boolean): void {
+    const changed = this._serverOnline !== online;
+    this._serverOnline = online;
+    if (changed) {
+      this.notifyConnectionListeners();
+    }
+  }
+
+  private setSseConnected(connected: boolean): void {
+    const changed = this._sseConnected !== connected;
+    this._sseConnected = connected;
+    if (changed) {
+      this.notifyConnectionListeners();
+    }
+  }
+
+  private notifyConnectionListeners(): void {
+    const status: ConnectionStatus = {
+      serverOnline: this._serverOnline,
+      sseConnected: this._sseConnected,
+    };
+    this.connectionListeners.forEach((cb) => cb(status));
+  }
+
+  onConnectionChange(callback: (status: ConnectionStatus) => void): () => void {
+    this.connectionListeners.push(callback);
+    // Immediately emit current status
+    callback({ serverOnline: this._serverOnline, sseConnected: this._sseConnected });
+    return () => {
+      const idx = this.connectionListeners.indexOf(callback);
+      if (idx > -1) this.connectionListeners.splice(idx, 1);
+    };
+  }
 
   connectToEvents(): void {
     const token = this.getToken();
@@ -239,6 +316,8 @@ class ApiService {
     })
       .then(async (response) => {
         if (!response.body) return;
+        this.setSseConnected(true);
+        this.setServerOnline(true);
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
         let buffer = '';
@@ -276,8 +355,11 @@ class ApiService {
             }
           }
         }
+        // Stream ended (server closed connection)
+        this.setSseConnected(false);
       })
       .catch((err) => {
+        this.setSseConnected(false);
         if (err.name !== 'AbortError') {
           console.error('SSE connection error, reconnecting...');
           setTimeout(() => this.connectToEvents(), 5000);
@@ -290,6 +372,7 @@ class ApiService {
       this.abortController.abort();
       this.abortController = null;
     }
+    this.setSseConnected(false);
   }
 
   onMessage(callback: (message: Message) => void): () => void {

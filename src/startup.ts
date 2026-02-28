@@ -409,11 +409,44 @@ export async function main(): Promise<void> {
       });
 
       if (commandResult) {
+        // Store the user's command message in history
+        storeMessage(msg);
+        broadcastToToken(chatJid, {
+          id: msg.id,
+          content: msg.content,
+          sender_name: msg.sender_name,
+          timestamp: msg.timestamp,
+          is_from_me: false,
+          is_bot_message: false,
+        });
+
         if (commandResult.reply) {
           const channel = findChannel(channels, chatJid);
           if (channel) {
             await channel.sendMessage(chatJid, commandResult.reply);
           }
+
+          // Store and broadcast the bot's reply
+          const replyMsgId = `bot_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+          const replyTimestamp = new Date().toISOString();
+          storeMessageDirect({
+            id: replyMsgId,
+            chat_jid: chatJid,
+            sender: 'bot',
+            sender_name: ASSISTANT_NAME,
+            content: commandResult.reply,
+            timestamp: replyTimestamp,
+            is_from_me: true,
+            is_bot_message: true,
+          });
+          broadcastToToken(chatJid, {
+            id: replyMsgId,
+            content: commandResult.reply,
+            sender_name: ASSISTANT_NAME,
+            timestamp: replyTimestamp,
+            is_from_me: true,
+            is_bot_message: true,
+          });
         }
         if (commandResult.action === 'restart') {
           setTimeout(() => {

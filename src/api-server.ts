@@ -19,6 +19,7 @@ import { getRegisteredGroups, reloadRegisteredGroups, getSessions } from './stat
 import { ASSISTANT_NAME, GROUPS_DIR, TRIGGER_PATTERN } from './config.js';
 import { NewMessage, RegisteredGroup } from './types.js';
 import { registerGroup } from './group-manager.js';
+import { executeCommand } from './commands/index.js';
 
 const API_PORT = parseInt(process.env.API_PORT || '4300', 10);
 
@@ -316,6 +317,81 @@ fastify.post(
 
     if (!content) {
       reply.code(400).send({ error: 'content is required' });
+      return;
+    }
+
+    // Check for slash commands before storing/processing the message
+    const registeredGroups = getRegisteredGroups();
+    const group = registeredGroups[jid];
+    const commandResult = await executeCommand(content, {
+      chatJid: jid,
+      senderName: 'Web User',
+      senderId: request.tokenId || 'web',
+      group,
+    });
+
+    if (commandResult) {
+      // Store the command message itself so it appears in chat history
+      const cmdMsgId = `web_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+      const cmdTimestamp = new Date().toISOString();
+      storeMessageDirect({
+        id: cmdMsgId,
+        chat_jid: jid,
+        sender: request.tokenId || 'web',
+        sender_name: 'Web User',
+        content,
+        timestamp: cmdTimestamp,
+        is_from_me: false,
+        is_bot_message: false,
+      });
+
+      // Send the command reply via SSE so the web UI sees it
+      if (commandResult.reply) {
+        const replyMsgId = `bot_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+        const replyTimestamp = new Date().toISOString();
+        storeMessageDirect({
+          id: replyMsgId,
+          chat_jid: jid,
+          sender: 'bot',
+          sender_name: ASSISTANT_NAME,
+          content: commandResult.reply,
+          timestamp: replyTimestamp,
+          is_from_me: true,
+          is_bot_message: true,
+        });
+        broadcastToToken(jid, {
+          id: replyMsgId,
+          content: commandResult.reply,
+          sender_name: ASSISTANT_NAME,
+          timestamp: replyTimestamp,
+          is_from_me: true,
+          is_bot_message: true,
+        });
+      }
+
+      // Handle special actions
+      if (commandResult.action === 'restart') {
+        reply.code(200).send({
+          success: true,
+          messageId: cmdMsgId,
+          timestamp: cmdTimestamp,
+          command: true,
+          reply: commandResult.reply,
+        });
+        setTimeout(() => {
+          logger.info('Initiating restart via web UI command');
+          process.exit(0);
+        }, 2000);
+        return;
+      }
+
+      reply.code(200).send({
+        success: true,
+        messageId: cmdMsgId,
+        timestamp: cmdTimestamp,
+        command: true,
+        reply: commandResult.reply,
+      });
       return;
     }
 
