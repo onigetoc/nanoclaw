@@ -605,9 +605,14 @@ export async function main(): Promise<void> {
   startIpcWatcher({
     sendMessage: async (jid, text) => {
       const channel = findChannel(channels, jid);
+      let wasSent = false;
       if (channel) {
-        await sendDeduped(channel, jid, text);
+        wasSent = await sendDeduped(channel, jid, text);
       }
+      // If sendDeduped returned false the same message was already sent
+      // (e.g. via the streaming callback in message-processor).  Skip
+      // storing and broadcasting to avoid duplicate DB entries and SSE events.
+      if (!wasSent) return;
       const msgId = `bot_${Date.now()}_${Math.random().toString(36).substring(7)}`;
       const timestamp = new Date().toISOString();
       storeMessageDirect({
@@ -620,14 +625,20 @@ export async function main(): Promise<void> {
         is_from_me: true,
         is_bot_message: true,
       });
-      broadcastToToken(jid, {
-        id: msgId,
-        content: text,
-        sender_name: ASSISTANT_NAME,
-        timestamp,
-        is_from_me: true,
-        is_bot_message: true,
-      });
+      // For web: JIDs, WebUIChannel.sendMessage() already called
+      // broadcastToToken inside sendDeduped — broadcasting again would
+      // produce a duplicate SSE event.  For non-web JIDs we still need
+      // the explicit broadcast for cross-channel sync to the web UI.
+      if (!jid.startsWith('web:')) {
+        broadcastToToken(jid, {
+          id: msgId,
+          content: text,
+          sender_name: ASSISTANT_NAME,
+          timestamp,
+          is_from_me: true,
+          is_bot_message: true,
+        });
+      }
     },
     sendImage: async (jid, filePath, options) => {
       const channel = findChannel(channels, jid);

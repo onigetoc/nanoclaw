@@ -114,8 +114,13 @@ export async function startMessageLoop(
             getLastAgentTimestampForJid(resolvedJid),
             ASSISTANT_NAME,
           );
-          const messagesToSend =
-            allPending.length > 0 ? allPending : groupMessages;
+          // If allPending is empty, the per-JID cursor already covers these
+          // messages (they were consumed by processGroupMessages triggered
+          // via processApiMessage or a prior loop iteration).  Falling back
+          // to groupMessages would re-pipe already-processed messages to the
+          // active container, causing the agent to respond multiple times.
+          if (allPending.length === 0) continue;
+          const messagesToSend = allPending;
           const formatted = formatMessages(messagesToSend);
 
           // Use chatJid (may have web: prefix) for channel routing, not resolvedJid
