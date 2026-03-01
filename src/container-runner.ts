@@ -55,6 +55,14 @@ export interface ContainerOutput {
   result: string | null;
   newSessionId?: string;
   error?: string;
+  metadata?: {
+    modelID?: string;
+    providerID?: string;
+    mode?: string;
+    agent?: string;
+    tokens?: { total: number; input: number; output: number; reasoning: number };
+    cost?: number;
+  };
 }
 
 /**

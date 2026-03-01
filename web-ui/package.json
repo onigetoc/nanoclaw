@@ -4,6 +4,8 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
+    "kill-stale": "node -e \"try{require('child_process').execSync(process.platform==='win32'?'powershell -Command \\\"Get-NetTCPConnection -LocalPort 5173 -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }\\\"':'fuser -k 5173/tcp 2>/dev/null',{stdio:'ignore'})}catch{}\"",
+    "predev": "bun run kill-stale",
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",

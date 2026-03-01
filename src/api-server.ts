@@ -576,6 +576,7 @@ export function broadcastToToken(
     timestamp: string;
     is_from_me: boolean;
     is_bot_message: boolean;
+    metadata?: Record<string, unknown>;
   },
 ): void {
   // Resolve linked JIDs so web UI clients watching web:main also see

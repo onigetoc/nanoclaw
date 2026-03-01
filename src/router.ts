@@ -15,7 +15,7 @@ function dedupKey(jid: string, text: string): string {
   return `${jid}::${text.slice(0, 500)}`;
 }
 
-function isDuplicate(jid: string, text: string): boolean {
+export function isDuplicate(jid: string, text: string): boolean {
   const key = dedupKey(jid, text);
   const lastSent = recentOutbound.get(key);
   const now = Date.now();

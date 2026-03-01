@@ -15,6 +15,7 @@ import remarkGfm from 'remark-gfm';
 import {
   ArrowDown,
   Bot,
+  Bug,
   Check,
   ChevronDown,
   Folder,
@@ -26,9 +27,13 @@ import {
   Paperclip,
   Power,
   CornerDownLeft,
+  Settings,
   Sun,
 } from 'lucide-react';
 import { apiService, type ChatInfo, type Message, type ApiToken, type ConnectionStatus } from './api';
+import { useSettings } from './useSettings';
+import SettingsPage from './SettingsPage';
+import DebugPanel from './DebugPanel';
 
 const SELECTED_CHAT_STORAGE_KEY = 'eureclaw_selected_chat_jid';
 const THEME_STORAGE_KEY = 'eureclaw_theme';
@@ -183,6 +188,9 @@ function App() {
   const [isComposerDragActive, setIsComposerDragActive] = useState(false);
   const [modelQuery, setModelQuery] = useState('');
   const [textareaRows, setTextareaRows] = useState(2);
+  const [showSettingsPage, setShowSettingsPage] = useState(false);
+  // debugMessageId removed — DebugPanel now always shows latest
+  const { settings, updateSetting, resetSettings } = useSettings();
 
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -723,9 +731,26 @@ function App() {
                         }`}`}
                   >
                     {isAssistant && (
-                      <div className="mb-2 flex items-center gap-1.5 text-xs text-emerald-400">
-                        <Bot className="h-3.5 w-3.5" />
-                        <span className="font-medium uppercase tracking-wider">{msg.sender_name || 'Assistant'}</span>
+                      <div className="mb-2 flex flex-col gap-0.5">
+                        <div className="flex items-center gap-1.5 text-xs text-emerald-400">
+                          <Bot className="h-3.5 w-3.5" />
+                          <span className="font-medium uppercase tracking-wider">{msg.sender_name || 'Assistant'}</span>
+                        </div>
+                        {msg.metadata && (msg.metadata.agent || msg.metadata.modelID) && (
+                          <div className="ml-5 flex items-center gap-1.5 text-[10px] text-zinc-500">
+                            {msg.metadata.agent && (
+                              <span className="rounded bg-zinc-700/50 px-1.5 py-0.5 font-medium text-zinc-400">{msg.metadata.agent}</span>
+                            )}
+                            {msg.metadata.modelID && (
+                              <span className="truncate">{msg.metadata.modelID}</span>
+                            )}
+                            {msg.metadata.tokens && (
+                              <span className="text-zinc-600">
+                                {(msg.metadata.tokens.total || (msg.metadata.tokens.input + msg.metadata.tokens.output)).toLocaleString()}tok
+                              </span>
+                            )}
+                          </div>
+                        )}
                       </div>
                     )}
 
@@ -1008,7 +1033,24 @@ function App() {
           })}
         </div>
 
-        <div className={`border-t p-3 ${isDark ? 'border-zinc-800' : 'border-zinc-300'}`}>
+        <div className={`border-t p-3 space-y-2 ${isDark ? 'border-zinc-800' : 'border-zinc-300'}`}>
+          <button
+            className={`flex w-full items-center justify-center gap-2 rounded-lg border px-3 py-2 text-sm transition ${isDark ? 'border-zinc-700 bg-zinc-800 text-zinc-200 hover:bg-zinc-700' : 'border-zinc-300 bg-zinc-100 text-zinc-700 hover:bg-zinc-200'}`}
+            onClick={() => setShowSettingsPage(true)}
+          >
+            <Settings className="h-4 w-4" />
+            Settings
+          </button>
+          {settings.debugPanel && (
+            <button
+              className={`flex w-full items-center justify-center gap-2 rounded-lg border px-3 py-2 text-sm transition ${isDark ? 'border-amber-700/50 bg-amber-500/10 text-amber-300 hover:bg-amber-500/20' : 'border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100'}`}
+              onClick={() => updateSetting('debugPanel', false)}
+              title="Debug panel is active — click to hide"
+            >
+              <Bug className="h-4 w-4" />
+              Debug ON
+            </button>
+          )}
           <button
             className={`flex w-full items-center justify-center gap-2 rounded-lg border px-3 py-2 text-sm transition ${isDark ? 'border-zinc-700 bg-zinc-800 text-zinc-200 hover:bg-zinc-700' : 'border-zinc-300 bg-zinc-100 text-zinc-700 hover:bg-zinc-200'}`}
             onClick={() => {
@@ -1020,6 +1062,19 @@ function App() {
           </button>
         </div>
       </aside>
+
+      {/* Settings overlay */}
+      {showSettingsPage && (
+        <aside className={`flex w-80 shrink-0 flex-col border-r ${isDark ? 'border-zinc-800 bg-zinc-950' : 'border-zinc-200 bg-zinc-50'}`}>
+          <SettingsPage
+            settings={settings}
+            onUpdate={updateSetting}
+            onReset={resetSettings}
+            onClose={() => setShowSettingsPage(false)}
+            isDark={isDark}
+          />
+        </aside>
+      )}
 
       <main className={`relative flex min-w-0 flex-1 flex-col ${isDark ? 'bg-zinc-900' : 'bg-white'}`}>
         {state.selectedChat ? (
@@ -1321,6 +1376,15 @@ function App() {
           </div>
         )}
       </main>
+
+      {/* Debug sidebar */}
+      {settings.debugPanel && state.selectedChat && (
+        <DebugPanel
+          messages={state.messages}
+          onClose={() => updateSetting('debugPanel', false)}
+          isDark={isDark}
+        />
+      )}
     </div>
   );
 }

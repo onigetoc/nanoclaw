@@ -16,6 +16,8 @@ const rootDir = path.join(__dirname, '..');
 let restartCount = 0;
 const MAX_RESTARTS_PER_MINUTE = 5;
 const restartTimestamps = [];
+let currentChild = null;
+let isShuttingDown = false;
 
 function shouldRestart() {
   const now = Date.now();
@@ -44,7 +46,18 @@ function startEureClaw() {
     shell: true,
   });
 
+  // Keep a reference so the SIGINT handler can kill the child
+  currentChild = child;
+
   child.on('exit', (code, signal) => {
+    currentChild = null;
+
+    // If we're shutting down via Ctrl+C, don't restart — just exit
+    if (isShuttingDown) {
+      process.exit(code ?? 1);
+      return;
+    }
+
     console.log(`\n📊 Process exited - Code: ${code}, Signal: ${signal}`);
     
     if (signal) {
@@ -75,15 +88,26 @@ function startEureClaw() {
   });
 
   child.on('error', (err) => {
+    currentChild = null;
     console.error('\n❌ Failed to start EureClaw:', err.message);
     process.exit(1);
   });
 }
 
-// Handle Ctrl+C gracefully
+// Handle Ctrl+C gracefully — kill child first, then exit
 process.on('SIGINT', () => {
-  console.log('\n\n👋 Shutting down EureClaw supervisor...\n');
-  process.exit(0);
+  if (isShuttingDown) return; // prevent double handling
+  isShuttingDown = true;
+  console.log('\n\n👋 Shutting down EureClaw...\n');
+
+  if (currentChild && !currentChild.killed) {
+    // Send SIGINT to the child so it does its graceful shutdown
+    // (stops OpenCode server, disconnects channels, etc.)
+    currentChild.kill('SIGINT');
+    // The child's 'exit' handler will call process.exit()
+  } else {
+    process.exit(0);
+  }
 });
 
 console.log('╔════════════════════════════════════════════════════════════╗');

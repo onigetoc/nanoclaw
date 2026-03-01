@@ -111,6 +111,24 @@ function createSchema(database: Database.Database): void {
   } catch {
     /* column already exists */
   }
+
+  // Add metadata column for model/agent info (migration for existing DBs)
+  try {
+    database.exec(
+      `ALTER TABLE messages ADD COLUMN metadata TEXT`,
+    );
+  } catch {
+    /* column already exists */
+  }
+
+  // Add model column to sessions table (migration for existing DBs)
+  try {
+    database.exec(
+      `ALTER TABLE sessions ADD COLUMN model TEXT`,
+    );
+  } catch {
+    /* column already exists */
+  }
 }
 
 export function initDatabase(): void {
@@ -287,9 +305,10 @@ export function storeMessageDirect(msg: {
   timestamp: string;
   is_from_me: boolean;
   is_bot_message?: boolean;
+  metadata?: Record<string, unknown>;
 }): void {
   db.prepare(
-    `INSERT OR REPLACE INTO messages (id, chat_jid, sender, sender_name, content, timestamp, is_from_me, is_bot_message) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT OR REPLACE INTO messages (id, chat_jid, sender, sender_name, content, timestamp, is_from_me, is_bot_message, metadata) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     msg.id,
     msg.chat_jid,
@@ -299,6 +318,7 @@ export function storeMessageDirect(msg: {
     msg.timestamp,
     msg.is_from_me ? 1 : 0,
     msg.is_bot_message ? 1 : 0,
+    msg.metadata ? JSON.stringify(msg.metadata) : null,
   );
 }
 
@@ -467,6 +487,23 @@ export function getAllMessagesSince(
 }
 
 /**
+ * Parse a raw DB row into a NewMessage, deserializing the metadata JSON.
+ */
+function parseMessageRow(row: any): NewMessage {
+  const msg: NewMessage = { ...row };
+  if (typeof row.metadata === 'string') {
+    try {
+      msg.metadata = JSON.parse(row.metadata);
+    } catch {
+      msg.metadata = undefined;
+    }
+  } else {
+    msg.metadata = undefined;
+  }
+  return msg;
+}
+
+/**
  * Get all messages since a timestamp for all chat JIDs linked to the same folder.
  * Includes bot responses. For non-web JIDs, this is equivalent to getAllMessagesSince.
  */
@@ -477,15 +514,16 @@ export function getAllMessagesSinceLinked(
   const linkedJids = getLinkedChatJids(chatJid);
   const placeholders = linkedJids.map(() => '?').join(',');
   const sql = `
-    SELECT id, chat_jid, sender, sender_name, content, timestamp, is_from_me, is_bot_message
+    SELECT id, chat_jid, sender, sender_name, content, timestamp, is_from_me, is_bot_message, metadata
     FROM messages
     WHERE chat_jid IN (${placeholders}) AND timestamp > ?
     ORDER BY timestamp
   `;
 
-  return db
+  const rows = db
     .prepare(sql)
-    .all(...linkedJids, sinceTimestamp) as NewMessage[];
+    .all(...linkedJids, sinceTimestamp) as any[];
+  return rows.map(parseMessageRow);
 }
 
 /**
@@ -510,16 +548,17 @@ export function getMessagesPage(
 
   // Fetch limit + 1 to know if there are more older messages
   const sql = `
-    SELECT id, chat_jid, sender, sender_name, content, timestamp, is_from_me, is_bot_message
+    SELECT id, chat_jid, sender, sender_name, content, timestamp, is_from_me, is_bot_message, metadata
     FROM messages
     ${whereClause}
     ORDER BY timestamp DESC
     LIMIT ?
   `;
 
-  const rows = db.prepare(sql).all(...params, limit + 1) as NewMessage[];
-  const hasMore = rows.length > limit;
-  const page = hasMore ? rows.slice(0, limit) : rows;
+  const rows = db.prepare(sql).all(...params, limit + 1) as any[];
+  const parsed = rows.map(parseMessageRow);
+  const hasMore = parsed.length > limit;
+  const page = hasMore ? parsed.slice(0, limit) : parsed;
 
   // Reverse to get ascending order (oldest first) for display
   page.reverse();
@@ -714,10 +753,10 @@ export function getSession(groupFolder: string): string | undefined {
   return row?.session_id;
 }
 
-export function setSession(groupFolder: string, sessionId: string): void {
+export function setSession(groupFolder: string, sessionId: string, model?: string): void {
   db.prepare(
-    'INSERT OR REPLACE INTO sessions (group_folder, session_id) VALUES (?, ?)',
-  ).run(groupFolder, sessionId);
+    'INSERT OR REPLACE INTO sessions (group_folder, session_id, model) VALUES (?, ?, ?)',
+  ).run(groupFolder, sessionId, model ?? getCurrentModel() ?? null);
 }
 
 export function getAllSessions(): Record<string, string> {
@@ -729,6 +768,51 @@ export function getAllSessions(): Record<string, string> {
     result[row.group_folder] = row.session_id;
   }
   return result;
+}
+
+/**
+ * Read the current model from opencode.json.
+ */
+function getCurrentModel(): string | undefined {
+  try {
+    const configPath = path.join(process.cwd(), 'opencode.json');
+    const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+    return config.model;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Purge all sessions whose stored model doesn't match the current opencode.json model.
+ * Called at startup so that changing the model in opencode.json automatically
+ * forces new sessions (OpenCode locks model per-session).
+ */
+export function purgeSessionsIfModelChanged(): void {
+  const currentModel = getCurrentModel();
+  if (!currentModel) {
+    logger.warn('Could not read model from opencode.json — skipping session purge');
+    return;
+  }
+
+  const stale = db
+    .prepare('SELECT group_folder, session_id, model FROM sessions WHERE model IS NULL OR model != ?')
+    .all(currentModel) as Array<{ group_folder: string; session_id: string; model: string | null }>;
+
+  if (stale.length === 0) {
+    logger.info({ model: currentModel }, 'All sessions match current model — no purge needed');
+    return;
+  }
+
+  for (const row of stale) {
+    logger.info(
+      { group: row.group_folder, oldModel: row.model, newModel: currentModel },
+      'Purging stale session (model changed)',
+    );
+  }
+
+  db.prepare('DELETE FROM sessions WHERE model IS NULL OR model != ?').run(currentModel);
+  logger.info({ purged: stale.length, currentModel }, `Purged ${stale.length} stale session(s) due to model change`);
 }
 
 // --- Registered group accessors ---

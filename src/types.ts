@@ -51,6 +51,14 @@ export interface NewMessage {
   is_from_me?: boolean;
   is_bot_message?: boolean;
   is_private_chat?: boolean; // Whether this is a private/DM chat (vs group chat)
+  metadata?: {
+    modelID?: string;
+    providerID?: string;
+    mode?: string;
+    agent?: string;
+    tokens?: { total: number; input: number; output: number; reasoning: number };
+    cost?: number;
+  };
 }
 
 export interface ScheduledTask {

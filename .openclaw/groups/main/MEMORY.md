@@ -13,20 +13,23 @@
 ## Current Projects
 
 ### EureClaw
+
 - Personal AI assistant running 24/7
 - **Origin**: Fork of Claude Code SDK, adapted for OpenCode SDK
 - Channels: Telegram (primary), WhatsApp (available)
-- Using OpenCode SDK with MiniMax M2.5 Free model
+- Using OpenCode SDK with google/gemini-2.5-flash model
 - Running in direct mode on Windows (no container isolation)
 - **Memory**: Now stores both user AND assistant messages in SQLite
 
 ### Active Explorations
+
 - Memory system architecture (SQLite + MEMORY.md hybrid)
 - Hybrid LLM system: OpenCode for actions + OpenRouter for multimodal
 - **Voice transcription via Groq** (free Whisper API - working!)
 - **TODO**: Figure out how to automatically read files sent via Telegram/WhatsApp
 
 ## OpenCode Free Models (4 available)
+
 - MiniMax (currently using)
 - GLM-5
 - Kimi k2.5
@@ -35,12 +38,14 @@
 ## Important Context
 
 ### Technical Setup
+
 - Has API keys configured in environment variables
 - Prefers checking environment first before asking for credentials
 - Windows environment (PowerShell/cmd)
 - Database: `C:\Users\LENOVO\APPS\0-AI-Agents\eureclaw\store\messages.db`
 
 ### Preferences
+
 - Wants proactive action over asking permission
 - Values efficiency and professional solutions
 - Not an advanced programmer - appreciates clear explanations
@@ -49,6 +54,7 @@
 ## Recent Decisions
 
 **2026-02-18**: Memory System Architecture
+
 - Identified that conversations weren't being loaded from archives
 - Decided on hybrid approach: SQLite for recent context + MEMORY.md for long-term
 - Postponing RAG/vector DB until needed (YAGNI principle)
@@ -71,10 +77,11 @@
 ## Research Approach
 
 When discovering how something works:
+
 1. Official documentation first (most reliable)
 2. Skill registries / web search
 3. Source code if needed
 
 ---
 
-*Last updated: 2026-02-18*
+_Last updated: 2026-02-18_

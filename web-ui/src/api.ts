@@ -15,6 +15,15 @@ export interface RegisteredGroup {
   added_at: string;
 }
 
+export interface MessageMetadata {
+  modelID?: string;
+  providerID?: string;
+  mode?: string;
+  agent?: string;
+  tokens?: { total: number; input: number; output: number; reasoning: number };
+  cost?: number;
+}
+
 export interface Message {
   id: string;
   chat_jid: string;
@@ -24,6 +33,7 @@ export interface Message {
   timestamp: string;
   is_from_me: boolean;
   is_bot_message?: boolean;
+  metadata?: MessageMetadata;
 }
 
 export interface ConnectionStatus {
@@ -168,6 +178,7 @@ class ApiService {
       ...m,
       is_from_me: !!m.is_from_me,
       is_bot_message: !!m.is_bot_message,
+      metadata: m.metadata,
     }));
     return { messages, hasMore: result.hasMore };
   }
@@ -344,6 +355,7 @@ class ApiService {
                     timestamp: data.timestamp,
                     is_from_me: data.is_from_me ?? false,
                     is_bot_message: data.is_bot_message ?? false,
+                    metadata: data.metadata,
                   };
                   this.messageListeners.forEach((listener) =>
                     listener(message),

@@ -35,12 +35,12 @@ function checkCommand(command) {
 
 function isOpencodeServerRunning() {
   try {
-    // Try to connect to OpenCode server
+    // Try to connect to OpenCode server on port 4100 (default)
     if (process.platform === 'win32') {
-      const result = execSync('netstat -ano | findstr :4096', { encoding: 'utf8' });
+      const result = execSync('netstat -ano | findstr :4100', { encoding: 'utf8' });
       return result.includes('LISTENING');
     } else {
-      const result = execSync('lsof -i :4096', { encoding: 'utf8' });
+      const result = execSync('lsof -i :4100', { encoding: 'utf8' });
       return result.length > 0;
     }
   } catch {
@@ -88,13 +88,13 @@ async function main() {
   // Kill any zombie OpenCode server from previous runs to avoid port conflicts.
   log('🔌 Checking for stale OpenCode server...', colors.yellow);
   if (isOpencodeServerRunning()) {
-    log('⚠️  Found existing OpenCode server on port 4096', colors.yellow);
+    log('⚠️  Found existing OpenCode server on port 4100', colors.yellow);
     log('   EureClaw will manage it automatically. Killing stale process...', colors.yellow);
     try {
       if (process.platform === 'win32') {
-        execSync('for /f "tokens=5" %a in (\'netstat -ano ^| findstr :4096 ^| findstr LISTENING\') do taskkill /F /PID %a', { stdio: 'pipe', shell: true });
+        execSync('for /f "tokens=5" %a in (\'netstat -ano ^| findstr :4100 ^| findstr LISTENING\') do taskkill /F /PID %a', { stdio: 'pipe', shell: true });
       } else {
-        execSync('kill $(lsof -t -i :4096) 2>/dev/null || true', { stdio: 'pipe' });
+        execSync('kill $(lsof -t -i :4100) 2>/dev/null || true', { stdio: 'pipe' });
       }
       log('✅ Stale server killed. EureClaw will start a fresh one.\n', colors.green);
     } catch {

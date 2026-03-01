@@ -41,6 +41,14 @@ interface ContainerOutput {
   result: string | null;
   newSessionId?: string;
   error?: string;
+  metadata?: {
+    modelID?: string;
+    providerID?: string;
+    mode?: string;
+    agent?: string;
+    tokens?: { total: number; input: number; output: number; reasoning: number };
+    cost?: number;
+  };
 }
 
 interface SessionEntry {
@@ -583,9 +591,24 @@ async function runQuery(
       
       log(`✓ Created new session: ${currentSessionId}`);
     } else {
-      // Valid OpenCode session ID — resume existing session
+      // Valid OpenCode session ID — verify it exists before resuming
       currentSessionId = sessionId;
-      log(`Resuming existing session: ${currentSessionId}`);
+      log(`Verifying session exists: ${currentSessionId}`);
+      try {
+        const listResp = await client.session.list();
+        const sessions = listResp.data ?? listResp;
+        const exists = Array.isArray(sessions) && sessions.some((s: any) => (s.id || s.data?.id) === currentSessionId);
+        if (!exists) {
+          log(`⚠ Session ${currentSessionId} not found in OpenCode — creating fresh session`);
+          const sessionResult = await client.session.create();
+          currentSessionId = sessionResult.data?.id ?? sessionResult.id;
+          log(`✓ Created replacement session: ${currentSessionId}`);
+        } else {
+          log(`✓ Session verified, resuming: ${currentSessionId}`);
+        }
+      } catch (verifyErr: any) {
+        log(`⚠ Could not verify session (${verifyErr?.message}), proceeding anyway`);
+      }
     }
   } catch (error) {
     // Requirement 7.4, 7.5: Log errors with full context and return error status
@@ -1136,6 +1159,25 @@ Use the Task tool to invoke agents when appropriate.
       .map((p: any) => p.text || '')
       .join('');
 
+    // Build metadata from responseData.info (contains modelID, providerID, agent, tokens, cost)
+    const info = responseData.info || {};
+    const outputMetadata: ContainerOutput['metadata'] = {
+      modelID: info.modelID || undefined,
+      providerID: info.providerID || undefined,
+      mode: info.mode || undefined,
+      agent: info.agent || info.mode || undefined,
+      tokens: info.tokens ? {
+        total: info.tokens.total || 0,
+        input: info.tokens.input || 0,
+        output: info.tokens.output || 0,
+        reasoning: info.tokens.reasoning || 0,
+      } : undefined,
+      cost: info.cost ?? undefined,
+    };
+    if (outputMetadata.modelID) {
+      log(`📊 Model: ${outputMetadata.providerID}/${outputMetadata.modelID}, agent: ${outputMetadata.agent}, tokens: ${JSON.stringify(outputMetadata.tokens)}`);
+    }
+
     if (textParts) {
       resultCount++;
       log(`✓ Assistant response #${resultCount}: ${textParts.slice(0, 200)}${textParts.length > 200 ? '...' : ''}`);
@@ -1143,7 +1185,8 @@ Use the Task tool to invoke agents when appropriate.
       writeOutput({
         status: 'success',
         result: textParts,
-        newSessionId: currentSessionId
+        newSessionId: currentSessionId,
+        metadata: outputMetadata,
       });
     } else {
       // No text parts — try fetching messages as fallback
@@ -1168,10 +1211,10 @@ Use the Task tool to invoke agents when appropriate.
       if (fallbackText) {
         resultCount++;
         log(`✓ Got response via fallback: ${fallbackText.slice(0, 200)}${fallbackText.length > 200 ? '...' : ''}`);
-        writeOutput({ status: 'success', result: fallbackText, newSessionId: currentSessionId });
+        writeOutput({ status: 'success', result: fallbackText, newSessionId: currentSessionId, metadata: outputMetadata });
       } else {
         log(`⚠ Empty response from session ${currentSessionId}`);
-        writeOutput({ status: 'success', result: '[No response]', newSessionId: currentSessionId });
+        writeOutput({ status: 'success', result: '[No response]', newSessionId: currentSessionId, metadata: outputMetadata });
       }
     }
 

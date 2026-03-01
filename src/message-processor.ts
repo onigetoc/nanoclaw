@@ -22,7 +22,7 @@ import {
   storeMessageDirect,
 } from './db.js';
 import { GroupQueue } from './group-queue.js';
-import { findChannel, formatMessages, sendDeduped } from './router.js';
+import { findChannel, formatMessages, sendDeduped, isDuplicate } from './router.js';
 import {
   getRegisteredGroups,
   getSessions,
@@ -111,36 +111,56 @@ export async function processGroupMessages(
       const text = raw.replace(/<internal>[\s\S]*?<\/internal>/g, '').trim();
       logger.info({ group: group.name }, `Agent output: ${raw.slice(0, 200)}`);
       if (text) {
-        const wasSent = await sendDeduped(channel, chatJid, text);
-        if (!wasSent) return; // Duplicate — skip store & broadcast
+        const msgMetadata = result.metadata ? {
+          modelID: result.metadata.modelID,
+          providerID: result.metadata.providerID,
+          mode: result.metadata.mode,
+          agent: result.metadata.agent,
+          tokens: result.metadata.tokens,
+          cost: result.metadata.cost,
+        } : undefined;
+
+        // For web: JIDs, bypass sendDeduped (which uses WebUIChannel.sendMessage
+        // and loses metadata). Instead, check dedup directly and broadcast with
+        // metadata via broadcastToToken.
+        const isWebJid = chatJid.startsWith('web:');
+        if (isWebJid) {
+          if (isDuplicate(chatJid, text)) return; // Duplicate — skip
+        } else {
+          const wasSent = await sendDeduped(channel, chatJid, text);
+          if (!wasSent) return; // Duplicate — skip store & broadcast
+        }
         outputSentToUser = true;
         monitoring.markOutputSent(executionId);
 
+        const msgId = `bot_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+        const msgTimestamp = new Date().toISOString();
+
         storeMessageDirect({
-          id: `bot_${Date.now()}_${Math.random().toString(36).substring(7)}`,
+          id: msgId,
           chat_jid: chatJid,
           sender: 'bot',
           sender_name: ASSISTANT_NAME,
           content: text,
-          timestamp: new Date().toISOString(),
+          timestamp: msgTimestamp,
           is_from_me: true,
           is_bot_message: true,
+          metadata: msgMetadata,
         });
 
-        // Cross-channel sync: broadcast to web UI SSE clients
-        // Only broadcast if the message did NOT originate from the web channel,
-        // because web-channel messages are already sent via WebUIChannel.sendMessage()
-        // which calls broadcastToToken internally (avoids duplicate SSE events).
-        if (!chatJid.startsWith('web:')) {
-          broadcastToToken(chatJid, {
-            id: `sse_${Date.now()}_${Math.random().toString(36).substring(7)}`,
-            content: text,
-            sender_name: ASSISTANT_NAME,
-            timestamp: new Date().toISOString(),
-            is_from_me: true,
-            is_bot_message: true,
-          });
-        }
+        // Broadcast to web UI SSE clients — always include metadata.
+        // For web: JIDs we broadcast directly here (not via WebUIChannel)
+        // so metadata is preserved. For non-web JIDs this provides
+        // cross-channel sync to any connected web clients.
+        broadcastToToken(chatJid, {
+          id: msgId,
+          content: text,
+          sender_name: ASSISTANT_NAME,
+          timestamp: msgTimestamp,
+          is_from_me: true,
+          is_bot_message: true,
+          metadata: msgMetadata,
+        });
       }
       resetIdleTimer();
     }

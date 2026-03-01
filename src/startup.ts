@@ -17,6 +17,7 @@ import {
   storeMessage,
   storeChatMetadata,
   storeMessageDirect,
+  purgeSessionsIfModelChanged,
 } from './db.js';
 import { GroupQueue } from './group-queue.js';
 import { startIpcWatcher } from './ipc.js';
@@ -328,6 +329,8 @@ export async function main(): Promise<void> {
 
   initDatabase();
   logger.info('Database initialized');
+
+  purgeSessionsIfModelChanged();
 
   const logsDir = path.join(process.cwd(), 'logs');
   initMonitoring(logsDir);
