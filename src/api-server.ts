@@ -20,6 +20,7 @@ import { ASSISTANT_NAME, GROUPS_DIR, TRIGGER_PATTERN } from './config.js';
 import { NewMessage, RegisteredGroup } from './types.js';
 import { registerGroup } from './group-manager.js';
 import { executeCommand } from './commands/index.js';
+import { getTranscriptionManager, isAudioTranscriptionAvailable } from './media/audio-manager.js';
 
 const API_PORT = parseInt(process.env.API_PORT || '4300', 10);
 
@@ -53,6 +54,14 @@ const fastify = Fastify({
 await fastify.register(cors, {
   origin: true,
   credentials: true,
+});
+
+// Register multipart support for file uploads
+import multipart from '@fastify/multipart';
+await fastify.register(multipart, {
+  limits: {
+    fileSize: 26214400, // 25MB (Whisper limit)
+  },
 });
 
 declare module 'fastify' {
@@ -426,6 +435,99 @@ fastify.post(
     reply
       .code(201)
       .send({ success: true, messageId, timestamp: message.timestamp });
+  },
+);
+
+// Audio transcription endpoint
+fastify.post(
+  '/chats/:jid/audio',
+  { preHandler: authenticate },
+  async (request: FastifyRequest, reply: FastifyReply) => {
+    const params = request.params as Record<string, string>;
+    const rawJid = params.jid;
+    const useWebChannel = rawJid.startsWith('web:');
+    const jid = useWebChannel ? rawJid : `web:${rawJid}`;
+
+    if (!isAudioTranscriptionAvailable()) {
+      reply.code(503).send({ error: 'Audio transcription not available' });
+      return;
+    }
+
+    try {
+      const data = await request.file();
+      if (!data) {
+        reply.code(400).send({ error: 'No audio file provided' });
+        return;
+      }
+
+      const buffer = await data.toBuffer();
+      const fileName = data.filename || 'audio.webm';
+
+      logger.info({ jid, fileName, size: buffer.length }, 'Transcribing audio from web UI');
+
+      const manager = getTranscriptionManager();
+      if (!manager) {
+        reply.code(503).send({ error: 'Transcription manager not initialized' });
+        return;
+      }
+
+      const result = await manager.transcribe(buffer, fileName, undefined);
+
+      if (!result || !result.text) {
+        reply.code(500).send({ error: 'Transcription failed' });
+        return;
+      }
+
+      const transcribedText = result.text.trim();
+      logger.info(
+        { jid, textLength: transcribedText.length, provider: result.provider },
+        'Audio transcribed successfully',
+      );
+
+      // Store the transcribed message
+      const messageId = `web_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+      const timestamp = new Date().toISOString();
+
+      const message: NewMessage = {
+        id: messageId,
+        chat_jid: jid,
+        sender: request.tokenId || 'web',
+        sender_name: 'Web User',
+        content: transcribedText,
+        timestamp,
+        is_from_me: false,
+        is_bot_message: false,
+      };
+
+      storeMessageDirect({
+        id: message.id,
+        chat_jid: message.chat_jid,
+        sender: message.sender,
+        sender_name: message.sender_name,
+        content: message.content,
+        timestamp: message.timestamp,
+        is_from_me: message.is_from_me ?? false,
+        is_bot_message: message.is_bot_message ?? false,
+      });
+
+      // Trigger message processing
+      if (processApiMessage) {
+        processApiMessage(jid);
+      }
+
+      reply.code(201).send({
+        success: true,
+        messageId,
+        timestamp,
+        transcribedText,
+      });
+    } catch (err: any) {
+      logger.error({ jid, err }, 'Audio transcription failed');
+      reply.code(500).send({
+        error: 'Transcription failed',
+        details: err.message,
+      });
+    }
   },
 );
 

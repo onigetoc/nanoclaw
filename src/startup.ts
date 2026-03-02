@@ -491,6 +491,7 @@ export async function main(): Promise<void> {
     'GEMINI_API_KEY',
     'GOOGLE_API_KEY',
     'OPENAI_API_KEY',
+    'GROQ_API_KEY',
   ]);
   const telegramToken = secrets.TELEGRAM_BOT_TOKEN || '';
 
@@ -500,6 +501,8 @@ export async function main(): Promise<void> {
     process.env.GOOGLE_API_KEY = secrets.GOOGLE_API_KEY;
   if (secrets.OPENAI_API_KEY)
     process.env.OPENAI_API_KEY = secrets.OPENAI_API_KEY;
+  if (secrets.GROQ_API_KEY)
+    process.env.GROQ_API_KEY = secrets.GROQ_API_KEY;
 
   // Create and connect channels
   // WebUI channel first - handles messages from OpenCode Web UI

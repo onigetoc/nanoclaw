@@ -314,7 +314,84 @@ export class TelegramChannel implements Channel {
         is_private_chat: ctx.chat.type === 'private',
       });
     });
-    this.bot.on('message:audio', (ctx) => storeNonText(ctx, '[Audio]'));
+    this.bot.on('message:audio', async (ctx) => {
+      const chatJid = `tg:${ctx.chat.id}`;
+      const group = this.opts.registeredGroups()[chatJid];
+      if (!group) return;
+
+      const timestamp = new Date(ctx.message.date * 1000).toISOString();
+      const senderName =
+        ctx.from?.first_name ||
+        ctx.from?.username ||
+        ctx.from?.id?.toString() ||
+        'Unknown';
+      const caption = ctx.message.caption ? ` ${ctx.message.caption}` : '';
+
+      this.opts.onChatMetadata(chatJid, timestamp);
+
+      let content = '[Audio]';
+
+      // Use Groq Whisper transcription for audio files too
+      if (isAudioTranscriptionAvailable() && ctx.message.audio) {
+        try {
+          const file = await ctx.getFile();
+          const fileUrl = `https://api.telegram.org/file/bot${this.botToken}/${file.file_path}`;
+          const fileInfo = await fetch(fileUrl);
+          const audioBuffer = Buffer.from(await fileInfo.arrayBuffer());
+
+          const manager = getTranscriptionManager();
+          if (manager) {
+            const fileName = ctx.message.audio.file_name || 'audio.mp3';
+            const result = await manager.transcribe(
+              audioBuffer,
+              fileName,
+              undefined // Auto-detect language
+            );
+            
+            if (result && result.text) {
+              content = `[Audio] Transcript: "${result.text.trim()}"`;
+              logger.info(
+                { 
+                  chatJid, 
+                  length: result.text.length,
+                  provider: result.provider,
+                  duration: result.duration 
+                },
+                'Audio file transcribed with Groq Whisper',
+              );
+            }
+          }
+        } catch (err: any) {
+          logger.warn(
+            { 
+              chatJid, 
+              error: err.message,
+              code: err.code,
+              retryAfter: err.retryAfter 
+            },
+            'Audio transcription failed, using placeholder',
+          );
+          
+          if (err.code === 'RATE_LIMIT') {
+            logger.warn(
+              { retryAfter: err.retryAfter },
+              'Groq rate limit hit, will retry after cooldown'
+            );
+          }
+        }
+      }
+
+      this.opts.onMessage(chatJid, {
+        id: ctx.message.message_id.toString(),
+        chat_jid: chatJid,
+        sender: ctx.from?.id?.toString() || '',
+        sender_name: senderName,
+        content: `${content}${caption}`,
+        timestamp,
+        is_from_me: false,
+        is_private_chat: ctx.chat.type === 'private',
+      });
+    });
     this.bot.on('message:document', (ctx) => {
       const name = ctx.message.document?.file_name || 'file';
       storeNonText(ctx, `[Document: ${name}]`);

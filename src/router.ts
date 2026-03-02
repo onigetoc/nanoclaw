@@ -63,10 +63,33 @@ export function escapeXml(s: string): string {
     .replace(/"/g, '&quot;');
 }
 
+/**
+ * Extract transcribed text from audio message placeholders.
+ * Converts "[Audio] Transcript: "text here"" to just "text here"
+ * so OpenCode receives the actual transcribed content.
+ */
+function extractTranscript(content: string): string {
+  // Match: [Audio] Transcript: "actual text"
+  const audioTranscriptMatch = content.match(/^\[Audio\]\s+Transcript:\s+"(.+)"$/);
+  if (audioTranscriptMatch) {
+    return audioTranscriptMatch[1];
+  }
+  
+  // Match: [Voice message] Transcript: "actual text" (legacy format)
+  const voiceTranscriptMatch = content.match(/^\[Voice message\]\s+Transcript:\s+"(.+)"$/);
+  if (voiceTranscriptMatch) {
+    return voiceTranscriptMatch[1];
+  }
+  
+  return content;
+}
+
 export function formatMessages(messages: NewMessage[]): string {
-  const lines = messages.map((m) =>
-    `<message sender="${escapeXml(m.sender_name)}" time="${m.timestamp}">${escapeXml(m.content)}</message>`,
-  );
+  const lines = messages.map((m) => {
+    // Extract transcript if this is a transcribed audio message
+    const content = extractTranscript(m.content);
+    return `<message sender="${escapeXml(m.sender_name)}" time="${m.timestamp}">${escapeXml(content)}</message>`;
+  });
   return `<messages>\n${lines.join('\n')}\n</messages>`;
 }
 

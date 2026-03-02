@@ -34,6 +34,7 @@ export interface Message {
   is_from_me: boolean;
   is_bot_message?: boolean;
   metadata?: MessageMetadata;
+  attachments?: Array<{ name: string; type: string; size: number }>;
 }
 
 export interface ConnectionStatus {
@@ -196,6 +197,34 @@ class ApiService {
       body: JSON.stringify({ content, channel: 'web' }),
     });
     return result;
+  }
+
+  async sendAudio(
+    chatJid: string,
+    audioFile: File,
+  ): Promise<{ success: boolean; messageId: string; timestamp: string; transcribedText: string }> {
+    const token = this.getToken();
+    if (!token) {
+      throw new Error('Not authenticated');
+    }
+
+    const formData = new FormData();
+    formData.append('file', audioFile);
+
+    const response = await fetch(`${API_BASE}/chats/${encodeURIComponent(chatJid)}/audio`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ error: 'Request failed' }));
+      throw new Error(error.error || `HTTP ${response.status}`);
+    }
+
+    return response.json();
   }
 
   async getGroups(): Promise<Record<string, RegisteredGroup>> {

@@ -20,10 +20,12 @@
     "setup": "bun scripts/auto-setup.js",
     "monitor": "bun src/monitoring-cli.ts",
     "monitor:stats": "bun src/monitoring-cli.ts --stats",
-    "monitor:logs": "bun src/monitoring-cli.ts --logs"
+    "monitor:logs": "bun src/monitoring-cli.ts --logs",
+    "kill": "npx kill-port 5173 5174 5175"
   },
   "dependencies": {
     "@fastify/cors": "^11.2.0",
+    "@fastify/multipart": "^9.4.0",
     "@types/js-yaml": "^4.0.9",
     "@whiskeysockets/baileys": "^7.0.0-rc.9",
     "cron-parser": "^5.5.0",

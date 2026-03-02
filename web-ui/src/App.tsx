@@ -29,6 +29,10 @@ import {
   CornerDownLeft,
   Settings,
   Sun,
+  FileText,
+  FileVideo,
+  File,
+  X,
 } from 'lucide-react';
 import { apiService, type ChatInfo, type Message, type ApiToken, type ConnectionStatus } from './api';
 import { useSettings } from './useSettings';
@@ -37,6 +41,67 @@ import DebugPanel from './DebugPanel';
 
 const SELECTED_CHAT_STORAGE_KEY = 'eureclaw_selected_chat_jid';
 const THEME_STORAGE_KEY = 'eureclaw_theme';
+
+// Allowed file types for security
+const ALLOWED_FILE_TYPES = {
+  // Images
+  'image/png': true,
+  'image/jpeg': true,
+  'image/jpg': true,
+  'image/gif': true,
+  'image/webp': true,
+  // Audio
+  'audio/mpeg': true,
+  'audio/mp3': true,
+  'audio/ogg': true,
+  'audio/wav': true,
+  'audio/webm': true,
+  'audio/mp4': true,
+  'audio/x-m4a': true,
+  // Video
+  'video/mp4': true,
+  'video/webm': true,
+  'video/ogg': true,
+  'video/quicktime': true,
+  // Documents
+  'application/pdf': true,
+  'text/plain': true,
+  'text/markdown': true,
+  'application/json': true,
+  // Archives (for later)
+  'application/zip': true,
+  'application/x-zip-compressed': true,
+};
+
+// Get file icon and color based on type
+function getFileIcon(mimeType: string): { icon: typeof FileText; color: string; label: string } {
+  if (mimeType.startsWith('image/')) {
+    return { icon: ImageIcon, color: 'text-blue-400', label: mimeType.split('/')[1].toUpperCase() };
+  }
+  if (mimeType.startsWith('audio/')) {
+    return { icon: AudioLines, color: 'text-purple-400', label: mimeType.split('/')[1].toUpperCase() };
+  }
+  if (mimeType.startsWith('video/')) {
+    return { icon: FileVideo, color: 'text-rose-400', label: mimeType.split('/')[1].toUpperCase() };
+  }
+  if (mimeType === 'application/pdf') {
+    return { icon: FileText, color: 'text-red-400', label: 'PDF' };
+  }
+  if (mimeType.startsWith('text/')) {
+    return { icon: FileText, color: 'text-emerald-400', label: 'TXT' };
+  }
+  if (mimeType.includes('zip')) {
+    return { icon: File, color: 'text-amber-400', label: 'ZIP' };
+  }
+  return { icon: File, color: 'text-zinc-400', label: 'FILE' };
+}
+
+// Format file size
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes}B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)}KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)}MB`;
+}
 
 interface ChatState {
   chats: ChatInfo[];
@@ -189,6 +254,7 @@ function App() {
   const [modelQuery, setModelQuery] = useState('');
   const [textareaRows, setTextareaRows] = useState(2);
   const [showSettingsPage, setShowSettingsPage] = useState(false);
+  const [rejectedFiles, setRejectedFiles] = useState<string[]>([]);
   // debugMessageId removed — DebugPanel now always shows latest
   const { settings, updateSetting, resetSettings } = useSettings();
 
@@ -207,9 +273,17 @@ function App() {
   const addAttachments = useCallback((files: File[]) => {
     if (!files.length) return;
 
+    const rejected: string[] = [];
     setAttachments((prev) => {
       const next = [...prev];
       for (const file of files) {
+        // Security check: only allow whitelisted file types
+        if (!ALLOWED_FILE_TYPES[file.type as keyof typeof ALLOWED_FILE_TYPES]) {
+          console.warn(`File type not allowed: ${file.type} (${file.name})`);
+          rejected.push(file.name);
+          continue;
+        }
+
         const exists = next.some(
           (current) =>
             current.name === file.name &&
@@ -222,6 +296,12 @@ function App() {
       }
       return next;
     });
+
+    // Show rejected files notification
+    if (rejected.length > 0) {
+      setRejectedFiles(rejected);
+      setTimeout(() => setRejectedFiles([]), 5000);
+    }
   }, []);
 
   const transferHasFiles = (transfer: DataTransfer | null): boolean => {
@@ -597,7 +677,7 @@ function App() {
     inputRef.current?.focus();
   };
 
-  const sendMessage = async (content: string) => {
+  const sendMessage = async (content: string, fileAttachments?: File[]) => {
     if (!state.selectedChat) return;
     const trimmed = content.trim();
     if (!trimmed) return;
@@ -613,6 +693,7 @@ function App() {
       timestamp: new Date().toISOString(),
       is_from_me: false,
       is_bot_message: false,
+      attachments: fileAttachments?.map(f => ({ name: f.name, type: f.type, size: f.size })),
     };
 
     setState((s) => ({ ...s, messages: [...s.messages, optimisticMsg] }));
@@ -632,11 +713,67 @@ function App() {
     const hasAttachments = attachments.length > 0;
     if (!hasText && !hasAttachments) return;
 
+    // Check if there's an audio file attachment
+    const audioFile = attachments.find(f => f.type.startsWith('audio/'));
+    
+    console.log('[DEBUG] hasText:', hasText, 'hasAttachments:', hasAttachments);
+    console.log('[DEBUG] attachments:', attachments.map(f => ({ name: f.name, type: f.type })));
+    console.log('[DEBUG] audioFile:', audioFile ? { name: audioFile.name, type: audioFile.type } : null);
+    console.log('[DEBUG] Will transcribe audio?', !!audioFile);
+    
+    if (audioFile) {
+      console.log('[DEBUG] Transcribing audio file...');
+      // Transcribe audio and combine with text if present
+      try {
+        if (!state.selectedChat) return;
+        
+        const userText = inputValue.trim();
+        setInputValue('');
+        setTextareaRows(2);
+        setAttachments([]);
+
+        // Show optimistic message with user's text if any
+        const optimisticContent = userText || '[Transcribing audio...]';
+        const optimisticMsg: Message = {
+          id: `local_${Date.now()}`,
+          chat_jid: state.selectedChat.jid,
+          sender: 'me',
+          sender_name: 'You',
+          content: optimisticContent,
+          timestamp: new Date().toISOString(),
+          is_from_me: false,
+          is_bot_message: false,
+        };
+        setState((s) => ({ ...s, messages: [...s.messages, optimisticMsg] }));
+
+        // Transcribe the audio
+        const result = await apiService.sendAudio(state.selectedChat.jid, audioFile);
+        
+        // Remove optimistic message
+        setState((s) => ({
+          ...s,
+          messages: s.messages.filter(m => m.id !== optimisticMsg.id),
+        }));
+
+        // If user provided text, send combined message
+        if (userText) {
+          const combinedMessage = `${userText}\n\n[Audio transcrit: "${result.transcribedText}"]`;
+          await sendMessage(combinedMessage);
+        }
+        // Otherwise the transcribed text was already sent by the API
+      } catch (err) {
+        console.error('Failed to transcribe audio:', err);
+        await sendMessage(`[Audio transcription failed: ${err instanceof Error ? err.message : 'Unknown error'}]`);
+      }
+      return;
+    }
+
     const outgoingText = hasText
       ? inputValue
       : `Sent with attachments (${attachments.length} file${attachments.length > 1 ? 's' : ''})`;
 
-    await sendMessage(outgoingText);
+    const currentAttachments = [...attachments];
+    await sendMessage(outgoingText, currentAttachments);
     setInputValue('');
     setTextareaRows(2);
     setAttachments([]);
@@ -649,10 +786,61 @@ function App() {
       const hasText = Boolean(inputValue.trim());
       const hasAttachments = attachments.length > 0;
       if (!hasText && !hasAttachments) return;
+
+      // Check if there's an audio file attachment
+      const audioFile = attachments.find(f => f.type.startsWith('audio/'));
+      
+      if (audioFile) {
+        // Transcribe audio and combine with text if present
+        try {
+          if (!state.selectedChat) return;
+          
+          const userText = inputValue.trim();
+          setInputValue('');
+          setTextareaRows(2);
+          setAttachments([]);
+
+          // Show optimistic message with user's text if any
+          const optimisticContent = userText || '[Transcribing audio...]';
+          const optimisticMsg: Message = {
+            id: `local_${Date.now()}`,
+            chat_jid: state.selectedChat.jid,
+            sender: 'me',
+            sender_name: 'You',
+            content: optimisticContent,
+            timestamp: new Date().toISOString(),
+            is_from_me: false,
+            is_bot_message: false,
+          };
+          setState((s) => ({ ...s, messages: [...s.messages, optimisticMsg] }));
+
+          // Transcribe the audio
+          const result = await apiService.sendAudio(state.selectedChat.jid, audioFile);
+          
+          // Remove optimistic message
+          setState((s) => ({
+            ...s,
+            messages: s.messages.filter(m => m.id !== optimisticMsg.id),
+          }));
+
+          // If user provided text, send combined message
+          if (userText) {
+            const combinedMessage = `${userText}\n\n[Audio transcrit: "${result.transcribedText}"]`;
+            await sendMessage(combinedMessage);
+          }
+          // Otherwise the transcribed text was already sent by the API
+        } catch (err) {
+          console.error('Failed to transcribe audio:', err);
+          await sendMessage(`[Audio transcription failed: ${err instanceof Error ? err.message : 'Unknown error'}]`);
+        }
+        return;
+      }
+
       const outgoingText = hasText
         ? inputValue
         : `Sent with attachments (${attachments.length} file${attachments.length > 1 ? 's' : ''})`;
-      await sendMessage(outgoingText);
+      const currentAttachments = [...attachments];
+      await sendMessage(outgoingText, currentAttachments);
       setInputValue('');
       setTextareaRows(2);
       setAttachments([]);
@@ -731,26 +919,28 @@ function App() {
                         }`}`}
                   >
                     {isAssistant && (
-                      <div className="mb-2 flex flex-col gap-0.5">
-                        <div className="flex items-center gap-1.5 text-xs text-emerald-400">
-                          <Bot className="h-3.5 w-3.5" />
-                          <span className="font-medium uppercase tracking-wider">{msg.sender_name || 'Assistant'}</span>
-                        </div>
-                        {msg.metadata && (msg.metadata.agent || msg.metadata.modelID) && (
-                          <div className="ml-5 flex items-center gap-1.5 text-[10px] text-zinc-500">
-                            {msg.metadata.agent && (
-                              <span className="rounded bg-zinc-700/50 px-1.5 py-0.5 font-medium text-zinc-400">{msg.metadata.agent}</span>
-                            )}
-                            {msg.metadata.modelID && (
-                              <span className="truncate">{msg.metadata.modelID}</span>
-                            )}
-                            {msg.metadata.tokens && (
-                              <span className="text-zinc-600">
-                                {(msg.metadata.tokens.total || (msg.metadata.tokens.input + msg.metadata.tokens.output)).toLocaleString()}tok
-                              </span>
-                            )}
+                      <div className="mb-2">
+                        <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-1.5 text-xs text-emerald-400">
+                            <Bot className="h-3.5 w-3.5" />
+                            <span className="font-medium uppercase tracking-wider">{msg.sender_name || 'Assistant'}</span>
                           </div>
-                        )}
+                          {msg.metadata && (msg.metadata.agent || msg.metadata.modelID || msg.metadata.tokens) && (
+                            <div className="flex items-center gap-1.5 text-[10px]">
+                              {msg.metadata.agent && (
+                                <span className={`rounded px-1.5 py-0.5 font-medium ${isDark ? 'bg-zinc-700/50 text-zinc-400' : 'bg-zinc-200 text-zinc-700'}`}>{msg.metadata.agent}</span>
+                              )}
+                              {msg.metadata.modelID && (
+                                <span className={`truncate ${isDark ? 'text-zinc-500' : 'text-zinc-600'}`}>{msg.metadata.modelID}</span>
+                              )}
+                              {msg.metadata.tokens && (
+                                <span className={isDark ? 'text-zinc-600' : 'text-zinc-500'}>
+                                  {(msg.metadata.tokens.total || (msg.metadata.tokens.input + msg.metadata.tokens.output)).toLocaleString()} tokens
+                                </span>
+                              )}
+                            </div>
+                          )}
+                        </div>
                       </div>
                     )}
 
@@ -791,7 +981,30 @@ function App() {
                       </details>
                     )}
 
-                    <div className={`break-words text-[15px] leading-relaxed [&_a]:cursor-pointer [&_a]:text-emerald-300 [&_a]:underline [&_a]:underline-offset-2 [&_a:hover]:text-emerald-200 [&_code]:rounded [&_code]:bg-black/30 [&_code]:px-1.5 [&_code]:py-0.5 [&_ol]:my-2 [&_ol]:list-inside [&_ol]:list-decimal [&_ol]:pl-1 [&_p]:mb-2 [&_p:last-child]:mb-0 [&_pre]:my-2 [&_pre]:overflow-x-auto [&_pre]:rounded-lg [&_pre]:bg-black/30 [&_pre]:p-3 [&_ul]:my-2 [&_ul]:list-inside [&_ul]:list-disc [&_ul]:pl-1 [&_li]:my-0.5 ${isDark ? 'text-zinc-300' : 'text-zinc-800'}`}>
+                    {msg.attachments && msg.attachments.length > 0 && (
+                      <div className="mb-2 flex flex-wrap gap-1.5">
+                        {msg.attachments.map((attachment, idx) => {
+                          const { icon: Icon, color, label } = getFileIcon(attachment.type);
+                          return (
+                            <span
+                              key={`${attachment.name}-${idx}`}
+                              className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 ${isDark ? 'border-zinc-700 bg-zinc-900/50' : 'border-zinc-300 bg-zinc-50'}`}
+                            >
+                              <Icon className={`h-3.5 w-3.5 shrink-0 ${color}`} />
+                              <span className={`text-[10px] font-medium ${color}`}>{label}</span>
+                              <span className={`max-w-32 truncate text-[11px] ${isDark ? 'text-zinc-400' : 'text-zinc-600'}`}>
+                                {attachment.name}
+                              </span>
+                              <span className={`text-[9px] ${isDark ? 'text-zinc-600' : 'text-zinc-500'}`}>
+                                {formatFileSize(attachment.size)}
+                              </span>
+                            </span>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    <div className={`break-words text-[15px] leading-relaxed [&_a]:cursor-pointer [&_a]:text-emerald-300 [&_a]:underline [&_a]:underline-offset-2 [&_a:hover]:text-emerald-200 [&_code]:rounded [&_code]:px-1.5 [&_code]:py-0.5 [&_ol]:my-2 [&_ol]:list-inside [&_ol]:list-decimal [&_ol]:pl-1 [&_p]:mb-2 [&_p:last-child]:mb-0 [&_pre]:my-2 [&_pre]:overflow-x-auto [&_pre]:rounded-lg [&_pre]:p-3 [&_ul]:my-2 [&_ul]:list-inside [&_ul]:list-disc [&_ul]:pl-1 [&_li]:my-0.5 ${isDark ? 'text-zinc-300 [&_code]:bg-black/30 [&_pre]:bg-black/30' : 'text-zinc-800 [&_code]:bg-zinc-200 [&_pre]:bg-zinc-200'}`}>
                       <ReactMarkdown
                         remarkPlugins={[remarkGfm]}
                         components={{
@@ -1129,6 +1342,19 @@ function App() {
               </button>
             )}
 
+            {rejectedFiles.length > 0 && (
+              <div
+                className={`absolute left-1/2 top-4 z-30 -translate-x-1/2 rounded-lg border px-4 py-2.5 shadow-xl ${isDark ? 'border-rose-700 bg-rose-900/90 text-rose-200' : 'border-rose-300 bg-rose-100 text-rose-800'}`}
+              >
+                <div className="flex items-center gap-2">
+                  <X className="h-4 w-4" />
+                  <span className="text-sm font-medium">
+                    Fichier(s) non autorisé(s): {rejectedFiles.join(', ')}
+                  </span>
+                </div>
+              </div>
+            )}
+
             <form
               ref={composerRef}
               className="px-3 py-3 md:px-6"
@@ -1170,29 +1396,40 @@ function App() {
                   )}
 
                   {attachments.length > 0 && (
-                    <div className="mb-2 flex flex-wrap gap-2 px-2">
-                      {attachments.map((file) => (
-                        <span
-                          key={`${file.name}-${file.lastModified}`}
-                          className={`inline-flex items-center gap-1 rounded-full border px-2 py-1 text-xs ${isDark ? 'border-zinc-600 bg-zinc-800 text-zinc-300' : 'border-zinc-300 bg-zinc-100 text-zinc-700'}`}
-                        >
-                          <span className="max-w-44 truncate">{file.name}</span>
-                          <button
-                            type="button"
-                            className="text-zinc-400 hover:text-rose-400"
-                            onClick={() => {
-                              setAttachments((prev) =>
-                                prev.filter(
-                                  (f) =>
-                                    !(f.name === file.name && f.lastModified === file.lastModified),
-                                ),
-                              );
-                            }}
+                    <div className="mb-2 flex flex-wrap gap-1.5 px-2">
+                      {attachments.map((file) => {
+                        const { icon: Icon, color, label } = getFileIcon(file.type);
+                        return (
+                          <span
+                            key={`${file.name}-${file.lastModified}`}
+                            className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 ${isDark ? 'border-zinc-700 bg-zinc-800/50' : 'border-zinc-300 bg-zinc-100'}`}
                           >
-                            ×
-                          </button>
-                        </span>
-                      ))}
+                            <Icon className={`h-4 w-4 shrink-0 ${color}`} />
+                            <span className={`text-[11px] font-medium ${color}`}>{label}</span>
+                            <span className={`max-w-32 truncate text-xs mb-1 ${isDark ? 'text-zinc-300' : 'text-zinc-700'}`}>
+                              {file.name}
+                            </span>
+                            <span className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-zinc-400'}`}>
+                              {formatFileSize(file.size)}
+                            </span>
+                            <button
+                              type="button"
+                              className="shrink-0 cursor-pointer text-zinc-400 transition hover:text-rose-400"
+                              onClick={() => {
+                                setAttachments((prev) =>
+                                  prev.filter(
+                                    (f) =>
+                                      !(f.name === file.name && f.lastModified === file.lastModified),
+                                  ),
+                                );
+                              }}
+                              title="Remove"
+                            >
+                              <X className="h-3.5 w-3.5" />
+                            </button>
+                          </span>
+                        );
+                      })}
                     </div>
                   )}
 
@@ -1204,7 +1441,7 @@ function App() {
                     onKeyDown={(e) => {
                       void handleInputKeyDown(e);
                     }}
-                    placeholder="Écris un message… (Shift+Entrée pour sauter une ligne)"
+                    placeholder="Write a message… (Shift+Enter to start a new line)"
                     disabled={!state.connected}
                     rows={textareaRows}
                     className={`w-full resize-none border-0 bg-transparent px-2 py-1 text-sm outline-none placeholder:text-zinc-500 disabled:cursor-not-allowed disabled:opacity-50 ${isDark ? 'text-zinc-100' : 'text-zinc-900'}`}
@@ -1238,7 +1475,7 @@ function App() {
                               className={`flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm transition ${isDark ? 'text-zinc-200 hover:bg-zinc-800' : 'text-zinc-700 hover:bg-zinc-100'}`}
                             >
                               <ImageIcon className="h-4 w-4" />
-                              Add photos or files
+                              Add photos, audio or documents
                             </button>
                           </div>
                         )}
