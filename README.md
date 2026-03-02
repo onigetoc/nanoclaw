@@ -12,8 +12,6 @@
   <a href="repo-tokens"><img src="repo-tokens/badge.svg" alt="34.9k tokens, 17% of context window" valign="middle"></a>
 </p>
 
-**New:** First AI assistant to support Agent Swarms. Spin up teams of agents that collaborate in your chat.
-
 ## How It Works
 
 EureClaw is a partnership between two components:
