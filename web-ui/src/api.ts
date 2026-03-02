@@ -199,6 +199,56 @@ class ApiService {
     return result;
   }
 
+  async uploadFiles(
+    chatJid: string,
+    files: File[],
+  ): Promise<{ success: boolean; files: Array<{ name: string; path: string }> }> {
+    const token = this.getToken();
+    if (!token) throw new Error('Not authenticated');
+
+    const formData = new FormData();
+    for (const file of files) {
+      formData.append('files', file);
+    }
+
+    const response = await fetch(`${API_BASE}/chats/${encodeURIComponent(chatJid)}/upload`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token}` },
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ error: 'Upload failed' }));
+      throw new Error(error.error || `HTTP ${response.status}`);
+    }
+
+    return response.json();
+  }
+
+  async analyzeMedia(
+    chatJid: string,
+    file: File,
+  ): Promise<{ success: boolean; type: string; description: string }> {
+    const token = this.getToken();
+    if (!token) throw new Error('Not authenticated');
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const response = await fetch(`${API_BASE}/chats/${encodeURIComponent(chatJid)}/analyze`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token}` },
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ error: 'Analysis failed' }));
+      throw new Error(error.error || `HTTP ${response.status}`);
+    }
+
+    return response.json();
+  }
+
   async sendAudio(
     chatJid: string,
     audioFile: File,

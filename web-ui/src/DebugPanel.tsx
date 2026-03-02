@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react';
-import { X, Bug, Cpu, Coins, Layers, Zap, Hash, Clock } from 'lucide-react';
-import type { Message, MessageMetadata } from './api';
+import { X, Bug, Cpu, Coins, Layers, Zap, Hash, Clock, Radio } from 'lucide-react';
+import { apiService, type Message, type MessageMetadata } from './api';
 
 interface DebugPanelProps {
   messages: Message[];
   onClose: () => void;
   isDark: boolean;
+  chatFolder?: string | null;
 }
 
 interface MetadataRowProps {
@@ -95,13 +96,31 @@ function MetadataCard({ metadata, timestamp, isDark }: { metadata: MessageMetada
   );
 }
 
-export default function DebugPanel({ messages, onClose, isDark }: DebugPanelProps) {
+export default function DebugPanel({ messages, onClose, isDark, chatFolder }: DebugPanelProps) {
   const [lastRefreshedAt, setLastRefreshedAt] = useState<Date>(new Date());
+  const [sessionId, setSessionId] = useState<string | null>(null);
 
   // Update timestamp whenever messages change
   useEffect(() => {
     setLastRefreshedAt(new Date());
   }, [messages]);
+
+  // Poll sessions every 5s to get live session ID
+  useEffect(() => {
+    if (!chatFolder) { setSessionId(null); return; }
+
+    let cancelled = false;
+    const fetchSession = async () => {
+      try {
+        const sessions = await apiService.getSessions();
+        if (!cancelled) setSessionId(sessions[chatFolder] ?? null);
+      } catch { /* ignore */ }
+    };
+
+    void fetchSession();
+    const interval = setInterval(fetchSession, 5000);
+    return () => { cancelled = true; clearInterval(interval); };
+  }, [chatFolder]);
 
   // Only show bot messages with metadata
   const botMessages = messages.filter((m) => m.is_bot_message && m.metadata);
@@ -137,6 +156,19 @@ export default function DebugPanel({ messages, onClose, isDark }: DebugPanelProp
         >
           <X className="h-3.5 w-3.5" />
         </button>
+      </div>
+
+      {/* Live Session ID */}
+      <div className={`flex items-center gap-2.5 border-b px-4 py-2.5 ${isDark ? 'border-zinc-800' : 'border-zinc-200'}`}>
+        <Radio className={`h-3.5 w-3.5 shrink-0 ${sessionId ? (isDark ? 'text-emerald-400' : 'text-emerald-600') : (isDark ? 'text-zinc-600' : 'text-zinc-400')}`} />
+        <div className="min-w-0 flex-1">
+          <div className={`text-[10px] font-medium uppercase tracking-wider ${isDark ? 'text-zinc-500' : 'text-zinc-400'}`}>
+            Session
+          </div>
+          <div className={`mt-0.5 truncate font-mono text-xs ${sessionId ? (isDark ? 'text-emerald-300' : 'text-emerald-700') : (isDark ? 'text-zinc-600' : 'text-zinc-400')}`} title={sessionId ?? undefined}>
+            {sessionId ?? 'No active session'}
+          </div>
+        </div>
       </div>
 
       {/* Aggregate stats bar */}

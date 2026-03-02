@@ -12,6 +12,7 @@ import Fastify, { FastifyRequest, FastifyReply } from 'fastify';
 import cors from '@fastify/cors';
 import crypto from 'crypto';
 import fs from 'fs';
+import path from 'path';
 import { logger } from './logger.js';
 import { getAllChats, getMessagesSince, getAllMessagesSinceLinked, getMessagesPage, getLinkedChatJids, storeMessageDirect, storeChatMetadata, setRegisteredGroup, insertApiToken, getAllApiTokens, updateApiTokenLastUsed, deactivateApiToken, getApiTokenChatMappings, addApiTokenChat, deleteApiTokenChats } from './db.js';
 import { getRegisteredGroups, reloadRegisteredGroups, getSessions } from './state.js';
@@ -21,6 +22,7 @@ import { registerGroup } from './group-manager.js';
 import { executeCommand } from './commands/index.js';
 import { handleCommandSideEffects } from './commands/command-effects.js';
 import { getTranscriptionManager, isAudioTranscriptionAvailable } from './media/audio-manager.js';
+import { analyzeImage, isVisionEnabled } from './vision.js';
 
 const API_PORT = parseInt(process.env.API_PORT || '4300', 10);
 
@@ -438,6 +440,118 @@ fastify.post(
     reply
       .code(201)
       .send({ success: true, messageId, timestamp: message.timestamp });
+  },
+);
+
+/**
+ * Image/media analysis endpoint — same pipeline as Telegram photos.
+ * Runs vision (Gemini/OpenAI) on uploaded images and returns the description.
+ * For audio files, runs transcription (same as Telegram voice messages).
+ */
+fastify.post(
+  '/chats/:jid/analyze',
+  { preHandler: authenticate },
+  async (request: FastifyRequest, reply: FastifyReply) => {
+    const params = request.params as Record<string, string>;
+    const rawJid = params.jid;
+    const useWebChannel = rawJid.startsWith('web:');
+    const jid = useWebChannel ? rawJid : `web:${rawJid}`;
+
+    try {
+      const data = await request.file();
+      if (!data) {
+        reply.code(400).send({ error: 'No file provided' });
+        return;
+      }
+
+      const buffer = await data.toBuffer();
+      const mimeType = data.mimetype || 'application/octet-stream';
+      const fileName = data.filename || 'file';
+
+      // Image → vision analysis (same as Telegram message:photo handler)
+      if (mimeType.startsWith('image/')) {
+        if (!isVisionEnabled()) {
+          reply.code(200).send({ success: true, type: 'image', description: '[Photo - vision unavailable]' });
+          return;
+        }
+        const description = await analyzeImage(buffer, mimeType);
+        const result = description ? description.trim() : 'Image received but analysis failed';
+        logger.info({ jid, fileName, descLength: result.length }, 'Web UI image analyzed via vision');
+        reply.code(200).send({ success: true, type: 'image', description: result });
+        return;
+      }
+
+      // Audio → transcription (same as Telegram voice handler)
+      if (mimeType.startsWith('audio/')) {
+        if (!isAudioTranscriptionAvailable()) {
+          reply.code(200).send({ success: true, type: 'audio', description: '[Audio - transcription unavailable]' });
+          return;
+        }
+        const manager = getTranscriptionManager();
+        const transcription = await manager!.transcribe(buffer, fileName, undefined);
+        const text = transcription?.text?.trim() || 'Audio received but transcription failed';
+        logger.info({ jid, fileName, textLength: text.length }, 'Web UI audio transcribed');
+        reply.code(200).send({ success: true, type: 'audio', description: text });
+        return;
+      }
+
+      // Other file types — no analysis available
+      reply.code(200).send({ success: true, type: 'file', description: `[File: ${fileName}]` });
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      logger.error({ err: errMsg, stack: err instanceof Error ? err.stack : undefined }, 'Media analysis failed');
+      reply.code(500).send({ error: `Media analysis failed: ${errMsg}` });
+    }
+  },
+);
+
+/**
+ * File transfer endpoint — saves files to groups/{folder}/uploads/
+ * Returns relative paths. Does NOT analyze content.
+ */
+fastify.post(
+  '/chats/:jid/upload',
+  { preHandler: authenticate },
+  async (request: FastifyRequest, reply: FastifyReply) => {
+    const params = request.params as Record<string, string>;
+    const rawJid = params.jid;
+    const useWebChannel = rawJid.startsWith('web:');
+    const jid = useWebChannel ? rawJid : `web:${rawJid}`;
+
+    const registeredGroups = getRegisteredGroups();
+    const group = registeredGroups[jid];
+    if (!group?.folder) {
+      reply.code(404).send({ error: 'Group not found for this chat' });
+      return;
+    }
+
+    try {
+      const parts = request.parts();
+      const savedFiles: Array<{ name: string; path: string }> = [];
+
+      for await (const part of parts) {
+        if (part.type !== 'file') continue;
+        const uploadsDir = path.join(GROUPS_DIR, group.folder, 'uploads');
+        fs.mkdirSync(uploadsDir, { recursive: true });
+        const safeName = `${Date.now()}-${part.filename.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
+        const filePath = path.join(uploadsDir, safeName);
+        const fileBuffer = await part.toBuffer();
+        fs.writeFileSync(filePath, fileBuffer);
+        const relativePath = path.relative(process.cwd(), filePath).replace(/\\/g, '/');
+        savedFiles.push({ name: part.filename, path: relativePath });
+        logger.info({ filePath: relativePath, originalName: part.filename, size: fileBuffer.length }, 'File transferred to group');
+      }
+
+      if (savedFiles.length === 0) {
+        reply.code(400).send({ error: 'No files provided' });
+        return;
+      }
+
+      reply.code(200).send({ success: true, files: savedFiles });
+    } catch (err) {
+      logger.error({ err }, 'File transfer failed');
+      reply.code(500).send({ error: 'File transfer failed' });
+    }
   },
 );
 

@@ -50,6 +50,8 @@ import {
   getRegisteredGroups,
   getSessions,
   reloadRegisteredGroups,
+  setLastAgentTimestampForJid,
+  saveState,
 } from './state.js';
 import {
   registerGroup,
@@ -426,6 +428,11 @@ export async function main(): Promise<void> {
           is_from_me: false,
           is_bot_message: false,
         });
+
+        // Advance the per-JID agent cursor past this command message so the
+        // message-loop doesn't pick it up and forward it to the agent.
+        setLastAgentTimestampForJid(chatJid, msg.timestamp);
+        saveState();
 
         // Handle side effects (e.g. /new session creation) — shared across all channels
         await handleCommandSideEffects(commandResult, chatJid, group);
