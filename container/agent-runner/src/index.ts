@@ -26,6 +26,7 @@ interface ContainerInput {
   chatJid: string;
   isMain: boolean;
   isScheduledTask?: boolean;
+  forceNewSession?: boolean; // Skip loading conversation history from SQLite
   secrets?: Record<string, string>;
   // Direct mode (Windows/Linux): real paths instead of container mount points
   directMode?: {
@@ -669,7 +670,11 @@ async function runQuery(
   // Load recent conversation history from SQLite (last 10 messages)
   // Note: OpenCode sessions maintain full conversation memory automatically.
   // These messages serve as initial context for new sessions or after crashes.
+  // Skip when forceNewSession is true (user used /new command)
   let conversationContext: string | undefined;
+  if (containerInput.forceNewSession) {
+    log('Skipping conversation history (forceNewSession=true)');
+  } else {
   try {
     // Import better-sqlite3 dynamically to access the database
     const Database = (await import('better-sqlite3')).default;
@@ -714,6 +719,7 @@ async function runQuery(
     log(`Failed to load conversation history: ${err instanceof Error ? err.message : String(err)}`);
     // Non-critical - continue without conversation history
   }
+  } // end forceNewSession else
 
   // Generate platform-aware environment context for the agent.
   // This replaces hardcoded /workspace/ paths in AGENTS.md files,

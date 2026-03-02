@@ -40,6 +40,7 @@ export interface ContainerInput {
   chatJid: string;
   isMain: boolean;
   isScheduledTask?: boolean;
+  forceNewSession?: boolean; // Skip loading conversation history from SQLite
   secrets?: Record<string, string>;
   // Direct mode (Windows/Linux): real paths instead of container mount points
   directMode?: {

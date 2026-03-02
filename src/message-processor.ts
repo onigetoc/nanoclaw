@@ -240,7 +240,13 @@ async function runAgent(
   const wrappedOnOutput = onOutput
     ? async (output: ContainerOutput) => {
         if (output.newSessionId) {
-          setGroupSession(group.folder, output.newSessionId);
+          // Only update session if it wasn't changed externally (e.g. by /new).
+          // The agent-runner reports back the session it used, but if /new already
+          // set a different session ID in state, we must not overwrite it.
+          const currentInState = getSessions()[group.folder];
+          if (!currentInState || currentInState === sessionId || currentInState === output.newSessionId) {
+            setGroupSession(group.folder, output.newSessionId);
+          }
         }
         await onOutput(output);
       }
@@ -256,13 +262,18 @@ async function runAgent(
         groupFolder: group.folder,
         chatJid,
         isMain,
+        forceNewSession: !sessionId, // Force new session when session ID is empty
       },
       (proc, containerName) => queue.registerProcess(chatJid, proc, containerName, group.folder),
       wrappedOnOutput,
     );
 
     if (output.newSessionId) {
-      setGroupSession(group.folder, output.newSessionId);
+      // Same guard: don't overwrite if /new changed the session externally
+      const currentInState = getSessions()[group.folder];
+      if (!currentInState || currentInState === sessionId || currentInState === output.newSessionId) {
+        setGroupSession(group.folder, output.newSessionId);
+      }
     }
 
     if (output.status === 'error') {

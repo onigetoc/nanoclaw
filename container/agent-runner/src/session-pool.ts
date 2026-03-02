@@ -5,11 +5,11 @@
  * Instead of creating a new session for each message (500ms), reuse existing ones (50ms).
  */
 
-import Opencode from '@opencode-ai/sdk';
+import { createOpencodeClient } from '@opencode-ai/sdk';
 
 interface PooledSession {
   id: string;
-  client: Opencode;
+  client: any; // OpenCode client instance
   createdAt: number;
   lastUsed: number;
   useCount: number;
@@ -43,7 +43,7 @@ export class SessionPool {
   /**
    * Get or create a session
    */
-  async acquire(client: Opencode): Promise<string> {
+  async acquire(client: any): Promise<string> {
     // Try to find an available session
     for (const [id, session] of this.pool.entries()) {
       if (!session.inUse && this.isSessionHealthy(session)) {

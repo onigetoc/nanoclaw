@@ -12,7 +12,6 @@ import Fastify, { FastifyRequest, FastifyReply } from 'fastify';
 import cors from '@fastify/cors';
 import crypto from 'crypto';
 import fs from 'fs';
-import path from 'path';
 import { logger } from './logger.js';
 import { getAllChats, getMessagesSince, getAllMessagesSinceLinked, getMessagesPage, getLinkedChatJids, storeMessageDirect, storeChatMetadata, setRegisteredGroup, insertApiToken, getAllApiTokens, updateApiTokenLastUsed, deactivateApiToken, getApiTokenChatMappings, addApiTokenChat, deleteApiTokenChats } from './db.js';
 import { getRegisteredGroups, reloadRegisteredGroups, getSessions } from './state.js';
@@ -20,6 +19,7 @@ import { ASSISTANT_NAME, GROUPS_DIR, TRIGGER_PATTERN } from './config.js';
 import { NewMessage, RegisteredGroup } from './types.js';
 import { registerGroup } from './group-manager.js';
 import { executeCommand } from './commands/index.js';
+import { handleCommandSideEffects } from './commands/command-effects.js';
 import { getTranscriptionManager, isAudioTranscriptionAvailable } from './media/audio-manager.js';
 
 const API_PORT = parseInt(process.env.API_PORT || '4300', 10);
@@ -340,6 +340,9 @@ fastify.post(
     });
 
     if (commandResult) {
+      // Handle side effects (e.g. /new session creation) — shared across all channels
+      await handleCommandSideEffects(commandResult, jid, group);
+
       // Store the command message itself so it appears in chat history
       const cmdMsgId = `web_${Date.now()}_${Math.random().toString(36).substring(7)}`;
       const cmdTimestamp = new Date().toISOString();
@@ -718,7 +721,6 @@ export async function startApiServer(
   try {
     await fastify.listen({ port: API_PORT, host: '127.0.0.1' });
     logger.info({ port: API_PORT }, 'API server started');
-    console.log(`\n🌐 API Server: http://127.0.0.1:${API_PORT}\n`);
     return API_PORT;
   } catch (err) {
     logger.error({ err }, 'Failed to start API server');

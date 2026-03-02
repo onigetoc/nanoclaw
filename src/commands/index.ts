@@ -18,7 +18,7 @@ export interface CommandContext {
 export interface CommandResponse {
   reply?: string;
   action?: 'restart' | 'sleep' | 'awake' | 'none';
-  data?: any;
+  data?: any; // Can include OpenCode-specific data like { opencodeCommand: 'new', forceNewSession: true }
 }
 
 export type CommandHandler = (ctx: CommandContext) => Promise<CommandResponse>;

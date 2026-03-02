@@ -185,6 +185,8 @@ registerCommand('help', async (ctx: CommandContext): Promise<CommandResponse> =>
     '/sleep [duration] - Pause all activity\n' +
     '  Examples: /sleep 4h, /sleep 30m, /sleep 2d\n' +
     '/awake - Wake from sleep mode\n\n' +
+    '**Session:**\n' +
+    '/new - Start a new conversation session\n\n' +
     '**Info:**\n' +
     '/help - Show this help message\n' +
     '/chatid - Get chat registration ID (Telegram only)';

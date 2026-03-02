@@ -6,7 +6,7 @@ import os from 'os';
 import path from 'path';
 import fs from 'fs';
 
-import { ASSISTANT_NAME, TELEGRAM_ONLY } from './config.js';
+import { ASSISTANT_NAME, DATA_DIR, TELEGRAM_ONLY } from './config.js';
 import { readEnvFile } from './env.js';
 import { WhatsAppChannel } from './channels/whatsapp.js';
 import { TelegramChannel } from './channels/telegram.js';
@@ -28,13 +28,17 @@ import { logger } from './logger.js';
 import { attemptAutoRegistration } from './auto-registration.js';
 import {
   ensureServerHealthy,
+  getOpenCodePort,
+  getOpenCodeHost,
   startServer,
   startHealthChecks,
   stopServer,
 } from './opencode-server.js';
 import { scanAndGetApiKeys, logApiKeysReport } from './api-key-scanner.js';
 import { executeCommand } from './commands/index.js';
+import { handleCommandSideEffects } from './commands/command-effects.js';
 import './commands/builtin-commands.js';
+import './commands/opencode-commands.js';
 import {
   loadSleepState,
   isSleeping,
@@ -423,6 +427,9 @@ export async function main(): Promise<void> {
           is_bot_message: false,
         });
 
+        // Handle side effects (e.g. /new session creation) — shared across all channels
+        await handleCommandSideEffects(commandResult, chatJid, group);
+
         if (commandResult.reply) {
           const channel = findChannel(channels, chatJid);
           if (channel) {
@@ -457,6 +464,9 @@ export async function main(): Promise<void> {
             process.exit(0);
           }, 2000);
         }
+
+        // /new already killed the agent-runner and cleared the session.
+        // The next real user message will spawn a fresh agent-runner.
         return;
       }
 
@@ -501,8 +511,7 @@ export async function main(): Promise<void> {
     process.env.GOOGLE_API_KEY = secrets.GOOGLE_API_KEY;
   if (secrets.OPENAI_API_KEY)
     process.env.OPENAI_API_KEY = secrets.OPENAI_API_KEY;
-  if (secrets.GROQ_API_KEY)
-    process.env.GROQ_API_KEY = secrets.GROQ_API_KEY;
+  if (secrets.GROQ_API_KEY) process.env.GROQ_API_KEY = secrets.GROQ_API_KEY;
 
   // Create and connect channels
   // WebUI channel first - handles messages from OpenCode Web UI
@@ -521,8 +530,12 @@ export async function main(): Promise<void> {
         ),
       ]);
     } catch {
-      logger.warn('WhatsApp connection timed out or failed — continuing startup without WhatsApp');
-      console.log('⚠️  WhatsApp not connected (no credentials?) — will retry in background');
+      logger.warn(
+        'WhatsApp connection timed out or failed — continuing startup without WhatsApp',
+      );
+      console.log(
+        '⚠️  WhatsApp not connected (no credentials?) — will retry in background',
+      );
     }
   }
 

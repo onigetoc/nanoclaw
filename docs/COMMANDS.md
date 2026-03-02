@@ -1,71 +1,56 @@
-# EureClaw Slash Commands
+# EureClaw Commands
 
-Universal command system that works across all channels (WhatsApp, Telegram, future Web UI).
+EureClaw supports slash commands for controlling the bot and managing sessions.
 
-## Available Commands
+## System Commands
 
-### System Control
-
-#### `/restart`
-Restart EureClaw process.
+### `/restart`
+Restart the EureClaw service.
 
 **Usage:**
 ```
 /restart
 ```
 
-**Requirements:**
-- Only works in registered chats
-- Requires supervised mode (`npm run start:supervised`)
-
-**Example:**
+**Response:**
 ```
-User: /restart
-Bot: 🔄 Restarting EureClaw...
-[Bot restarts automatically]
+🔄 Restarting EureClaw...
 ```
 
 ---
 
-#### `/status`
-Check bot status (awake or sleeping).
+### `/status`
+Check if the bot is awake or sleeping.
 
 **Usage:**
 ```
 /status
 ```
 
-**Example (awake):**
+**Response (when awake):**
 ```
-User: /status
-Bot: ✅ EureClaw is awake and ready!
+✅ Andy is awake and ready!
 
 Use /sleep to pause the bot.
 ```
 
-**Example (sleeping):**
+**Response (when sleeping):**
 ```
-User: /status
-Bot: 😴 EureClaw is sleeping
+😴💤 Andy is sleeping
 
-Started: 2/22/2026, 10:30:00 PM
-Duration: 2h 15m
-Wake time: 2/23/2026, 12:45:00 AM
-Remaining: 45m
+Started: Mar 2, 2026, 10:30 AM
+Duration: 2 hours 15 minutes
+Wake time: Mar 2, 2026, 12:45 PM
+Remaining: 30 minutes
 Requested by: Gino
 ```
 
 ---
 
-### Sleep Mode
+## Sleep Mode Commands
 
-Sleep mode pauses ALL bot activity:
-- Messages are ignored (except `/awake`)
-- Scheduled tasks (crons) are paused
-- Only slash commands work
-
-#### `/sleep [duration]`
-Put bot to sleep.
+### `/sleep [duration]`
+Put the bot to sleep. All messages will be ignored until awakened.
 
 **Usage:**
 ```
@@ -76,26 +61,15 @@ Put bot to sleep.
 /sleep 1h30m        # Sleep for 1 hour 30 minutes
 ```
 
-**Duration format:**
-- `d` = days
-- `h` = hours
+**Duration Format:**
 - `m` = minutes
-- `s` = seconds
+- `h` = hours
+- `d` = days
 - Can combine: `1h30m`, `2d12h`, etc.
 
-**Examples:**
+**Response:**
 ```
-User: /sleep 4h
-Bot: 😴 EureClaw is going to sleep for 4h.
-
-• All messages will be ignored
-• Scheduled tasks will be paused
-• Use /awake to wake up early
-```
-
-```
-User: /sleep
-Bot: 😴 EureClaw is going to sleep indefinitely (use /awake to wake up).
+😴💤 Andy is going to sleep for 4 hours.
 
 • All messages will be ignored
 • Scheduled tasks will be paused
@@ -104,28 +78,56 @@ Bot: 😴 EureClaw is going to sleep indefinitely (use /awake to wake up).
 
 ---
 
-#### `/awake`
-Wake bot from sleep mode.
+### `/awake`
+Wake the bot from sleep mode.
 
 **Usage:**
 ```
 /awake
 ```
 
-**Example:**
+**Response:**
 ```
-User: /awake
-Bot: ☀️ EureClaw is now awake!
+☀️ Andy is now awake!
 
-Slept for: 2h 15m
+Slept for: 2 hours 15 minutes
 Awakened by: Gino
 ```
 
 ---
 
-### Information
+## Session Commands
 
-#### `/help`
+### `/new`
+Create a new OpenCode session. This clears the conversation history and starts fresh.
+
+**Usage:**
+```
+/new
+```
+
+**Response:**
+```
+🆕 Starting a new session...
+```
+
+**What happens:**
+1. Current session ID is cleared
+2. Bot sends confirmation message
+3. Next message creates a fresh OpenCode session
+4. Conversation history is reset
+
+**Use cases:**
+- Starting a completely new topic
+- Clearing context after a long conversation
+- Resetting when the bot seems confused
+- Testing with a clean slate
+
+---
+
+## Help Command
+
+### `/help`
 Show available commands.
 
 **Usage:**
@@ -133,10 +135,9 @@ Show available commands.
 /help
 ```
 
-**Example:**
+**Response:**
 ```
-User: /help
-Bot: 🤖 EureClaw Commands
+🤖 Andy Commands
 
 **System Control:**
 /restart - Restart the bot
@@ -147,6 +148,9 @@ Bot: 🤖 EureClaw Commands
   Examples: /sleep 4h, /sleep 30m, /sleep 2d
 /awake - Wake from sleep mode
 
+**Session:**
+/new - Start a new conversation session
+
 **Info:**
 /help - Show this help message
 /chatid - Get chat registration ID (Telegram only)
@@ -154,149 +158,83 @@ Bot: 🤖 EureClaw Commands
 
 ---
 
-#### `/chatid` (Telegram only)
-Get chat ID for registration.
+## Command Behavior
 
-**Usage:**
-```
-/chatid
-```
+### EureClaw Commands
+These commands are handled directly by EureClaw:
+- `/restart`
+- `/sleep`
+- `/awake`
+- `/status`
+- `/help`
+- `/chatid`
 
-**Example:**
-```
-User: /chatid
-Bot: Chat ID: `tg:123456789`
-Name: Gino
-Type: private
-```
+They execute immediately and don't interact with OpenCode.
+
+### OpenCode Commands
+These commands interact with the OpenCode SDK:
+- `/new` - Creates a new session
+
+They set flags and continue processing, allowing the agent to handle them.
+
+### Unknown Commands
+Commands that don't match any registered command are ignored. The message is treated as regular text and sent to the agent.
 
 ---
 
-## Implementation Details
+## Technical Details
 
-### Architecture
+### Command Format
+- Commands must start with `/`
+- Command name is case-insensitive
+- Arguments are space-separated
+- Example: `/sleep 4h` → command: `sleep`, args: `['4h']`
 
-Commands are handled by a universal system in `src/commands/`:
-
-```
-src/commands/
-├── index.ts              # Command registry and executor
-├── sleep-manager.ts      # Sleep state management
-└── builtin-commands.ts   # Built-in command handlers
-```
-
-### Command Flow
-
-1. Message arrives from any channel (WhatsApp, Telegram, etc.)
-2. `src/index.ts` checks if message starts with `/`
-3. If yes, `executeCommand()` is called
-4. Command handler executes and returns response
-5. Response is sent back through the same channel
-6. Message is NOT stored in DB or processed further
+### Command Registration
+Commands are registered in:
+- `src/commands/builtin-commands.ts` - System and sleep commands
+- `src/commands/opencode-commands.ts` - OpenCode session commands
 
 ### Adding New Commands
-
-```typescript
-// src/commands/my-commands.ts
-import { registerCommand } from './index.js';
-
-registerCommand('mycommand', async (ctx) => {
-  // ctx.chatJid - Chat identifier
-  // ctx.senderName - Sender's name
-  // ctx.senderId - Sender's ID
-  // ctx.group - RegisteredGroup (if registered)
-  // ctx.args - Command arguments
-  // ctx.rawMessage - Full message text
-
-  return {
-    reply: 'Command executed!',
-    action: 'none', // or 'restart', 'sleep', 'awake'
-    data: { /* optional data */ }
-  };
-});
-```
-
-Then import in `src/index.ts`:
-```typescript
-import './commands/my-commands.js';
-```
-
-### Sleep State Persistence
-
-Sleep state is stored in `data/sleep-state.json`:
-
-```json
-{
-  "isSleeping": true,
-  "sleepStartTime": "2026-02-22T22:30:00.000Z",
-  "sleepDuration": 14400000,
-  "sleepUntil": "2026-02-23T02:30:00.000Z",
-  "sleepRequestedBy": "Gino",
-  "sleepRequestedFrom": "tg:123456789"
-}
-```
-
-This ensures sleep mode persists across restarts.
+See `dev-notes/decisions.md` for implementation details.
 
 ---
 
-## Use Cases
+## Examples
 
-### Night Mode
+### Typical Workflow
+
 ```
-# Before bed
-/sleep 8h
+User: /status
+Bot: ✅ Andy is awake and ready!
 
-# Bot ignores all messages and crons for 8 hours
-# Auto-wakes in the morning
-```
+User: /new
+Bot: 🆕 Starting a new session...
 
-### Maintenance Window
-```
-# Before deploying updates
-/sleep
+User: Hello! Can you help me with a project?
+Bot: [Fresh conversation starts]
 
-# Do maintenance work
-# When done:
-/awake
-```
+User: /sleep 2h
+Bot: 😴💤 Andy is going to sleep for 2 hours...
 
-### Vacation Mode
-```
-# Going away for a week
-/sleep 7d
+[2 hours later]
 
-# Bot pauses all activity
-# Auto-wakes when you're back
+User: /awake
+Bot: ☀️ Andy is now awake!
+     Slept for: 2 hours 0 minutes
+     Awakened by: Gino
 ```
 
-### Emergency Pause
+### Error Handling
+
 ```
-# Something's wrong, pause everything
-/sleep
+User: /sleep invalid
+Bot: ❌ Invalid duration format.
 
-# Fix the issue
-# Resume when ready:
-/awake
+     Examples:
+       /sleep 4h       - Sleep for 4 hours
+       /sleep 30m      - Sleep for 30 minutes
+       /sleep 2d       - Sleep for 2 days
+       /sleep 1h30m    - Sleep for 1 hour 30 minutes
+       /sleep          - Sleep indefinitely
 ```
-
----
-
-## Security
-
-- Commands only work in registered chats
-- Sleep state is tamper-proof (stored outside container)
-- Only `/awake` and `/status` work during sleep mode
-- All command executions are logged
-
----
-
-## Future Commands
-
-Planned commands for future releases:
-
-- `/model [name]` - Switch AI model
-- `/logs [count]` - Show recent logs
-- `/tasks` - List scheduled tasks
-- `/groups` - List registered groups
-- `/stats` - Show usage statistics
