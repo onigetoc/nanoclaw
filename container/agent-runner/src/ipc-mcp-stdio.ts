@@ -975,6 +975,110 @@ server.tool(
   }
 );
 
+// --- Conversation Memory Tools ---
+
+/**
+ * Get the SQLite database path.
+ * In direct mode: {PROJECT_DIR}/store/messages.db
+ * In container mode: /workspace/project/store/messages.db
+ */
+function getDbPath(): string {
+  const projectDir = process.env.PROJECT_DIR || '/workspace/project';
+  return path.join(projectDir, 'store', 'messages.db');
+}
+
+server.tool(
+  'search_conversations',
+  `Search your conversation history in the SQLite database. Use this when:
+- The user asks "what did we talk about?", "remember when...", "what was that thing..."
+- You need context from previous conversations
+- You want to recall a decision, idea, or instruction from the user
+Returns messages matching the query, ordered by most recent first.`,
+  {
+    query: z.string().optional().describe('Search term to filter messages (searches in content). Leave empty to get recent messages.'),
+    limit: z.number().optional().describe('Max number of messages to return (default: 20, max: 50)'),
+    hours_ago: z.number().optional().describe('Only return messages from the last N hours (e.g. 24 for last day)'),
+    sender: z.string().optional().describe('Filter by sender name (e.g. "Gino", "Andy")'),
+  },
+  async (args) => {
+    const dbPath = getDbPath();
+    if (!fs.existsSync(dbPath)) {
+      return {
+        content: [{ type: 'text' as const, text: 'No conversation database found.' }],
+        isError: true,
+      };
+    }
+
+    try {
+      const Database = (await import('better-sqlite3')).default;
+      const db = new Database(dbPath, { readonly: true });
+
+      const limit = Math.min(args.limit || 20, 50);
+      const conditions: string[] = [`chat_jid = ?`];
+      const params: any[] = [chatJid];
+
+      if (args.query) {
+        conditions.push(`content LIKE ?`);
+        params.push(`%${args.query}%`);
+      }
+
+      if (args.hours_ago) {
+        const since = new Date(Date.now() - args.hours_ago * 3600000).toISOString();
+        conditions.push(`timestamp > ?`);
+        params.push(since);
+      }
+
+      if (args.sender) {
+        conditions.push(`sender_name LIKE ?`);
+        params.push(`%${args.sender}%`);
+      }
+
+      const where = conditions.join(' AND ');
+      const rows = db.prepare(
+        `SELECT sender_name, content, timestamp, is_bot_message
+         FROM messages
+         WHERE ${where}
+         ORDER BY timestamp DESC
+         LIMIT ?`
+      ).all(...params, limit) as Array<{
+        sender_name: string;
+        content: string;
+        timestamp: string;
+        is_bot_message: number;
+      }>;
+
+      db.close();
+
+      if (rows.length === 0) {
+        return {
+          content: [{ type: 'text' as const, text: 'No messages found matching your criteria.' }],
+        };
+      }
+
+      // Reverse to chronological order
+      rows.reverse();
+
+      const formatted = rows.map(msg => {
+        const date = new Date(msg.timestamp);
+        const timeStr = date.toLocaleString('fr-FR', {
+          month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
+        });
+        const role = msg.is_bot_message ? '🤖' : '👤';
+        return `${role} [${timeStr}] ${msg.sender_name}: ${msg.content}`;
+      }).join('\n\n');
+
+      return {
+        content: [{ type: 'text' as const, text: `Found ${rows.length} message(s):\n\n${formatted}` }],
+      };
+    } catch (err) {
+      return {
+        content: [{ type: 'text' as const, text: `Error searching conversations: ${err instanceof Error ? err.message : String(err)}` }],
+        isError: true,
+      };
+    }
+  }
+);
+
 // Start the stdio transport
 const transport = new StdioServerTransport();
 await server.connect(transport);

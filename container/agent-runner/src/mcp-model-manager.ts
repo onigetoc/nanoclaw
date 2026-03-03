@@ -39,9 +39,9 @@ export function getCurrentModelConfig(): ModelConfig {
     // Return sensible defaults if file doesn't exist
     return {
       model: 'opencode/minimax-m2.5-free',
-      small_model: 'opencode/minimax-m2.5-free',
-      vision_model: 'opencode/minimax-m2.5-free',
-      fallback_model: 'opencode/glm-5-free'
+      small_model: 'opencode/trinity-large-preview-free',
+      vision_model: 'opencode/big-pickle',
+      fallback_model: 'opencode/big-pickle'
     };
   }
 

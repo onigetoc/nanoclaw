@@ -192,48 +192,54 @@ function App() {
     inputRef.current?.focus();
   };
 
-  const sendMessage = useCallback(async (content: string, fileAttachments?: File[]) => {
+  const sendMessage = useCallback(async (content: string, fileAttachments?: File[], mode?: 'analyze' | 'transfer') => {
     if (!state.selectedChat) return;
     const trimmed = content.trim();
     if (!trimmed && (!fileAttachments || fileAttachments.length === 0)) return;
 
-    // Separate media (images/audio → analyze like Telegram) from files (→ transfer)
     let finalContent = trimmed;
     if (fileAttachments && fileAttachments.length > 0) {
       const descriptions: string[] = [];
-      const transferFiles: File[] = [];
+      const attachMode = mode || 'analyze';
 
-      for (const file of fileAttachments) {
-        if (file.type.startsWith('image/') || file.type.startsWith('audio/')) {
-          // Analyze via vision/transcription — same pipeline as Telegram
-          try {
-            const result = await apiService.analyzeMedia(state.selectedChat.jid, file);
-            if (result.type === 'image') {
-              descriptions.push(`[Photo: ${result.description}]`);
-            } else if (result.type === 'audio') {
-              descriptions.push(`[Audio: ${result.description}]`);
-            } else {
-              descriptions.push(result.description);
-            }
-          } catch (err) {
-            const errMsg = err instanceof Error ? err.message : String(err);
-            console.error('Failed to analyze media:', errMsg);
-            descriptions.push(`[${file.type.startsWith('image/') ? 'Photo' : 'Audio'}: ${errMsg}]`);
-          }
-        } else {
-          transferFiles.push(file);
-        }
-      }
-
-      // Transfer non-media files to group uploads
-      if (transferFiles.length > 0) {
+      if (attachMode === 'transfer') {
+        // File Transfer mode — save all files to group uploads
         try {
-          const uploadResult = await apiService.uploadFiles(state.selectedChat.jid, transferFiles);
+          const uploadResult = await apiService.uploadFiles(state.selectedChat.jid, fileAttachments);
           for (const f of uploadResult.files) {
             descriptions.push(`[Attached file: ${f.path}]`);
           }
         } catch (err) {
           console.error('Failed to upload files:', err);
+          descriptions.push(`[File transfer failed: ${err instanceof Error ? err.message : 'Unknown error'}]`);
+        }
+      } else {
+        // Read Media mode — analyze images/audio via vision/transcription (same as Telegram)
+        for (const file of fileAttachments) {
+          if (file.type.startsWith('image/') || file.type.startsWith('audio/')) {
+            try {
+              const result = await apiService.analyzeMedia(state.selectedChat.jid, file);
+              if (result.type === 'image') {
+                descriptions.push(`[Photo: ${result.description}]`);
+              } else if (result.type === 'audio') {
+                descriptions.push(`[Audio: ${result.description}]`);
+              } else {
+                descriptions.push(result.description);
+              }
+            } catch (err) {
+              const errMsg = err instanceof Error ? err.message : String(err);
+              console.error('Failed to analyze media:', errMsg);
+              descriptions.push(`[${file.type.startsWith('image/') ? 'Photo' : 'Audio'}: ${errMsg}]`);
+            }
+          } else {
+            // Non-media files in Read Media mode → still analyze (returns [File: name])
+            try {
+              const result = await apiService.analyzeMedia(state.selectedChat.jid, file);
+              descriptions.push(result.description);
+            } catch (err) {
+              descriptions.push(`[File: ${file.name}]`);
+            }
+          }
         }
       }
 

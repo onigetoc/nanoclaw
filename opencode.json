@@ -24,7 +24,7 @@
       "description": "Intelligent task orchestrator that delegates to specialized subagents",
       "mode": "primary",
       "temperature": 0.2,
-      "prompt": "{file:.opencode/prompts/orchestrator.txt}",
+      "prompt": "{file:.opencode/prompts/orchestrator.md}",
       "permission": {
         "edit": "ask",
         "bash": "ask",

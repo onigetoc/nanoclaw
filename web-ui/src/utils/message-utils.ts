@@ -9,8 +9,8 @@ export function linkifyMentionsAndCommands(text: string): string {
   const protectedParts: [string, string][] = [];
   let idx = 0;
 
-  // 1. Protect code blocks, inline code, and existing markdown links
-  let processed = text.replace(/(```[\s\S]*?```|`[^`\n]+`|\[[^\]]*\]\([^)]*\))/g, (match) => {
+  // 1. Protect code blocks, inline code, existing markdown links, and URLs
+  let processed = text.replace(/(```[\s\S]*?```|`[^`\n]+`|\[[^\]]*\]\([^)]*\)|https?:\/\/[^\s)]+)/g, (match) => {
     const placeholder = `\x00P${idx++}\x00`;
     protectedParts.push([placeholder, match]);
     return placeholder;
@@ -19,9 +19,9 @@ export function linkifyMentionsAndCommands(text: string): string {
   // 2. Linkify @mentions
   processed = processed.replace(/(^|[\s(])@(\w+)/gm, '$1[@$2](mention:$2)');
 
-  // 3. Linkify /commands — match /word after start-of-line or any non-alphanumeric char
-  //    This catches commands after colons, newlines, spaces, punctuation, etc.
-  processed = processed.replace(/(^|[^a-zA-Z0-9])\/(\w[\w-]*)(?![^[]*\]\()/gm, '$1[/$2](command:$2)');
+  // 3. Linkify /commands — only match /word at start-of-line or preceded by whitespace
+  //    This avoids matching slashes inside file paths, URLs, or other non-command contexts.
+  processed = processed.replace(/(^|[\s])\/([a-zA-Z][\w-]*)(?![^[]*\]\()/gm, '$1[/$2](command:$2)');
 
   // 4. Restore protected parts
   for (const [placeholder, original] of protectedParts) {

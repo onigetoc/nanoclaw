@@ -17,7 +17,7 @@ interface ComposerBarProps {
   selectedChatJid: string | null;
   selectedModelId: string;
   onSelectModel: (id: string) => void;
-  onSendMessage: (content: string, attachments?: File[]) => Promise<void>;
+  onSendMessage: (content: string, attachments?: File[], mode?: 'analyze' | 'transfer') => Promise<void>;
   onOptimisticMessage: (msg: Message) => void;
   onRemoveOptimisticMessage: (id: string) => void;
   onComposerResize: (height: number) => void;
@@ -36,6 +36,7 @@ export default function ComposerBar({
   const [useWebSearch, setUseWebSearch] = useState(false);
   const [useMicrophone, setUseMicrophone] = useState(false);
   const [rejectedFiles, setRejectedFiles] = useState<string[]>([]);
+  const [attachMode, setAttachMode] = useState<'analyze' | 'transfer'>('analyze');
 
   const composerRef = useRef<HTMLFormElement>(null);
   const attachmentInputRef = useRef<HTMLInputElement>(null);
@@ -69,13 +70,13 @@ export default function ComposerBar({
     return () => document.removeEventListener('mousedown', onPointerDown);
   }, [attachMenuOpen]);
 
-  const addAttachments = useCallback((files: File[]) => {
+  const addAttachments = useCallback((files: File[], skipValidation = false) => {
     if (!files.length) return;
     const rejected: string[] = [];
     setAttachments((prev) => {
       const next = [...prev];
       for (const file of files) {
-        if (!ALLOWED_FILE_TYPES[file.type]) {
+        if (!skipValidation && !ALLOWED_FILE_TYPES[file.type]) {
           rejected.push(file.name);
           continue;
         }
@@ -98,11 +99,16 @@ export default function ComposerBar({
     return Array.from(transfer.types).includes('Files');
   };
 
+  // Track which mode was selected from the popup — set BEFORE file picker opens
+  const pendingModeRef = useRef<'analyze' | 'transfer'>('analyze');
+
   const handleAttachmentInputFiles = useCallback(
     (event: ChangeEvent<HTMLInputElement>) => {
       const files = Array.from(event.target.files ?? []);
       if (!files.length) return;
-      addAttachments(files);
+      const mode = pendingModeRef.current;
+      setAttachMode(mode);
+      addAttachments(files, mode === 'transfer');
       event.currentTarget.value = '';
       setAttachMenuOpen(false);
     },
@@ -211,10 +217,12 @@ export default function ComposerBar({
       ? inputValue
       : `Sent with attachments (${attachments.length} file${attachments.length > 1 ? 's' : ''})`;
     const currentAttachments = [...attachments];
+    const currentMode = attachMode;
     setInputValue('');
     setTextareaRows(2);
     setAttachments([]);
-    await onSendMessage(outgoingText, currentAttachments);
+    setAttachMode('analyze');
+    await onSendMessage(outgoingText, currentAttachments, currentMode);
   };
 
   const handleSubmit = async (e: FormEvent) => {
@@ -277,7 +285,10 @@ export default function ComposerBar({
             )}
 
             {attachments.length > 0 && (
-              <div className="mb-2 flex flex-wrap gap-1.5 px-2">
+              <div className="mb-2 flex flex-wrap items-center gap-1.5 px-2">
+                <span className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-semibold ${attachMode === 'analyze' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-blue-500/20 text-blue-400'}`}>
+                  {attachMode === 'analyze' ? 'Read Media' : 'File Transfer'}
+                </span>
                 {attachments.map((file) => {
                   const { icon: Icon, color, label } = getFileIcon(file.type);
                   return (
@@ -328,14 +339,35 @@ export default function ComposerBar({
                     <Paperclip className="h-4 w-4" />
                   </button>
                   {attachMenuOpen && (
-                    <div className={`absolute bottom-11 left-0 z-30 min-w-48 rounded-xl border p-1.5 shadow-xl ${isDark ? 'border-zinc-700 bg-zinc-900' : 'border-zinc-300 bg-white'}`}>
+                    <div className={`absolute bottom-11 left-0 z-30 min-w-52 rounded-xl border p-1.5 shadow-xl ${isDark ? 'border-zinc-700 bg-zinc-900' : 'border-zinc-300 bg-white'}`}>
                       <button
                         type="button"
-                        onClick={() => attachmentInputRef.current?.click()}
-                        className={`flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm transition ${isDark ? 'text-zinc-200 hover:bg-zinc-800' : 'text-zinc-700 hover:bg-zinc-100'}`}
+                        onClick={() => {
+                          pendingModeRef.current = 'analyze';
+                          attachmentInputRef.current?.click();
+                        }}
+                        className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-sm transition ${isDark ? 'text-zinc-200 hover:bg-zinc-800' : 'text-zinc-700 hover:bg-zinc-100'}`}
                       >
-                        <ImageIcon className="h-4 w-4" />
-                        Add photos, audio or documents
+                        <ImageIcon className="h-4 w-4 text-emerald-500" />
+                        <div>
+                          <div className="font-medium">Read Media</div>
+                          <div className={`text-xs ${isDark ? 'text-zinc-400' : 'text-zinc-500'}`}>Analyze images, transcribe audio</div>
+                        </div>
+                      </button>
+                      <div className={`mx-2 my-0.5 border-t ${isDark ? 'border-zinc-800' : 'border-zinc-200'}`} />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          pendingModeRef.current = 'transfer';
+                          attachmentInputRef.current?.click();
+                        }}
+                        className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-sm transition ${isDark ? 'text-zinc-200 hover:bg-zinc-800' : 'text-zinc-700 hover:bg-zinc-100'}`}
+                      >
+                        <Paperclip className="h-4 w-4 text-blue-500" />
+                        <div>
+                          <div className="font-medium">File Transfer</div>
+                          <div className={`text-xs ${isDark ? 'text-zinc-400' : 'text-zinc-500'}`}>Save files to group uploads</div>
+                        </div>
                       </button>
                     </div>
                   )}

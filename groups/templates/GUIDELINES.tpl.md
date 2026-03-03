@@ -7,6 +7,7 @@ When performing any search (news, web, documentation, etc.):
 **CRITICAL - Always include source links:**
 - Every piece of information MUST have its source URL
 - Format: `[Title](https://url)` or list URLs at the end
+- Show full titles and full descriptions unless the user want otherwise or a resume
 - Links allow users to verify information and explore further
 - Links allow you to reference specific sources in follow-up questions
 
