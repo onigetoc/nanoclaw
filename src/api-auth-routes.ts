@@ -7,14 +7,10 @@
  *   DELETE /auth/provider/:provider — remove a provider API key
  */
 import { FastifyInstance } from 'fastify';
-import { execFile } from 'child_process';
-import { promisify } from 'util';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import { logger } from './logger.js';
-
-const execFileAsync = promisify(execFile);
 
 /** Allowed provider names — strict whitelist to prevent injection */
 const ALLOWED_PROVIDERS = [
@@ -108,16 +104,37 @@ export function registerAuthRoutes(fastify: FastifyInstance, authenticate: any):
     }
 
     try {
-      const { stdout, stderr } = await execFileAsync('opencode', ['auth', 'login', provider, '--key', key], {
-        timeout: 15000,
-        env: { ...process.env },
-      });
+      // Write directly to auth.json (same as OpenCode does internally)
+      const authPath = path.join(os.homedir(), '.local', 'share', 'opencode', 'auth.json');
+      const authDir = path.dirname(authPath);
+      
+      // Ensure directory exists
+      if (!fs.existsSync(authDir)) {
+        fs.mkdirSync(authDir, { recursive: true });
+      }
 
-      logger.info({ provider, stdout: stdout?.trim(), stderr: stderr?.trim() }, 'API key configured via web UI');
+      // Read existing auth data
+      let authData: Record<string, string> = {};
+      if (fs.existsSync(authPath)) {
+        try {
+          authData = JSON.parse(fs.readFileSync(authPath, 'utf-8'));
+        } catch {
+          // Invalid JSON, start fresh
+          authData = {};
+        }
+      }
+
+      // Update provider key
+      authData[provider] = key;
+
+      // Write back to file
+      fs.writeFileSync(authPath, JSON.stringify(authData, null, 2), 'utf-8');
+
+      logger.info({ provider, authPath }, 'API key configured via web UI');
 
       return { success: true, provider, message: `${PROVIDER_INFO[provider].label} key configured` };
     } catch (err: any) {
-      const errMsg = err.stderr?.trim() || err.message || 'Unknown error';
+      const errMsg = err.message || 'Unknown error';
       logger.error({ provider, err: errMsg }, 'Failed to configure API key');
       reply.code(500).send({ error: `Failed to configure key: ${errMsg}` });
     }

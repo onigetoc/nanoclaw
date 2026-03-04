@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { ArrowDown, Bug, MessageCircle, Moon, Sun } from 'lucide-react';
 import { apiService, type ChatInfo, type Message, type ApiToken, type ConnectionStatus } from './api';
 import { useSettings } from './useSettings';
-import { UI_MODELS } from './utils/models';
+import { getUiModels } from './utils/models';
 import { formatDate } from './types';
 import type { ChatState } from './types';
 import { LoginScreen } from './components/LoginScreens';
@@ -35,9 +35,11 @@ function App() {
   const [isNearBottom, setIsNearBottom] = useState(true);
   const [hasMoreMessages, setHasMoreMessages] = useState(false);
   const [isLoadingOlder, setIsLoadingOlder] = useState(false);
-  const [selectedModelId, setSelectedModelId] = useState(UI_MODELS[0].id);
+  const [availableModels, setAvailableModels] = useState(getUiModels());
+  const [selectedModelId, setSelectedModelId] = useState(getUiModels()[0]?.id || '');
   const [composerHeight, setComposerHeight] = useState(176);
   const [showSettingsPage, setShowSettingsPage] = useState(false);
+  const [unreadChats, setUnreadChats] = useState<Set<string>>(new Set());
   const { settings, updateSetting, resetSettings } = useSettings();
 
   const messagesContainerRef = useRef<HTMLDivElement>(null);
@@ -47,6 +49,18 @@ function App() {
   const loadOlderRef = useRef<() => void>(() => {});
 
   const isDark = theme === 'dark';
+
+  // Reload models when returning from settings
+  useEffect(() => {
+    if (!showSettingsPage) {
+      const models = getUiModels();
+      setAvailableModels(models);
+      // Keep current selection if still available, otherwise pick first
+      if (!models.find(m => m.id === selectedModelId)) {
+        setSelectedModelId(models[0]?.id || '');
+      }
+    }
+  }, [showSettingsPage, selectedModelId]);
 
   // --- Data loading ---
   const loadChats = async () => {
@@ -128,6 +142,8 @@ function App() {
           if (s.messages.some((m) => m.id === message.id)) return s;
           return { ...s, messages: [...s.messages, message] };
         }
+        // Message for a different chat - mark as unread
+        setUnreadChats((prev) => new Set(prev).add(message.chat_jid));
         return s;
       });
     });
@@ -184,11 +200,26 @@ function App() {
 
   // --- Chat actions ---
   const selectChat = (chat: ChatInfo) => {
-    setState((s) => ({ ...s, selectedChat: chat, messages: [] }));
-    setHasMoreMessages(false);
-    setIsNearBottom(true);
+    setState((s) => {
+      // If clicking the same chat, don't clear messages
+      if (s.selectedChat?.jid === chat.jid) {
+        return s;
+      }
+      return { ...s, selectedChat: chat, messages: [] };
+    });
+    // Only reset scroll state if switching to a different chat
+    if (state.selectedChat?.jid !== chat.jid) {
+      setHasMoreMessages(false);
+      setIsNearBottom(true);
+      setShowScrollToBottom(false);
+    }
+    // Mark chat as read
+    setUnreadChats((prev) => {
+      const next = new Set(prev);
+      next.delete(chat.jid);
+      return next;
+    });
     localStorage.setItem(SELECTED_CHAT_STORAGE_KEY, chat.jid);
-    setShowScrollToBottom(false);
     inputRef.current?.focus();
   };
 
@@ -300,119 +331,125 @@ function App() {
   }
 
   // --- Render: Main app ---
-  if (showSettingsPage) {
-    return (
-      <AdminPage
-        onBack={() => setShowSettingsPage(false)}
-        isDark={isDark}
-        serverOnline={serverStatus.serverOnline}
-        settings={settings}
-        onUpdateSetting={updateSetting}
-        onResetSettings={resetSettings}
-      />
-    );
-  }
-
   return (
     <div className={`flex h-screen ${isDark ? 'bg-zinc-950 text-zinc-100' : 'bg-zinc-100 text-zinc-900'}`}>
-      <ChatSidebar
-        isDark={isDark} chats={state.chats} selectedChat={state.selectedChat}
-        connected={state.connected} error={state.error} serverOnline={serverStatus.serverOnline}
-        onSelectChat={selectChat} onOpenSettings={() => setShowSettingsPage(true)}
-        onDisconnect={() => setToken(null)}
-      />
-
-      <main className={`relative flex min-w-0 flex-1 flex-col ${isDark ? 'bg-zinc-900' : 'bg-white'}`}>
-        {state.selectedChat ? (
-          <>
-            <header className={`flex h-16 items-center justify-between border-b px-4 md:px-6 ${isDark ? 'border-zinc-800 bg-zinc-950/90' : 'border-zinc-200 bg-zinc-50/90'}`}>
-              <div className="min-w-0">
-                <h2 className="truncate text-base font-semibold md:text-lg">{state.selectedChat.name || state.selectedChat.jid}</h2>
-                <p className={`truncate text-xs ${isDark ? 'text-zinc-400' : 'text-zinc-500'}`}>{state.selectedChat.jid}</p>
-              </div>
-              <div className="ml-4 flex items-center gap-2">
-                <button
-                  type="button" onClick={() => updateSetting('debugPanel', !settings.debugPanel)}
-                  className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border ${
-                    settings.debugPanel
-                      ? isDark ? 'border-amber-700/50 bg-amber-500/15 text-amber-300 hover:bg-amber-500/25' : 'border-amber-300 bg-amber-50 text-amber-600 hover:bg-amber-100'
-                      : isDark ? 'border-zinc-700 bg-zinc-800 text-zinc-400 hover:bg-zinc-700' : 'border-zinc-300 bg-zinc-100 text-zinc-500 hover:bg-zinc-200'
-                  }`}
-                  title={settings.debugPanel ? 'Hide debug panel' : 'Show debug panel'}
-                >
-                  <Bug className="h-4 w-4" />
-                </button>
-                <button
-                  type="button" onClick={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))}
-                  className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border ${isDark ? 'border-zinc-700 bg-zinc-800 text-zinc-200 hover:bg-zinc-700' : 'border-zinc-300 bg-zinc-100 text-zinc-700 hover:bg-zinc-200'}`}
-                  title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-                >
-                  {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-                </button>
-              </div>
-            </header>
-
-            <div ref={messagesContainerRef} onScroll={updateScrollState} className="flex-1 overflow-y-auto px-3 py-4 md:px-6">
-              <div className="mx-auto w-full max-w-4xl">
-                {isLoadingOlder && (
-                  <div className="flex justify-center py-3"><div className="h-5 w-5 animate-spin rounded-full border-2 border-zinc-400 border-t-transparent" /></div>
-                )}
-                {groupedMessages.map((group) => (
-                  <div key={group.date} className="mb-6">
-                    <div className="my-5 text-center text-xs text-zinc-500">{group.date}</div>
-                    <div className="space-y-3">
-                      {group.messages.map((msg) => (
-                        <MessageBubble 
-                          key={msg.id} 
-                          msg={msg} 
-                          isDark={isDark} 
-                          onSendCommand={(cmd) => { 
-                            scrollToBottomFast();
-                            setTimeout(() => {
-                              setIsNearBottom(true);
-                              void sendMessage(`/${cmd}`);
-                            }, 250);
-                          }} 
-                        />
-                      ))}
-                    </div>
-                  </div>
-                ))}
-                <div ref={messagesEndRef} />
-              </div>
-            </div>
-
-            {showScrollToBottom && (
-              <button
-                type="button" onClick={() => { scrollToBottom(); setShowScrollToBottom(false); }}
-                style={{ bottom: composerHeight + 10 }}
-                className={`absolute left-1/2 z-20 -translate-x-1/2 rounded-full border p-3 shadow-lg backdrop-blur transition ${isDark ? 'border-zinc-700 bg-zinc-800/90 text-zinc-200 hover:bg-zinc-700' : 'border-zinc-300 bg-white/95 text-zinc-700 hover:bg-zinc-100'}`}
-                title="Scroll to bottom"
-              >
-                <ArrowDown className="h-5 w-5" />
-              </button>
-            )}
-
-            <ComposerBar
-              isDark={isDark} connected={state.connected} selectedChatJid={state.selectedChat.jid}
-              selectedModelId={selectedModelId} onSelectModel={setSelectedModelId}
-              onSendMessage={sendMessage} onOptimisticMessage={handleOptimisticMessage}
-              onRemoveOptimisticMessage={handleRemoveOptimisticMessage}
-              onComposerResize={setComposerHeight} inputRef={inputRef}
-            />
-          </>
-        ) : (
-          <div className={`flex flex-1 flex-col items-center justify-center ${isDark ? 'text-zinc-400' : 'text-zinc-600'}`}>
-            <MessageCircle className={`mb-2 h-10 w-10 ${isDark ? 'text-zinc-500' : 'text-zinc-400'}`} />
-            <h2 className={`text-xl font-medium ${isDark ? 'text-zinc-200' : 'text-zinc-800'}`}>Select a chat to start</h2>
-            <p className="mt-1 text-sm">Choose a conversation from the sidebar</p>
-          </div>
-        )}
-      </main>
-
-      {settings.debugPanel && state.selectedChat && (
-        <DebugPanel messages={state.messages} onClose={() => updateSetting('debugPanel', false)} isDark={isDark} chatFolder={state.selectedChat?.groupInfo?.folder} />
+      {/* Settings page overlay */}
+      {showSettingsPage && (
+        <div className="absolute inset-0 z-50">
+          <AdminPage
+            onBack={() => setShowSettingsPage(false)}
+            isDark={isDark}
+            serverOnline={serverStatus.serverOnline}
+            settings={settings}
+            onUpdateSetting={updateSetting}
+            onResetSettings={resetSettings}
+          />
+        </div>
       )}
+
+      {/* Main chat interface - hidden when settings are open */}
+      <div className={`flex h-screen w-full ${showSettingsPage ? 'hidden' : ''}`}>
+        <ChatSidebar
+          isDark={isDark} chats={state.chats} selectedChat={state.selectedChat}
+          connected={state.connected} error={state.error} serverOnline={serverStatus.serverOnline}
+          unreadChats={unreadChats}
+          onSelectChat={selectChat} onOpenSettings={() => setShowSettingsPage(true)}
+          onDisconnect={() => setToken(null)}
+        />
+
+        <main className={`relative flex min-w-0 flex-1 flex-col ${isDark ? 'bg-zinc-900' : 'bg-white'}`}>
+          {state.selectedChat ? (
+            <>
+              <header className={`flex h-16 items-center justify-between border-b px-4 md:px-6 ${isDark ? 'border-zinc-800 bg-zinc-950/90' : 'border-zinc-200 bg-zinc-50/90'}`}>
+                <div className="min-w-0">
+                  <h2 className="truncate text-base font-semibold md:text-lg">{state.selectedChat.name || state.selectedChat.jid}</h2>
+                  <p className={`truncate text-xs ${isDark ? 'text-zinc-400' : 'text-zinc-500'}`}>{state.selectedChat.jid}</p>
+                </div>
+                <div className="ml-4 flex items-center gap-2">
+                  <button
+                    type="button" onClick={() => updateSetting('debugPanel', !settings.debugPanel)}
+                    className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border ${
+                      settings.debugPanel
+                        ? isDark ? 'border-amber-700/50 bg-amber-500/15 text-amber-300 hover:bg-amber-500/25' : 'border-amber-300 bg-amber-50 text-amber-600 hover:bg-amber-100'
+                        : isDark ? 'border-zinc-700 bg-zinc-800 text-zinc-400 hover:bg-zinc-700' : 'border-zinc-300 bg-zinc-100 text-zinc-500 hover:bg-zinc-200'
+                    }`}
+                    title={settings.debugPanel ? 'Hide debug panel' : 'Show debug panel'}
+                  >
+                    <Bug className="h-4 w-4" />
+                  </button>
+                  <button
+                    type="button" onClick={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))}
+                    className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border ${isDark ? 'border-zinc-700 bg-zinc-800 text-zinc-200 hover:bg-zinc-700' : 'border-zinc-300 bg-zinc-100 text-zinc-700 hover:bg-zinc-200'}`}
+                    title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+                  >
+                    {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+                  </button>
+                </div>
+              </header>
+
+              <div ref={messagesContainerRef} onScroll={updateScrollState} className="flex-1 overflow-y-auto px-3 py-4 md:px-6">
+                <div className="mx-auto w-full max-w-4xl">
+                  {isLoadingOlder && (
+                    <div className="flex justify-center py-3"><div className="h-5 w-5 animate-spin rounded-full border-2 border-zinc-400 border-t-transparent" /></div>
+                  )}
+                  {groupedMessages.map((group) => (
+                    <div key={group.date} className="mb-6">
+                      <div className="my-5 text-center text-xs text-zinc-500">{group.date}</div>
+                      <div className="space-y-3">
+                        {group.messages.map((msg) => (
+                          <MessageBubble 
+                            key={msg.id} 
+                            msg={msg} 
+                            isDark={isDark} 
+                            onSendCommand={(cmd) => { 
+                              scrollToBottomFast();
+                              setTimeout(() => {
+                                setIsNearBottom(true);
+                                void sendMessage(`/${cmd}`);
+                              }, 250);
+                            }} 
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                  <div ref={messagesEndRef} />
+                </div>
+              </div>
+
+              {showScrollToBottom && (
+                <button
+                  type="button" onClick={() => { scrollToBottom(); setShowScrollToBottom(false); }}
+                  style={{ bottom: composerHeight + 10 }}
+                  className={`absolute left-1/2 z-20 -translate-x-1/2 rounded-full border p-3 shadow-lg backdrop-blur transition ${isDark ? 'border-zinc-700 bg-zinc-800/90 text-zinc-200 hover:bg-zinc-700' : 'border-zinc-300 bg-white/95 text-zinc-700 hover:bg-zinc-100'}`}
+                  title="Scroll to bottom"
+                >
+                  <ArrowDown className="h-5 w-5" />
+                </button>
+              )}
+
+              <ComposerBar
+                isDark={isDark} connected={state.connected} selectedChatJid={state.selectedChat.jid}
+                selectedModelId={selectedModelId} onSelectModel={setSelectedModelId}
+                availableModels={availableModels}
+                onSendMessage={sendMessage} onOptimisticMessage={handleOptimisticMessage}
+                onRemoveOptimisticMessage={handleRemoveOptimisticMessage}
+                onComposerResize={setComposerHeight} inputRef={inputRef}
+              />
+            </>
+          ) : (
+            <div className={`flex flex-1 flex-col items-center justify-center ${isDark ? 'text-zinc-400' : 'text-zinc-600'}`}>
+              <MessageCircle className={`mb-2 h-10 w-10 ${isDark ? 'text-zinc-500' : 'text-zinc-400'}`} />
+              <h2 className={`text-xl font-medium ${isDark ? 'text-zinc-200' : 'text-zinc-800'}`}>Select a chat to start</h2>
+              <p className="mt-1 text-sm">Choose a conversation from the sidebar</p>
+            </div>
+          )}
+        </main>
+
+        {settings.debugPanel && state.selectedChat && (
+          <DebugPanel messages={state.messages} onClose={() => updateSetting('debugPanel', false)} isDark={isDark} chatFolder={state.selectedChat?.groupInfo?.folder} />
+        )}
+      </div>
     </div>
   );
 }

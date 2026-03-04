@@ -15,6 +15,8 @@ export default function ApiKeysSection({ isDark }: ApiKeysSectionProps) {
   const [saving, setSaving] = useState(false);
   const [removing, setRemoving] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; msg: string } | null>(null);
+  const [restarting, setRestarting] = useState(false);
+  const [showRestart, setShowRestart] = useState(false);
 
   const fetchProviders = useCallback(async () => {
     try {
@@ -46,11 +48,26 @@ export default function ApiKeysSection({ isDark }: ApiKeysSectionProps) {
       setKeyInput('');
       setSelectedProvider('');
       setShowKey(false);
+      setShowRestart(true);
       await fetchProviders();
     } catch (err: any) {
       setFeedback({ type: 'error', msg: err.message || 'Failed to save key' });
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleRestart = async () => {
+    setRestarting(true);
+    setFeedback(null);
+    try {
+      const result = await apiService.restartOpenCodeServer();
+      setFeedback({ type: 'success', msg: result.message });
+      setShowRestart(false);
+    } catch (err: any) {
+      setFeedback({ type: 'error', msg: err.message || 'Failed to restart server' });
+    } finally {
+      setRestarting(false);
     }
   };
 
@@ -100,17 +117,45 @@ export default function ApiKeysSection({ isDark }: ApiKeysSectionProps) {
         </div>
       )}
 
+      {/* Restart button */}
+      {showRestart && (
+        <div className={`mb-4 rounded-lg border p-4 ${isDark ? 'border-amber-700/30 bg-amber-500/10' : 'border-amber-200 bg-amber-50'}`}>
+          <div className="flex items-center justify-between">
+            <div>
+              <p className={`text-sm font-medium ${isDark ? 'text-amber-300' : 'text-amber-700'}`}>
+                Restart Required
+              </p>
+              <p className={`text-xs mt-1 ${isDark ? 'text-amber-400/70' : 'text-amber-600'}`}>
+                API key changes require a server restart. This may interrupt active conversations or scheduled tasks.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={handleRestart}
+              disabled={restarting}
+              className={`rounded-lg px-4 py-2 text-sm font-medium transition ${
+                restarting
+                  ? isDark ? 'bg-zinc-800 text-zinc-600 cursor-not-allowed' : 'bg-zinc-100 text-zinc-400 cursor-not-allowed'
+                  : isDark ? 'bg-amber-600 text-white hover:bg-amber-500' : 'bg-amber-600 text-white hover:bg-amber-500'
+              }`}
+            >
+              {restarting ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Restart'}
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Add key form */}
       <div className={`rounded-xl border p-4 mb-6 ${isDark ? 'border-zinc-800 bg-zinc-900/80' : 'border-zinc-200 bg-white'}`}>
         <h3 className={`text-sm font-medium mb-3 ${isDark ? 'text-zinc-200' : 'text-zinc-800'}`}>
           Add / Update Key
         </h3>
 
-        <div className="space-y-3">
+        <div className="flex items-center gap-2">
           <select
             value={selectedProvider}
             onChange={(e) => setSelectedProvider(e.target.value)}
-            className={`w-full rounded-lg border px-3 py-2 text-sm ${
+            className={`rounded-lg border px-3 py-2 text-sm ${
               isDark
                 ? 'border-zinc-700 bg-zinc-800 text-zinc-200'
                 : 'border-zinc-300 bg-zinc-50 text-zinc-800'
@@ -124,7 +169,7 @@ export default function ApiKeysSection({ isDark }: ApiKeysSectionProps) {
             ))}
           </select>
 
-          <div className="relative">
+          <div className="relative flex-1">
             <input
               type={showKey ? 'text' : 'password'}
               value={keyInput}
@@ -154,13 +199,13 @@ export default function ApiKeysSection({ isDark }: ApiKeysSectionProps) {
             type="button"
             onClick={handleSave}
             disabled={!selectedProvider || !keyInput.trim() || saving}
-            className={`w-full rounded-lg px-3 py-2 text-sm font-medium transition ${
+            className={`rounded-lg px-4 py-2 text-sm font-medium transition ${
               !selectedProvider || !keyInput.trim() || saving
                 ? isDark ? 'bg-zinc-800 text-zinc-600 cursor-not-allowed' : 'bg-zinc-100 text-zinc-400 cursor-not-allowed'
                 : isDark ? 'bg-emerald-600 text-white hover:bg-emerald-500' : 'bg-emerald-600 text-white hover:bg-emerald-500'
             }`}
           >
-            {saving ? <Loader2 className="mx-auto h-4 w-4 animate-spin" /> : 'Save Key'}
+            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Save Key'}
           </button>
         </div>
       </div>

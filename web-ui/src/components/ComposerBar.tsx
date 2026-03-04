@@ -9,6 +9,7 @@ import { AudioLines, Globe, Image as ImageIcon, Paperclip, CornerDownLeft, X } f
 import { apiService, type Message } from '../api';
 import { ALLOWED_FILE_TYPES, getFileIcon, formatFileSize } from '../utils/file-utils';
 import { SUGGESTIONS } from '../utils/models';
+import type { UiModel } from '../utils/models';
 import ModelSelector from './ModelSelector';
 
 interface ComposerBarProps {
@@ -17,6 +18,7 @@ interface ComposerBarProps {
   selectedChatJid: string | null;
   selectedModelId: string;
   onSelectModel: (id: string) => void;
+  availableModels: UiModel[];
   onSendMessage: (content: string, attachments?: File[], mode?: 'analyze' | 'transfer') => Promise<void>;
   onOptimisticMessage: (msg: Message) => void;
   onRemoveOptimisticMessage: (id: string) => void;
@@ -25,7 +27,7 @@ interface ComposerBarProps {
 }
 
 export default function ComposerBar({
-  isDark, connected, selectedChatJid, selectedModelId, onSelectModel,
+  isDark, connected, selectedChatJid, selectedModelId, onSelectModel, availableModels,
   onSendMessage, onOptimisticMessage, onRemoveOptimisticMessage, onComposerResize, inputRef,
 }: ComposerBarProps) {
   const [inputValue, setInputValue] = useState('');
@@ -391,7 +393,7 @@ export default function ComposerBar({
                   Search
                 </button>
 
-                <ModelSelector isDark={isDark} selectedModelId={selectedModelId} onSelectModel={onSelectModel} />
+                <ModelSelector isDark={isDark} selectedModelId={selectedModelId} onSelectModel={onSelectModel} availableModels={availableModels} />
               </div>
 
               <button

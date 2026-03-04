@@ -609,3 +609,21 @@ export async function stopServer(): Promise<void> {
     logger.info('Orphaned OpenCode processes cleaned up');
   }
 }
+
+/**
+ * Restart the OpenCode server.
+ * Useful after API key changes or configuration updates.
+ */
+export async function restartServer(): Promise<boolean> {
+  logger.info('Restarting OpenCode server...');
+  await stopServer();
+  // Give it a moment to fully shut down
+  await new Promise((r) => setTimeout(r, 2000));
+  const success = await startServer();
+  if (success) {
+    logger.info('OpenCode server restarted successfully');
+  } else {
+    logger.error('Failed to restart OpenCode server');
+  }
+  return success;
+}

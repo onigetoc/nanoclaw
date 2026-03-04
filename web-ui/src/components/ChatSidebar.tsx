@@ -8,13 +8,14 @@ interface ChatSidebarProps {
   connected: boolean;
   error: string | null;
   serverOnline: boolean;
+  unreadChats: Set<string>;
   onSelectChat: (chat: ChatInfo) => void;
   onOpenSettings: () => void;
   onDisconnect: () => void;
 }
 
 export default function ChatSidebar({
-  isDark, chats, selectedChat, connected, error, serverOnline,
+  isDark, chats, selectedChat, connected, error, serverOnline, unreadChats,
   onSelectChat, onOpenSettings, onDisconnect,
 }: ChatSidebarProps) {
   return (
@@ -48,6 +49,7 @@ export default function ChatSidebar({
         </div>
         {chats.map((chat) => {
           const active = selectedChat?.jid === chat.jid;
+          const hasUnread = unreadChats.has(chat.jid);
           return (
             <button
               key={chat.jid}
@@ -68,6 +70,9 @@ export default function ChatSidebar({
                   <span>{chat.groupInfo ? chat.groupInfo.folder : chat.jid}</span>
                 </div>
               </div>
+              {hasUnread && (
+                <div className="h-2.5 w-2.5 shrink-0 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.6)]" title="New messages" />
+              )}
             </button>
           );
         })}

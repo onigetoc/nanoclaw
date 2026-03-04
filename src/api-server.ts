@@ -27,6 +27,8 @@ import { getMonitoring } from './monitoring.js';
 import { getOpenCodePort } from './opencode-server.js';
 import { isSleeping } from './commands/sleep-manager.js';
 import { registerAuthRoutes } from './api-auth-routes.js';
+import { getProviders, getPopularProviders, clearCache as clearModelsCache } from './models-cache.js';
+import { restartServer as restartOpenCodeServer } from './opencode-server.js';
 
 const API_PORT = parseInt(process.env.API_PORT || '4300', 10);
 
@@ -817,6 +819,47 @@ fastify.get('/monitoring', { preHandler: authenticate }, async () => {
       recent: [],
       sessions: {},
     };
+  }
+});
+
+/**
+ * Models and providers endpoints
+ */
+fastify.get('/models/providers', { preHandler: authenticate }, async (request: FastifyRequest, reply: FastifyReply) => {
+  try {
+    const providers = await getProviders();
+    const popular = getPopularProviders();
+    reply.code(200).send({ providers, popular });
+  } catch (err) {
+    logger.error({ err }, 'Failed to fetch providers');
+    reply.code(500).send({ error: 'Failed to fetch providers' });
+  }
+});
+
+fastify.post('/models/cache/clear', { preHandler: authenticate }, async (request: FastifyRequest, reply: FastifyReply) => {
+  try {
+    clearModelsCache();
+    reply.code(200).send({ success: true, message: 'Cache cleared' });
+  } catch (err) {
+    logger.error({ err }, 'Failed to clear cache');
+    reply.code(500).send({ error: 'Failed to clear cache' });
+  }
+});
+
+/**
+ * Restart OpenCode server (needed after API key changes)
+ */
+fastify.post('/system/restart-opencode', { preHandler: authenticate }, async (request: FastifyRequest, reply: FastifyReply) => {
+  try {
+    logger.info('Restart OpenCode server requested via API');
+    // Don't await - respond immediately and restart in background
+    restartOpenCodeServer().catch((err) => {
+      logger.error({ err }, 'Failed to restart OpenCode server');
+    });
+    reply.code(200).send({ success: true, message: 'OpenCode server restart initiated' });
+  } catch (err) {
+    logger.error({ err }, 'Failed to initiate OpenCode server restart');
+    reply.code(500).send({ error: 'Failed to restart server' });
   }
 });
 

@@ -379,9 +379,21 @@ class ApiService {
     });
   }
 
+  async getProviders(): Promise<{ providers: Array<{ id: string; name: string; models: Array<{ id: string; name: string; provider: string; context_length?: number; pricing?: { prompt?: number; completion?: number } }> }>; popular: string[] }> {
+    return this.request('/models/providers');
+  }
+
+  async clearModelsCache(): Promise<{ success: boolean; message: string }> {
+    return this.request('/models/cache/clear', { method: 'POST' });
+  }
+
   async checkHealth(): Promise<{ status: string; timestamp: string }> {
     const response = await fetch(`${API_BASE}/health`);
     return response.json();
+  }
+
+  async restartOpenCodeServer(): Promise<{ success: boolean; message: string }> {
+    return this.request('/system/restart-opencode', { method: 'POST' });
   }
 
   private abortController: AbortController | null = null;
