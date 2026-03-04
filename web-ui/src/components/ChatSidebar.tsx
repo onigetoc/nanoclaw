@@ -71,7 +71,7 @@ export default function ChatSidebar({
                 </div>
               </div>
               {hasUnread && (
-                <div className="h-2.5 w-2.5 shrink-0 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.6)]" title="New messages" />
+                <div className="h-2.5 w-2.5 shrink-0 rounded-full bg-zinc-400 shadow-[0_0_6px_rgba(52,211,153,0.6)]" title="New messages" />
               )}
             </button>
           );
