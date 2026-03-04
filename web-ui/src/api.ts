@@ -54,6 +54,43 @@ export interface ApiToken {
   createdAt: string;
 }
 
+export interface AgentExecution {
+  id: string;
+  timestamp: string;
+  groupName: string;
+  groupFolder: string;
+  chatJid: string;
+  agentType: string;
+  status: 'started' | 'running' | 'completed' | 'error';
+  model: string;
+  sessionId?: string;
+  messageCount: number;
+  duration?: number;
+  error?: string;
+  outputSent: boolean;
+}
+
+export interface MonitoringData {
+  system: {
+    openCodeServerStatus: 'running' | 'stopped' | 'error';
+    openCodeServerPort: number;
+    activeAgents: number;
+    registeredGroups: number;
+    isSleeping: boolean;
+    uptime: number;
+  };
+  stats: {
+    totalExecutions: number;
+    successRate: number;
+    averageDuration: number;
+    byAgent: Record<string, number>;
+    byGroup: Record<string, number>;
+  };
+  active: AgentExecution[];
+  recent: AgentExecution[];
+  sessions: Record<string, string>;
+}
+
 class ApiService {
   private token: string | null = null;
 
@@ -309,6 +346,11 @@ class ApiService {
 
   async getConfig(): Promise<ApiConfig> {
     const result = await this.request<ApiConfig>('/config');
+    return result;
+  }
+
+  async getMonitoring(): Promise<MonitoringData> {
+    const result = await this.request<MonitoringData>('/monitoring');
     return result;
   }
 

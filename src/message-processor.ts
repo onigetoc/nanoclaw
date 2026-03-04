@@ -104,6 +104,7 @@ export async function processGroupMessages(
   await channel.setTyping?.(chatJid, true);
   let hadError = false;
   let outputSentToUser = false;
+  let lastErrorMessage = '';
 
   const output = await runAgent(group, prompt, chatJid, queue, async (result) => {
     if (result.result) {
@@ -167,6 +168,7 @@ export async function processGroupMessages(
 
     if (result.status === 'error') {
       hadError = true;
+      lastErrorMessage = result.error || 'Unknown error';
       monitoring.updateExecution(executionId, { status: 'error', error: result.error });
     }
   });
@@ -175,6 +177,32 @@ export async function processGroupMessages(
   if (idleTimer) clearTimeout(idleTimer);
 
   if (output === 'error' || hadError) {
+    // Send a user-visible error message in the conversation so the user knows what happened
+    const errorDetail = lastErrorMessage || 'Agent execution failed';
+    const userErrorText = formatErrorForUser(errorDetail);
+    const errMsgId = `err_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+    const errTimestamp = new Date().toISOString();
+
+    storeMessageDirect({
+      id: errMsgId,
+      chat_jid: chatJid,
+      sender: 'bot',
+      sender_name: ASSISTANT_NAME,
+      content: userErrorText,
+      timestamp: errTimestamp,
+      is_from_me: true,
+      is_bot_message: true,
+    });
+
+    broadcastToToken(chatJid, {
+      id: errMsgId,
+      content: userErrorText,
+      sender_name: ASSISTANT_NAME,
+      timestamp: errTimestamp,
+      is_from_me: true,
+      is_bot_message: true,
+    });
+
     if (outputSentToUser) {
       logger.warn({ group: group.name }, 'Agent error after output was sent, skipping cursor rollback to prevent duplicates');
       monitoring.updateExecution(executionId, { status: 'completed' });
@@ -183,12 +211,68 @@ export async function processGroupMessages(
     setLastAgentTimestampForJid(chatJid, previousCursor);
     saveState();
     logger.warn({ group: group.name }, 'Agent error, rolled back message cursor for retry');
-    monitoring.updateExecution(executionId, { status: 'error', error: 'Agent execution failed' });
+    monitoring.updateExecution(executionId, { status: 'error', error: errorDetail });
     return false;
   }
 
   monitoring.updateExecution(executionId, { status: 'completed' });
   return true;
+}
+
+/**
+ * Classify and format an error message for display in the conversation UI.
+ * Turns raw technical errors into actionable, user-readable messages.
+ */
+function formatErrorForUser(rawError: string): string {
+  const lower = rawError.toLowerCase();
+
+  // Rate limit / quota exceeded
+  if (lower.includes('429') || lower.includes('rate') || lower.includes('quota') || lower.includes('limit exceeded') || lower.includes('too many requests')) {
+    return `⚠️ Rate limit reached — the AI provider is throttling requests. Try again in a minute.\n\n\`Details: ${rawError}\``;
+  }
+
+  // Network / connectivity
+  if (lower.includes('fetch failed') || lower.includes('econnrefused') || lower.includes('enotfound') || lower.includes('network') || lower.includes('dns') || lower.includes('apiconnectionerror') || lower.includes('connectivity')) {
+    return `⚠️ Network error — could not reach the AI provider. Check your internet connection.\n\n\`Details: ${rawError}\``;
+  }
+
+  // OpenCode server unreachable
+  if (lower.includes('opencode server') || lower.includes('unreachable') || lower.includes('localhost:4096')) {
+    return `⚠️ OpenCode server is not responding. Make sure the OpenCode process is running.\n\n\`Details: ${rawError}\``;
+  }
+
+  // Timeout
+  if (lower.includes('timeout') || lower.includes('abort') || lower.includes('timed out')) {
+    return `⚠️ Request timed out — the AI took too long to respond. This can happen with complex prompts or slow providers.\n\n\`Details: ${rawError}\``;
+  }
+
+  // Context overflow
+  if (lower.includes('contextoverflow') || lower.includes('context_length') || lower.includes('context window') || lower.includes('token limit') || lower.includes('maximum context length')) {
+    return `⚠️ Context window full — the conversation is too long. A new session will be created automatically on the next message.\n\n\`Details: ${rawError}\``;
+  }
+
+  // Auth / API key
+  if (lower.includes('401') || lower.includes('403') || lower.includes('unauthorized') || lower.includes('forbidden') || lower.includes('api key') || lower.includes('invalid key')) {
+    return `⚠️ Authentication error — the API key may be invalid or expired. Check your provider credentials.\n\n\`Details: ${rawError}\``;
+  }
+
+  // Server error (500, 502, 503)
+  if (lower.includes('500') || lower.includes('502') || lower.includes('503') || lower.includes('internal server error') || lower.includes('bad gateway') || lower.includes('service unavailable') || lower.includes('overloaded')) {
+    return `⚠️ The AI provider is experiencing issues (server error). Try again shortly.\n\n\`Details: ${rawError}\``;
+  }
+
+  // Container / spawn errors
+  if (lower.includes('container') || lower.includes('spawn error') || lower.includes('exited with code')) {
+    return `⚠️ Agent container error — the execution environment failed.\n\n\`Details: ${rawError}\``;
+  }
+
+  // Session management
+  if (lower.includes('session') && (lower.includes('failed') || lower.includes('not found'))) {
+    return `⚠️ Session error — could not create or resume the conversation session.\n\n\`Details: ${rawError}\``;
+  }
+
+  // Generic fallback
+  return `⚠️ An error occurred while processing your message.\n\n\`Details: ${rawError}\``;
 }
 
 /**
@@ -209,6 +293,13 @@ async function runAgent(
   const serverOk = await ensureServerHealthy();
   if (!serverOk) {
     logger.error({ group: group.name }, 'OpenCode server unreachable, skipping agent run');
+    if (onOutput) {
+      await onOutput({
+        status: 'error',
+        result: null,
+        error: 'OpenCode server is unreachable. Check that the OpenCode process is running.',
+      });
+    }
     return 'error';
   }
 
@@ -281,12 +372,20 @@ async function runAgent(
         { group: group.name, error: output.error },
         'Container agent error',
       );
+      // Ensure onOutput is called with the error so the user sees it
+      if (onOutput && output.error) {
+        await onOutput({ status: 'error', result: null, error: output.error });
+      }
       return 'error';
     }
 
     return 'success';
   } catch (err) {
     logger.error({ group: group.name, err }, 'Agent error');
+    if (onOutput) {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      await onOutput({ status: 'error', result: null, error: errMsg });
+    }
     return 'error';
   }
 }

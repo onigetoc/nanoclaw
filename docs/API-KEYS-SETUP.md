@@ -195,9 +195,11 @@ We recommend **Option 1 (OpenCode Auth)** for most users:
    - Anthropic Claude: https://console.anthropic.com/
    - OpenAI: https://platform.openai.com/api-keys
 
-2. Configure with OpenCode:
+2. Configure with OpenCode auth: (equivalant de /connect command via un terminal):
    ```bash
    opencode auth login
+   # Ex: Google Gemini clé via Google AI Studio
+   opencode auth login google --key AIza****************
    ```
 
 3. Update `models-config.json` to use your preferred models:

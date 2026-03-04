@@ -23,6 +23,14 @@ import { logger } from './logger.js';
 import { RegisteredGroup, ScheduledTask } from './types.js';
 import { isSleeping } from './commands/sleep-manager.js';
 
+/**
+ * Format a scheduled task error into a user-readable message.
+ */
+function formatTaskErrorForUser(taskPrompt: string, error: string): string {
+  const shortPrompt = taskPrompt.length > 80 ? taskPrompt.slice(0, 80) + '…' : taskPrompt;
+  return `⚠️ Scheduled task failed: "${shortPrompt}"\n\n\`Error: ${error}\``;
+}
+
 export interface SchedulerDependencies {
   registeredGroups: () => Record<string, RegisteredGroup>;
   getSessions: () => Record<string, string>;
@@ -124,6 +132,9 @@ async function runTask(
         }
         if (streamedOutput.status === 'error') {
           error = streamedOutput.error || 'Unknown error';
+          // Send error to user so they see what happened with their scheduled task
+          const errorMsg = formatTaskErrorForUser(task.prompt, error);
+          await deps.sendMessage(task.chat_jid, errorMsg);
         }
       },
     );
@@ -132,6 +143,11 @@ async function runTask(
 
     if (output.status === 'error') {
       error = output.error || 'Unknown error';
+      // If no streamed error was sent yet, notify the user
+      if (!result) {
+        const errorMsg = formatTaskErrorForUser(task.prompt, error);
+        await deps.sendMessage(task.chat_jid, errorMsg);
+      }
     } else if (output.result) {
       // Messages are sent via MCP tool (IPC), result text is just logged
       result = output.result;
@@ -145,6 +161,13 @@ async function runTask(
     if (idleTimer) clearTimeout(idleTimer);
     error = err instanceof Error ? err.message : String(err);
     logger.error({ taskId: task.id, error }, 'Task failed');
+    // Notify user about the scheduled task failure
+    const errorMsg = formatTaskErrorForUser(task.prompt, error);
+    try {
+      await deps.sendMessage(task.chat_jid, errorMsg);
+    } catch (sendErr) {
+      logger.error({ taskId: task.id, sendErr }, 'Failed to send task error to user');
+    }
   }
 
   const durationMs = Date.now() - startTime;

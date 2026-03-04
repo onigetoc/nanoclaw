@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { ArrowDown, MessageCircle, Moon, Sun } from 'lucide-react';
+import { ArrowDown, Bug, MessageCircle, Moon, Sun } from 'lucide-react';
 import { apiService, type ChatInfo, type Message, type ApiToken, type ConnectionStatus } from './api';
 import { useSettings } from './useSettings';
 import { UI_MODELS } from './utils/models';
@@ -10,7 +10,7 @@ import { CreateTokenScreen, TokenCreatedScreen } from './components/TokenSetupSc
 import ChatSidebar from './components/ChatSidebar';
 import MessageBubble from './components/MessageBubble';
 import ComposerBar from './components/ComposerBar';
-import SettingsPage from './SettingsPage';
+import AdminPage from './settings/AdminPage';
 import DebugPanel from './DebugPanel';
 
 const SELECTED_CHAT_STORAGE_KEY = 'eureclaw_selected_chat_jid';
@@ -300,20 +300,27 @@ function App() {
   }
 
   // --- Render: Main app ---
+  if (showSettingsPage) {
+    return (
+      <AdminPage
+        onBack={() => setShowSettingsPage(false)}
+        isDark={isDark}
+        serverOnline={serverStatus.serverOnline}
+        settings={settings}
+        onUpdateSetting={updateSetting}
+        onResetSettings={resetSettings}
+      />
+    );
+  }
+
   return (
     <div className={`flex h-screen ${isDark ? 'bg-zinc-950 text-zinc-100' : 'bg-zinc-100 text-zinc-900'}`}>
       <ChatSidebar
         isDark={isDark} chats={state.chats} selectedChat={state.selectedChat}
         connected={state.connected} error={state.error} serverOnline={serverStatus.serverOnline}
-        settings={settings} onSelectChat={selectChat} onOpenSettings={() => setShowSettingsPage(true)}
-        onToggleDebug={() => updateSetting('debugPanel', false)} onDisconnect={() => setToken(null)}
+        onSelectChat={selectChat} onOpenSettings={() => setShowSettingsPage(true)}
+        onDisconnect={() => setToken(null)}
       />
-
-      {showSettingsPage && (
-        <aside className={`flex w-80 shrink-0 flex-col border-r ${isDark ? 'border-zinc-800 bg-zinc-950' : 'border-zinc-200 bg-zinc-50'}`}>
-          <SettingsPage settings={settings} onUpdate={updateSetting} onReset={resetSettings} onClose={() => setShowSettingsPage(false)} isDark={isDark} />
-        </aside>
-      )}
 
       <main className={`relative flex min-w-0 flex-1 flex-col ${isDark ? 'bg-zinc-900' : 'bg-white'}`}>
         {state.selectedChat ? (
@@ -323,13 +330,26 @@ function App() {
                 <h2 className="truncate text-base font-semibold md:text-lg">{state.selectedChat.name || state.selectedChat.jid}</h2>
                 <p className={`truncate text-xs ${isDark ? 'text-zinc-400' : 'text-zinc-500'}`}>{state.selectedChat.jid}</p>
               </div>
-              <button
-                type="button" onClick={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))}
-                className={`ml-4 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border ${isDark ? 'border-zinc-700 bg-zinc-800 text-zinc-200 hover:bg-zinc-700' : 'border-zinc-300 bg-zinc-100 text-zinc-700 hover:bg-zinc-200'}`}
-                title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-              >
-                {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-              </button>
+              <div className="ml-4 flex items-center gap-2">
+                <button
+                  type="button" onClick={() => updateSetting('debugPanel', !settings.debugPanel)}
+                  className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border ${
+                    settings.debugPanel
+                      ? isDark ? 'border-amber-700/50 bg-amber-500/15 text-amber-300 hover:bg-amber-500/25' : 'border-amber-300 bg-amber-50 text-amber-600 hover:bg-amber-100'
+                      : isDark ? 'border-zinc-700 bg-zinc-800 text-zinc-400 hover:bg-zinc-700' : 'border-zinc-300 bg-zinc-100 text-zinc-500 hover:bg-zinc-200'
+                  }`}
+                  title={settings.debugPanel ? 'Hide debug panel' : 'Show debug panel'}
+                >
+                  <Bug className="h-4 w-4" />
+                </button>
+                <button
+                  type="button" onClick={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))}
+                  className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border ${isDark ? 'border-zinc-700 bg-zinc-800 text-zinc-200 hover:bg-zinc-700' : 'border-zinc-300 bg-zinc-100 text-zinc-700 hover:bg-zinc-200'}`}
+                  title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+                >
+                  {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+                </button>
+              </div>
             </header>
 
             <div ref={messagesContainerRef} onScroll={updateScrollState} className="flex-1 overflow-y-auto px-3 py-4 md:px-6">

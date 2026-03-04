@@ -1,6 +1,5 @@
-import { Bug, Folder, Power, Settings } from 'lucide-react';
+import { Folder, LayoutDashboard, Power } from 'lucide-react';
 import type { ChatInfo } from '../api';
-import type { Settings as AppSettings } from '../useSettings';
 
 interface ChatSidebarProps {
   isDark: boolean;
@@ -9,21 +8,19 @@ interface ChatSidebarProps {
   connected: boolean;
   error: string | null;
   serverOnline: boolean;
-  settings: AppSettings;
   onSelectChat: (chat: ChatInfo) => void;
   onOpenSettings: () => void;
-  onToggleDebug: () => void;
   onDisconnect: () => void;
 }
 
 export default function ChatSidebar({
   isDark, chats, selectedChat, connected, error, serverOnline,
-  settings, onSelectChat, onOpenSettings, onToggleDebug, onDisconnect,
+  onSelectChat, onOpenSettings, onDisconnect,
 }: ChatSidebarProps) {
   return (
-    <aside className={`flex w-80 shrink-0 flex-col border-r ${isDark ? 'border-zinc-800 bg-zinc-950' : 'border-zinc-200 bg-zinc-50'}`}>
+    <aside className={`flex w-64 shrink-0 flex-col border-r ${isDark ? 'border-zinc-800 bg-zinc-950' : 'border-zinc-200 bg-zinc-50'}`}>
       <div className={`flex h-16 items-center justify-between border-b px-5 ${isDark ? 'border-zinc-800' : 'border-zinc-300'}`}>
-        <h1 className="text-xl font-semibold">EureClaw !</h1>
+        <h1 className="text-xl font-semibold">EureClaw Chat</h1>
         <span
           className={`h-2.5 w-2.5 shrink-0 rounded-full ${connected
             ? 'bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.5)]'
@@ -46,6 +43,9 @@ export default function ChatSidebar({
       )}
 
       <div className="flex-1 overflow-y-auto p-2">
+        <div className={`mb-1 px-3 text-[10px] font-semibold uppercase tracking-wider ${isDark ? 'text-zinc-600' : 'text-zinc-400'}`}>
+          Workspaces / Groups
+        </div>
         {chats.map((chat) => {
           const active = selectedChat?.jid === chat.jid;
           return (
@@ -78,19 +78,9 @@ export default function ChatSidebar({
           className={`flex w-full items-center justify-center gap-2 rounded-lg border px-3 py-2 text-sm transition ${isDark ? 'border-zinc-700 bg-zinc-800 text-zinc-200 hover:bg-zinc-700' : 'border-zinc-300 bg-zinc-100 text-zinc-700 hover:bg-zinc-200'}`}
           onClick={onOpenSettings}
         >
-          <Settings className="h-4 w-4" />
-          Settings
+          <LayoutDashboard className="h-4 w-4" />
+          Control Panel
         </button>
-        {settings.debugPanel && (
-          <button
-            className={`flex w-full items-center justify-center gap-2 rounded-lg border px-3 py-2 text-sm transition ${isDark ? 'border-amber-700/50 bg-amber-500/10 text-amber-300 hover:bg-amber-500/20' : 'border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100'}`}
-            onClick={onToggleDebug}
-            title="Debug panel is active — click to hide"
-          >
-            <Bug className="h-4 w-4" />
-            Debug ON
-          </button>
-        )}
         <button
           className={`flex w-full items-center justify-center gap-2 rounded-lg border px-3 py-2 text-sm transition ${isDark ? 'border-zinc-700 bg-zinc-800 text-zinc-200 hover:bg-zinc-700' : 'border-zinc-300 bg-zinc-100 text-zinc-700 hover:bg-zinc-200'}`}
           onClick={onDisconnect}

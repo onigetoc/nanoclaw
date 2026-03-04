@@ -23,6 +23,9 @@ import { executeCommand } from './commands/index.js';
 import { handleCommandSideEffects } from './commands/command-effects.js';
 import { getTranscriptionManager, isAudioTranscriptionAvailable } from './media/audio-manager.js';
 import { analyzeImage, isVisionEnabled } from './vision.js';
+import { getMonitoring } from './monitoring.js';
+import { getOpenCodePort } from './opencode-server.js';
+import { isSleeping } from './commands/sleep-manager.js';
 
 const API_PORT = parseInt(process.env.API_PORT || '4300', 10);
 
@@ -776,6 +779,44 @@ fastify.get('/config', { preHandler: authenticate }, async () => {
     assistantName: ASSISTANT_NAME,
     apiPort: API_PORT,
   };
+});
+
+/**
+ * Monitoring endpoint: recent executions, errors, and system stats.
+ * Used by the web UI Settings/Logs page.
+ */
+fastify.get('/monitoring', { preHandler: authenticate }, async () => {
+  try {
+    const monitoring = getMonitoring();
+    const recent = monitoring.getRecentExecutions(50);
+    const active = monitoring.getActiveExecutions();
+    const stats = monitoring.getStats();
+    const groups = getRegisteredGroups();
+    const sessions = getSessions();
+
+    const systemState = monitoring.getSystemState({
+      openCodeServerStatus: 'running',
+      openCodeServerPort: getOpenCodePort(),
+      registeredGroups: Object.keys(groups).length,
+      isSleeping: isSleeping(),
+    });
+
+    return {
+      system: systemState,
+      stats,
+      active,
+      recent,
+      sessions,
+    };
+  } catch {
+    return {
+      system: { openCodeServerStatus: 'stopped', openCodeServerPort: 0, activeAgents: 0, registeredGroups: 0, isSleeping: false, uptime: 0 },
+      stats: { totalExecutions: 0, successRate: 0, averageDuration: 0, byAgent: {}, byGroup: {} },
+      active: [],
+      recent: [],
+      sessions: {},
+    };
+  }
 });
 
 let sendMessageFn: ((jid: string, text: string) => Promise<void>) | null = null;
