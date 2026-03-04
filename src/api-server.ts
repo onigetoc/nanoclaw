@@ -26,6 +26,7 @@ import { analyzeImage, isVisionEnabled } from './vision.js';
 import { getMonitoring } from './monitoring.js';
 import { getOpenCodePort } from './opencode-server.js';
 import { isSleeping } from './commands/sleep-manager.js';
+import { registerAuthRoutes } from './api-auth-routes.js';
 
 const API_PORT = parseInt(process.env.API_PORT || '4300', 10);
 
@@ -818,6 +819,9 @@ fastify.get('/monitoring', { preHandler: authenticate }, async () => {
     };
   }
 });
+
+// Register auth routes (API key management)
+registerAuthRoutes(fastify, authenticate);
 
 let sendMessageFn: ((jid: string, text: string) => Promise<void>) | null = null;
 

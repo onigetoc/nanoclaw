@@ -3,6 +3,7 @@ import {
   ArrowLeft,
   Bug,
   FileWarning,
+  Key,
   Radio,
   Settings,
 } from 'lucide-react';
@@ -12,6 +13,7 @@ export type SettingsSection =
   | 'sessions'
   | 'debug'
   | 'logs'
+  | 'apikeys'
   | 'config';
 
 interface NavItem {
@@ -26,6 +28,7 @@ const NAV_ITEMS: NavItem[] = [
   { id: 'sessions', label: 'Sessions', icon: <Radio className="h-4 w-4" />, group: 'Control' },
   { id: 'debug', label: 'Debug', icon: <Bug className="h-4 w-4" />, group: 'Agent' },
   { id: 'logs', label: 'Logs', icon: <FileWarning className="h-4 w-4" />, group: 'Agent' },
+  { id: 'apikeys', label: 'API Keys', icon: <Key className="h-4 w-4" />, group: 'Settings' },
   { id: 'config', label: 'Config', icon: <Settings className="h-4 w-4" />, group: 'Settings' },
 ];
 

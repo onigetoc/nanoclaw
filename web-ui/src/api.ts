@@ -91,6 +91,13 @@ export interface MonitoringData {
   sessions: Record<string, string>;
 }
 
+export interface ProviderInfo {
+  provider: string;
+  label: string;
+  placeholder: string;
+  configured: boolean;
+}
+
 class ApiService {
   private token: string | null = null;
 
@@ -352,6 +359,24 @@ class ApiService {
   async getMonitoring(): Promise<MonitoringData> {
     const result = await this.request<MonitoringData>('/monitoring');
     return result;
+  }
+
+  async getAuthProviders(): Promise<ProviderInfo[]> {
+    const result = await this.request<{ providers: ProviderInfo[] }>('/auth/providers');
+    return result.providers;
+  }
+
+  async setAuthProvider(provider: string, key: string): Promise<{ success: boolean; message: string }> {
+    return this.request('/auth/provider', {
+      method: 'POST',
+      body: JSON.stringify({ provider, key }),
+    });
+  }
+
+  async removeAuthProvider(provider: string): Promise<{ success: boolean; message: string }> {
+    return this.request(`/auth/provider/${encodeURIComponent(provider)}`, {
+      method: 'DELETE',
+    });
   }
 
   async checkHealth(): Promise<{ status: string; timestamp: string }> {

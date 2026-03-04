@@ -6,6 +6,7 @@ import OverviewSection from './OverviewSection';
 import SessionsSection from './SessionsSection';
 import DebugSection from './DebugSection';
 import LogsSection from './LogsSection';
+import ApiKeysSection from './ApiKeysSection';
 import ConfigSection from './ConfigSection';
 
 interface AdminPageProps {
@@ -96,6 +97,9 @@ export default function AdminPage({
                 onRefresh={fetchMonitoring}
                 isDark={isDark}
               />
+            )}
+            {section === 'apikeys' && (
+              <ApiKeysSection isDark={isDark} />
             )}
             {section === 'config' && (
               <ConfigSection
