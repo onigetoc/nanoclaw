@@ -847,6 +847,20 @@ fastify.post('/models/cache/clear', { preHandler: authenticate }, async (request
 });
 
 /**
+ * Get system information (platform, container mode, security level)
+ */
+fastify.get('/system/info', { preHandler: authenticate }, async (request: FastifyRequest, reply: FastifyReply) => {
+  try {
+    const { getSystemInfo } = await import('./system-info.js');
+    const systemInfo = getSystemInfo();
+    reply.code(200).send(systemInfo);
+  } catch (err) {
+    logger.error({ err }, 'Failed to get system info');
+    reply.code(500).send({ error: 'Failed to get system information' });
+  }
+});
+
+/**
  * Restart OpenCode server (needed after API key changes)
  */
 fastify.post('/system/restart-opencode', { preHandler: authenticate }, async (request: FastifyRequest, reply: FastifyReply) => {

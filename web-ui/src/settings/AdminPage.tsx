@@ -33,6 +33,13 @@ export default function AdminPage({
   const fetchMonitoring = useCallback(async () => {
     try {
       const data = await apiService.getMonitoring();
+      // Fetch system info and merge it into monitoring data
+      try {
+        const systemInfo = await apiService.getSystemInfo();
+        data.systemInfo = systemInfo;
+      } catch {
+        // System info endpoint might not be available
+      }
       setMonitoringData(data);
     } catch {
       // Server might be offline
@@ -79,7 +86,7 @@ export default function AdminPage({
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto px-6 py-6">
-          <div className="mx-auto w-full max-w-4xl">
+          <div className="mx-auto w-full max-w-6xl">
             {section === 'overview' && (
               <OverviewSection data={monitoringData} serverOnline={serverOnline} isDark={isDark} />
             )}

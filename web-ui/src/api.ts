@@ -89,6 +89,22 @@ export interface MonitoringData {
   active: AgentExecution[];
   recent: AgentExecution[];
   sessions: Record<string, string>;
+  systemInfo?: SystemInfo;
+}
+
+export interface SystemInfo {
+  platform: string;
+  platformName: string;
+  containerMode: 'apple-container' | 'docker' | 'direct';
+  containerAvailable: boolean;
+  dockerInstalled?: boolean;
+  dockerRunning?: boolean;
+  dockerFunctional?: boolean;
+  securityLevel: 'high' | 'medium' | 'low';
+  recommendation?: string;
+  nodeVersion?: string;
+  opencodeVersion?: string;
+  opencodeFunctional?: boolean;
 }
 
 export interface ProviderInfo {
@@ -358,6 +374,11 @@ class ApiService {
 
   async getMonitoring(): Promise<MonitoringData> {
     const result = await this.request<MonitoringData>('/monitoring');
+    return result;
+  }
+
+  async getSystemInfo(): Promise<SystemInfo> {
+    const result = await this.request<SystemInfo>('/system/info');
     return result;
   }
 

@@ -420,7 +420,7 @@ export class TelegramChannel implements Channel {
     return new Promise<void>((resolve, reject) => {
       const timeout = setTimeout(() => {
         reject(new Error('Telegram bot connection timeout'));
-      }, 30000);
+      }, 60000); // Increased to 60 seconds for slow connections
 
       this.bot!.start({
         onStart: (botInfo) => {

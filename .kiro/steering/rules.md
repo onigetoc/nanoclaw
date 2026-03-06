@@ -67,7 +67,7 @@ When users ask questions about EureClaw architecture, features, or how things wo
   - Security and isolation model
   - Configuration and customization
   - Development and debugging guides
-  - Comparison with OpenClaw
+  - Comparison with OpenClaw (Le dossier .openclaw est juste comme référence de agent OpenCLaw (Competiteur de mon projet) et ne fait pas partie de ce projet Eureclaw)
 
 Use this as your primary reference for answering EureClaw-related questions.
 

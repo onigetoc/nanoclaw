@@ -648,6 +648,24 @@ async function runQuery(
     log(`Loaded global AGENTS.md (${globalAgentsMd.length} chars)`);
   }
 
+  // Load group-specific context files (AGENTS.md, GUIDELINES.md, IDENTITY.md, SOUL.md, TOOLS.md)
+  // These files contain group-specific instructions, personality, and capabilities
+  const groupContextFiles = ['AGENTS.md', 'GUIDELINES.md', 'IDENTITY.md', 'SOUL.md', 'TOOLS.md'];
+  const groupContexts: string[] = [];
+  
+  for (const filename of groupContextFiles) {
+    const filePath = path.join(groupDir, filename);
+    if (fs.existsSync(filePath)) {
+      const content = fs.readFileSync(filePath, 'utf-8');
+      groupContexts.push(`\n## ${filename}\n\n${content}`);
+      log(`Loaded ${filename} (${content.length} chars)`);
+    } else {
+      log(`${filename} not found - skipping`);
+    }
+  }
+  
+  const groupContext = groupContexts.length > 0 ? groupContexts.join('\n\n') : undefined;
+
   // Load MEMORY.md for long-term context (main group only)
   let memoryContext: string | undefined;
   if (containerInput.isMain) {
@@ -952,6 +970,7 @@ Use the Task tool to invoke agents when appropriate.
   // Requirement 9.4: Build final system prompt with all context
   const systemAppend = [
     globalAgentsMd,
+    groupContext,
     memoryContext,
     conversationContext,
     envContext,

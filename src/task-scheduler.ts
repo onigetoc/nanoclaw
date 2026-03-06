@@ -10,7 +10,8 @@ import {
   SCHEDULER_POLL_INTERVAL,
   TIMEZONE,
 } from './config.js';
-import { ContainerOutput, runContainerAgent, writeTasksSnapshot } from './container-runner.js';
+import { ContainerOutput, runContainerAgent, shouldUseDirectMode, writeTasksSnapshot } from './container-runner.js';
+import { runDirectAgent } from './direct-runner.js';
 import {
   getAllTasks,
   getDueTasks,
@@ -111,7 +112,10 @@ async function runTask(
   };
 
   try {
-    const output = await runContainerAgent(
+    // Use direct mode on Windows/Linux, container mode on macOS
+    const runAgentFn = shouldUseDirectMode() ? runDirectAgent : runContainerAgent;
+    
+    const output = await runAgentFn(
       group,
       {
         prompt: task.prompt,

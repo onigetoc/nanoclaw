@@ -151,6 +151,8 @@ opencode
 
 Then run `/setup`. OpenCode handles everything: dependencies, authentication, container setup, service configuration.
 
+**Windows Users:** See the [Windows Setup Guide](docs/WINDOWS-SETUP.md) for platform-specific instructions. You'll need to install OpenCode manually: `npm install -g opencode-ai`
+
 **Auto-Registration**: After setup, just send your first message to the bot on any channel (WhatsApp, Telegram). That chat will automatically be registered as your 'main' group—no manual JID entry or configuration scripts needed. The bot responds immediately.
 
 ## Philosophy

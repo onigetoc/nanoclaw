@@ -2,7 +2,7 @@
  * Container Runner for EureClaw
  * Spawns agent execution in Apple Container and handles IPC
  */
-import { ChildProcess, exec, spawn } from 'child_process';
+import { ChildProcess, exec, execSync, spawn } from 'child_process';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
@@ -67,10 +67,38 @@ export interface ContainerOutput {
 }
 
 /**
+ * Check if Docker is available AND functional on the system
+ */
+function isDockerAvailable(): boolean {
+  try {
+    // First check if docker command exists
+    execSync('docker --version', { stdio: 'pipe', timeout: 5000 });
+    
+    // Then check if Docker daemon is actually running
+    execSync('docker ps', { stdio: 'pipe', timeout: 5000 });
+    
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Check if we should use direct mode (no containers)
+ * Returns true if containers are NOT available
  */
 export function shouldUseDirectMode(): boolean {
-  return os.platform() !== 'darwin';
+  const platform = os.platform();
+  
+  // macOS always uses Apple Container (built-in)
+  if (platform === 'darwin') {
+    return false;
+  }
+  
+  // Windows/Linux: check if Docker is available
+  // If Docker is available, use it for security
+  // Otherwise fall back to direct mode
+  return !isDockerAvailable();
 }
 
 interface VolumeMount {
@@ -195,17 +223,29 @@ function readSecrets(): Record<string, string> {
 }
 
 function buildContainerArgs(mounts: VolumeMount[], containerName: string): string[] {
+  const platform = os.platform();
+  const isDocker = platform !== 'darwin';
+  
   const args: string[] = ['run', '-i', '--rm', '--name', containerName];
 
-  // Apple Container: --mount for readonly, -v for read-write
+  // Mount syntax differs between Apple Container and Docker
   for (const mount of mounts) {
-    if (mount.readonly) {
-      args.push(
-        '--mount',
-        `type=bind,source=${mount.hostPath},target=${mount.containerPath},readonly`,
-      );
+    if (isDocker) {
+      // Docker: always use -v (supports :ro suffix for readonly)
+      const mountStr = mount.readonly 
+        ? `${mount.hostPath}:${mount.containerPath}:ro`
+        : `${mount.hostPath}:${mount.containerPath}`;
+      args.push('-v', mountStr);
     } else {
-      args.push('-v', `${mount.hostPath}:${mount.containerPath}`);
+      // Apple Container: --mount for readonly, -v for read-write
+      if (mount.readonly) {
+        args.push(
+          '--mount',
+          `type=bind,source=${mount.hostPath},target=${mount.containerPath},readonly`,
+        );
+      } else {
+        args.push('-v', `${mount.hostPath}:${mount.containerPath}`);
+      }
     }
   }
 
@@ -257,7 +297,10 @@ export async function runContainerAgent(
   fs.mkdirSync(logsDir, { recursive: true });
 
   return new Promise((resolve) => {
-    const container = spawn('container', containerArgs, {
+    // Use 'docker' on Windows/Linux, 'container' (Apple Container) on macOS
+    const containerCommand = os.platform() === 'darwin' ? 'container' : 'docker';
+    
+    const container = spawn(containerCommand, containerArgs, {
       stdio: ['pipe', 'pipe', 'pipe'],
     });
 
@@ -364,7 +407,8 @@ export async function runContainerAgent(
     const killOnTimeout = () => {
       timedOut = true;
       logger.error({ group: group.name, containerName }, 'Container timeout, stopping gracefully');
-      exec(`container stop ${containerName}`, { timeout: 15000 }, (err) => {
+      const containerCmd = os.platform() === 'darwin' ? 'container' : 'docker';
+      exec(`${containerCmd} stop ${containerName}`, { timeout: 15000 }, (err) => {
         if (err) {
           logger.warn({ group: group.name, containerName, err }, 'Graceful stop failed, force killing');
           container.kill('SIGKILL');

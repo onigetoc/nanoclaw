@@ -69,85 +69,150 @@ import { processGroupMessages } from './message-processor.js';
 import { startMessageLoop, recoverPendingMessages } from './message-loop.js';
 
 export function ensureContainerSystemRunning(): void {
-  if (os.platform() !== 'darwin') {
-    logger.info(
-      { platform: os.platform() },
-      'Running in direct mode (no container isolation)',
-    );
-    console.log('\n⚠️  Running in DIRECT MODE (no container isolation)');
-    console.log(
-      '   This is less secure but works on Windows/Linux without Docker.\n',
-    );
-    return;
-  }
-
-  try {
-    execSync('container system status', { stdio: 'pipe' });
-    logger.debug('Apple Container system already running');
-  } catch {
-    logger.info('Starting Apple Container system...');
+  const platform = os.platform();
+  
+  // macOS: Use Apple Container (built-in)
+  if (platform === 'darwin') {
     try {
-      execSync('container system start', { stdio: 'pipe', timeout: 30000 });
-      logger.info('Apple Container system started');
-    } catch (err) {
-      logger.error({ err }, 'Failed to start Apple Container system');
-      console.error(
-        '\n╔════════════════════════════════════════════════════════════════╗',
-      );
-      console.error(
-        '║  FATAL: Apple Container system failed to start                 ║',
-      );
-      console.error(
-        '║                                                                ║',
-      );
-      console.error(
-        '║  Agents cannot run without Apple Container. To fix:           ║',
-      );
-      console.error(
-        '║  1. Install from: https://github.com/apple/container/releases ║',
-      );
-      console.error(
-        '║  2. Run: container system start                               ║',
-      );
-      console.error(
-        '║  3. Restart EureClaw                                          ║',
-      );
-      console.error(
-        '╚════════════════════════════════════════════════════════════════╝\n',
-      );
-      throw new Error('Apple Container system is required but failed to start');
-    }
-  }
-
-  // Kill orphaned EureClaw containers from previous runs
-  try {
-    const output = execSync('container ls --format json', {
-      stdio: ['pipe', 'pipe', 'pipe'],
-      encoding: 'utf-8',
-    });
-    const containers: { status: string; configuration: { id: string } }[] =
-      JSON.parse(output || '[]');
-    const orphans = containers
-      .filter(
-        (c) =>
-          c.status === 'running' && c.configuration.id.startsWith('eureclaw-'),
-      )
-      .map((c) => c.configuration.id);
-    for (const name of orphans) {
+      execSync('container system status', { stdio: 'pipe' });
+      logger.debug('Apple Container system already running');
+    } catch {
+      logger.info('Starting Apple Container system...');
       try {
-        execSync(`container stop ${name}`, { stdio: 'pipe' });
-      } catch {
-        /* already stopped */
+        execSync('container system start', { stdio: 'pipe', timeout: 30000 });
+        logger.info('Apple Container system started');
+      } catch (err) {
+        logger.error({ err }, 'Failed to start Apple Container system');
+        console.error(
+          '\n╔════════════════════════════════════════════════════════════════╗',
+        );
+        console.error(
+          '║  FATAL: Apple Container system failed to start                 ║',
+        );
+        console.error(
+          '║                                                                ║',
+        );
+        console.error(
+          '║  Agents cannot run without Apple Container. To fix:           ║',
+        );
+        console.error(
+          '║  1. Install from: https://github.com/apple/container/releases ║',
+        );
+        console.error(
+          '║  2. Run: container system start                               ║',
+        );
+        console.error(
+          '║  3. Restart EureClaw                                          ║',
+        );
+        console.error(
+          '╚════════════════════════════════════════════════════════════════╝\n',
+        );
+        throw new Error('Apple Container system is required but failed to start');
       }
     }
-    if (orphans.length > 0) {
-      logger.info(
-        { count: orphans.length, names: orphans },
-        'Stopped orphaned containers',
-      );
+    
+    // Kill orphaned Apple Container instances
+    try {
+      const output = execSync('container ls --format json', {
+        stdio: ['pipe', 'pipe', 'pipe'],
+        encoding: 'utf-8',
+      });
+      const containers: { status: string; configuration: { id: string } }[] =
+        JSON.parse(output || '[]');
+      const orphans = containers
+        .filter(
+          (c) =>
+            c.status === 'running' && c.configuration.id.startsWith('eureclaw-'),
+        )
+        .map((c) => c.configuration.id);
+      for (const name of orphans) {
+        try {
+          execSync(`container stop ${name}`, { stdio: 'pipe' });
+        } catch {
+          /* already stopped */
+        }
+      }
+      if (orphans.length > 0) {
+        logger.info(
+          { count: orphans.length, names: orphans },
+          'Stopped orphaned containers',
+        );
+      }
+    } catch (err) {
+      logger.warn({ err }, 'Failed to clean up orphaned containers');
     }
-  } catch (err) {
-    logger.warn({ err }, 'Failed to clean up orphaned containers');
+    
+    return;
+  }
+  
+  // Windows/Linux: Check for Docker
+  try {
+    execSync('docker --version', { stdio: 'pipe', timeout: 5000 });
+    logger.info({ platform }, 'Docker detected - will use container isolation');
+    console.log('\n✅ Docker detected - using container isolation for security\n');
+    
+    // Verify Docker daemon is running
+    try {
+      execSync('docker ps', { stdio: 'pipe', timeout: 5000 });
+      logger.debug('Docker daemon is running');
+    } catch {
+      logger.warn('Docker is installed but daemon is not running');
+      console.log('⚠️  Docker daemon is not running. Starting it...\n');
+      // On Windows, Docker Desktop needs to be started manually
+      // On Linux, we can try to start the service
+      if (platform === 'linux') {
+        try {
+          execSync('sudo systemctl start docker', { stdio: 'pipe', timeout: 10000 });
+          logger.info('Docker daemon started');
+        } catch (err) {
+          logger.warn({ err }, 'Could not start Docker daemon automatically');
+          console.log('⚠️  Please start Docker manually and restart EureClaw\n');
+        }
+      } else {
+        console.log('⚠️  Please start Docker Desktop and restart EureClaw\n');
+      }
+    }
+    
+    // Kill orphaned Docker containers
+    try {
+      const output = execSync('docker ps --format "{{json .}}"', {
+        stdio: ['pipe', 'pipe', 'pipe'],
+        encoding: 'utf-8',
+      });
+      const containers: { Names: string; State: string }[] = output
+        .trim()
+        .split('\n')
+        .filter((line) => line.trim())
+        .map((line) => JSON.parse(line));
+      const orphans = containers
+        .filter((c) => c.State === 'running' && c.Names.startsWith('eureclaw-'))
+        .map((c) => c.Names);
+      for (const name of orphans) {
+        try {
+          execSync(`docker stop ${name}`, { stdio: 'pipe' });
+        } catch {
+          /* already stopped */
+        }
+      }
+      if (orphans.length > 0) {
+        logger.info(
+          { count: orphans.length, names: orphans },
+          'Stopped orphaned Docker containers',
+        );
+      }
+    } catch (err) {
+      logger.warn({ err }, 'Failed to clean up orphaned Docker containers');
+    }
+  } catch {
+    // Docker not available - use direct mode
+    logger.info(
+      { platform },
+      'Docker not found - running in direct mode (no container isolation)',
+    );
+    console.log('\n⚠️  Running in DIRECT MODE (no container isolation)');
+    console.log('   Docker not detected. For better security, install Docker:');
+    console.log('   - Windows: https://docs.docker.com/desktop/install/windows-install/');
+    console.log('   - Linux: https://docs.docker.com/engine/install/\n');
   }
 }
 

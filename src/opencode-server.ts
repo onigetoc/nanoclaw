@@ -601,13 +601,14 @@ export async function stopServer(): Promise<void> {
     // Give the OS a moment to release the port
     await new Promise((r) => setTimeout(r, 1000));
     logger.info('OpenCode server stopped via SDK');
-  } else {
-    // No SDK handle — kill any orphaned processes as fallback
-    logger.info('No SDK server handle, killing orphaned OpenCode processes...');
-    await killOrphanedServers();
-    opencodePid = null;
-    logger.info('Orphaned OpenCode processes cleaned up');
   }
+  
+  // Always kill any orphaned processes (even if we had an SDK handle)
+  // This ensures zombie processes from previous crashes are cleaned up
+  logger.info('Cleaning up any orphaned OpenCode processes...');
+  await killOrphanedServers();
+  opencodePid = null;
+  logger.info('OpenCode server fully stopped');
 }
 
 /**
