@@ -17,6 +17,7 @@ import {
 } from '../state.js';
 import { CommandResponse } from './index.js';
 import { RegisteredGroup } from '../types.js';
+import { clearUndoState } from './undo-manager.js';
 
 /**
  * Process side effects for a command result.
@@ -56,6 +57,7 @@ export async function handleCommandSideEffects(
 
       if (newSessionId && typeof newSessionId === 'string') {
         setGroupSession(group.folder, newSessionId);
+        clearUndoState(newSessionId); // Clear undo/redo history for new session
         const shortId = newSessionId.slice(0, 12) + '...';
         commandResult.reply = `🆕 New session created (${shortId}).`;
         logger.info({ chatJid, groupFolder: group.folder, newSessionId }, '/new: Session created');

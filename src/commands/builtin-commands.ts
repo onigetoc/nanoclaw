@@ -11,8 +11,10 @@ import {
   parseDuration,
   formatDuration,
 } from './sleep-manager.js';
+import { undo, redo } from './undo-manager.js';
 import { ASSISTANT_NAME } from '../config.js';
 import { logger } from '../logger.js';
+import { getSessions } from '../state.js';
 
 /**
  * /restart - Restart EureClaw
@@ -173,6 +175,80 @@ registerCommand('status', async (ctx: CommandContext): Promise<CommandResponse> 
 });
 
 /**
+ * /undo [steps] - Undo conversation steps
+ */
+registerCommand('undo', async (ctx: CommandContext): Promise<CommandResponse> => {
+  if (!ctx.group) {
+    return {
+      reply: '⛔ This command is only available in registered chats.',
+    };
+  }
+
+  const sessions = getSessions();
+  const sessionId = sessions[ctx.group.folder];
+
+  if (!sessionId) {
+    return {
+      reply: '❌ No active session found. Start a conversation first.',
+    };
+  }
+
+  const steps = ctx.args.length > 0 ? parseInt(ctx.args[0], 10) : 1;
+
+  if (isNaN(steps) || steps < 1) {
+    return {
+      reply: '❌ Invalid number of steps. Usage: /undo [steps]\nExample: /undo 2',
+    };
+  }
+
+  const result = await undo(sessionId, steps);
+
+  logger.info(
+    { chatJid: ctx.chatJid, user: ctx.senderName, steps, sessionId },
+    'Undo command executed',
+  );
+
+  return { reply: result };
+});
+
+/**
+ * /redo [steps] - Redo conversation steps
+ */
+registerCommand('redo', async (ctx: CommandContext): Promise<CommandResponse> => {
+  if (!ctx.group) {
+    return {
+      reply: '⛔ This command is only available in registered chats.',
+    };
+  }
+
+  const sessions = getSessions();
+  const sessionId = sessions[ctx.group.folder];
+
+  if (!sessionId) {
+    return {
+      reply: '❌ No active session found. Start a conversation first.',
+    };
+  }
+
+  const steps = ctx.args.length > 0 ? parseInt(ctx.args[0], 10) : 1;
+
+  if (isNaN(steps) || steps < 1) {
+    return {
+      reply: '❌ Invalid number of steps. Usage: /redo [steps]\nExample: /redo 2',
+    };
+  }
+
+  const result = await redo(sessionId, steps);
+
+  logger.info(
+    { chatJid: ctx.chatJid, user: ctx.senderName, steps, sessionId },
+    'Redo command executed',
+  );
+
+  return { reply: result };
+});
+
+/**
  * /help - Show available commands
  */
 registerCommand('help', async (ctx: CommandContext): Promise<CommandResponse> => {
@@ -186,7 +262,9 @@ registerCommand('help', async (ctx: CommandContext): Promise<CommandResponse> =>
     '  Examples: /sleep 4h, /sleep 30m, /sleep 2d\n' +
     '/awake - Wake from sleep mode\n\n' +
     '**Session:**\n' +
-    '/new - Start a new conversation session\n\n' +
+    '/new - Start a new conversation session\n' +
+    '/undo [steps] - Undo conversation steps (default: 1)\n' +
+    '/redo [steps] - Redo conversation steps (default: 1)\n\n' +
     '**Info:**\n' +
     '/help - Show this help message\n' +
     '/chatid - Get chat registration ID (Telegram only)';

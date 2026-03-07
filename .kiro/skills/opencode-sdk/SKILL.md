@@ -318,3 +318,50 @@ Working examples in `examples/`:
 - [OpenCode SDK Docs](https://opencode.ai/docs/sdk/)
 - [Custom Tools Guide](https://opencode.ai/docs/custom-tools/)
 - [OpenCode GitHub](https://github.com/sst/opencode)
+
+## TRIGGER OPENCODE COMMAND
+
+Pour déclencher des commandes réelles comme /copy, /exit, /mcp ect via le [SDK OpenCode](https://opencode.ai/), vous devez utiliser la méthode client.session.prompt. Contrairement à une API classique où chaque commande est un endpoint différent, le SDK traite les slash commands comme des entrées de texte prioritaires envoyées au moteur d'exécution. [1, 2] 
+Exemples de déclenchement programmatique (TypeScript)
+Voici comment envoyer ces commandes spécifiques à une session active via le [SDK @opencode-ai/sdk](https://smithery.ai/skills/hhopkins95/opencode-sdk-development) :
+
+import { createOpencodeClient } from "@opencode-ai/sdk";
+const client = createOpencodeClient({ baseUrl: "http://127.0.0.1:4096" });const sessionId = "votre-id-de-session";
+// 1. Commande /copy : Copie le dernier bloc de code ou le contexte dans le presse-papierawait client.session.prompt({
+  path: { id: sessionId },
+  body: { parts: [{ type: "text", text: "/copy" }] }
+});
+// 2. Commande /mcp : Gérer ou lister les serveurs Model Context Protocol connectésawait client.session.prompt({
+  path: { id: sessionId },
+  body: { parts: [{ type: "text", text: "/mcp list" }] }
+});
+// 3. Commande /exit : Ferme proprement la session ou le serveurawait client.session.prompt({
+  path: { id: sessionId },
+  body: { parts: [{ type: "text", text: "/exit" }] }
+});
+
+Détails des commandes courantes
+
+* /init : Analyse le dépôt actuel et génère le fichier agents.md pour définir le contexte du projet.
+* /mcp <command> : Permet d'interagir avec les outils externes (ex: Google Search, terminaux distants) configurés via le protocole MCP.
+* /undo / /redo : Annule ou rétablit la dernière modification de code effectuée par l'agent.
+* /clear : Réinitialise l'historique de la session actuelle pour libérer de la mémoire contextuelle. [2, 3, 4, 5, 6] 
+
+Alternative via la CLI (pour scripts Bash/Automation)
+Si vous ne souhaitez pas utiliser TypeScript, vous pouvez injecter ces commandes directement via le terminal avec la commande run : [7, 8] 
+
+* Pour initialiser : opencode run "/init"
+* Pour copier le contexte : opencode run "/copy"
+
+Avez-vous besoin d'un exemple pour créer une commande personnalisée (ex: .opencode/commands/mon-action.md) que vous pourriez ensuite appeler avec /mon-action ? [9] 
+
+[1] [https://smithery.ai](https://smithery.ai/skills/hhopkins95/opencode-sdk-development)
+[2] [https://www.educative.io](https://www.educative.io/courses/learn-opencode/core-slash-commands)
+[3] [https://opencode.ai](https://opencode.ai/docs/acp/)
+[4] [https://www.freecodecamp.org](https://www.freecodecamp.org/news/integrate-ai-into-your-terminal-using-opencode/)
+[5] [https://www.youtube.com](https://www.youtube.com/watch?v=nUCwPxMgz_8)
+[6] [https://www.youtube.com](https://www.youtube.com/watch?v=beBaZfZL3Sk&t=52)
+[7] [https://opencode.ai](https://opencode.ai/docs/cli/)
+[8] [https://opencode.ai](https://opencode.ai/docs/cli/)
+[9] [https://github.com](https://github.com/anomalyco/opencode/issues/299)
+
