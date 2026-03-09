@@ -10,6 +10,19 @@ body {
   margin: 0;
 }
 
+/* Cursor pointer for all buttons and clickable elements */
+button:not(:disabled),
+[role="button"]:not([aria-disabled="true"]),
+[role="switch"],
+a {
+  cursor: pointer;
+}
+
+button:disabled,
+[aria-disabled="true"] {
+  cursor: not-allowed;
+}
+
 /* Theme-aware scrollbars */
 html[data-theme='dark'] * {
   scrollbar-color: #52525b #18181b; /* thumb / track */

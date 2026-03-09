@@ -1,6 +1,7 @@
 /**
  * Utility to get selected models from localStorage
  */
+import { loadSelections, getModelsDevData } from '../services/models-cache';
 
 export interface SelectedModel {
   id: string;
@@ -8,24 +9,42 @@ export interface SelectedModel {
   provider: string;
 }
 
-export function getSelectedModels(): SelectedModel[] {
+export async function getSelectedModels(): Promise<SelectedModel[]> {
   try {
-    const saved = localStorage.getItem('eureclaw_selected_models');
-    if (!saved) {
-      // Return default models if nothing selected
+    const saved = loadSelections();
+    if (saved.models.length === 0) {
       return getDefaultModels();
     }
 
-    const parsed = JSON.parse(saved);
-    const modelIds = new Set(parsed.models || []);
+    // Fetch models.dev data to get full model info
+    const modelsDevData = await getModelsDevData();
+    const result: SelectedModel[] = [];
     
-    // We need to reconstruct the full model objects
-    // For now, just return the IDs - the UI will need to fetch full data
-    return Array.from(modelIds).map(id => ({
-      id: id as string,
-      name: extractModelName(id as string),
-      provider: extractProvider(id as string),
-    }));
+    for (const modelId of saved.models) {
+      const provider = extractProvider(modelId);
+      const providerData = modelsDevData[provider];
+      
+      if (provider === 'opencode') {
+        // OpenCode models (hardcoded since not in models.dev)
+        result.push({
+          id: modelId,
+          name: extractModelName(modelId),
+          provider: 'opencode',
+        });
+      } else if (providerData) {
+        // Find model in provider data
+        const modelData = Object.values(providerData.models).find(m => m.id === modelId);
+        if (modelData) {
+          result.push({
+            id: modelData.id,
+            name: modelData.name,
+            provider,
+          });
+        }
+      }
+    }
+
+    return result.length > 0 ? result : getDefaultModels();
   } catch (e) {
     console.error('Failed to parse selected models:', e);
     return getDefaultModels();

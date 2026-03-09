@@ -4,12 +4,13 @@
  * Endpoints:
  *   GET  /auth/providers  — list configured providers (no keys exposed)
  *   POST /auth/provider   — add/update a provider API key
- *   DELETE /auth/provider/:provider — remove a provider API key
+ *   POST /auth/provider/remove — remove a provider API key
  */
 import { FastifyInstance } from 'fastify';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
+import { execSync } from 'child_process';
 import { logger } from './logger.js';
 
 /** Allowed provider names — strict whitelist to prevent injection */
@@ -141,28 +142,44 @@ export function registerAuthRoutes(fastify: FastifyInstance, authenticate: any):
   });
 
   /** Remove a provider API key */
-  fastify.delete('/auth/provider/:provider', { preHandler: authenticate }, async (request, reply) => {
-    const params = request.params as Record<string, string>;
-    const provider = (params.provider || '').toLowerCase().trim();
+  fastify.post('/auth/provider/remove', { preHandler: authenticate }, async (request, reply) => {
+    const body = request.body as Record<string, unknown> | undefined;
+    const provider = (body?.provider as string || '').toLowerCase().trim();
 
     if (!isAllowedProvider(provider)) {
       reply.code(400).send({ error: `Invalid provider` });
       return;
     }
 
-    // Remove from auth.json directly
-    const authPath = path.join(os.homedir(), '.local', 'share', 'opencode', 'auth.json');
     try {
-      if (fs.existsSync(authPath)) {
-        const authData = JSON.parse(fs.readFileSync(authPath, 'utf-8'));
-        if (authData[provider]) {
-          delete authData[provider];
-          fs.writeFileSync(authPath, JSON.stringify(authData, null, 2));
-          logger.info({ provider }, 'API key removed via web UI');
-          return { success: true, provider, message: `${PROVIDER_INFO[provider].label} key removed` };
+      // Use OpenCode CLI to properly logout
+      logger.info({ provider }, 'Removing API key via OpenCode CLI');
+      
+      try {
+        execSync(`opencode auth logout ${provider}`, { 
+          encoding: 'utf-8',
+          stdio: 'pipe' 
+        });
+        logger.info({ provider }, 'API key removed successfully via OpenCode CLI');
+        return { success: true, provider, message: `${PROVIDER_INFO[provider].label} key removed` };
+      } catch (cliErr: any) {
+        // If CLI fails, fall back to direct file manipulation
+        logger.warn({ provider, err: cliErr.message }, 'OpenCode CLI failed, falling back to direct file removal');
+        
+        const authPath = path.join(os.homedir(), '.local', 'share', 'opencode', 'auth.json');
+        if (fs.existsSync(authPath)) {
+          const authData = JSON.parse(fs.readFileSync(authPath, 'utf-8'));
+          if (authData[provider]) {
+            delete authData[provider];
+            fs.writeFileSync(authPath, JSON.stringify(authData, null, 2));
+            logger.info({ provider }, 'API key removed via direct file manipulation');
+            return { success: true, provider, message: `${PROVIDER_INFO[provider].label} key removed` };
+          }
         }
+        // Provider not found in file - consider it already removed
+        logger.info({ provider }, 'Provider not found in auth.json, considering it removed');
+        return { success: true, provider, message: `${PROVIDER_INFO[provider].label} key removed` };
       }
-      reply.code(404).send({ error: 'Provider not configured' });
     } catch (err: any) {
       logger.error({ provider, err: err.message }, 'Failed to remove API key');
       reply.code(500).send({ error: 'Failed to remove key' });

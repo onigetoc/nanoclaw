@@ -30,6 +30,8 @@ import {
   setLastAgentTimestampForJid,
   setGroupSession,
   saveState,
+  isSessionFresh,
+  clearFreshSessionFlag,
 } from './state.js';
 import { getAvailableGroups } from './group-manager.js';
 import { RegisteredGroup, Channel } from './types.js';
@@ -344,6 +346,13 @@ async function runAgent(
     : undefined;
 
   try {
+    // Check if this is a fresh session (just created by /new command)
+    const isFreshSession = sessionId && isSessionFresh(sessionId);
+    if (isFreshSession) {
+      logger.info({ group: group.name, sessionId }, 'Fresh session detected - will skip conversation history');
+      clearFreshSessionFlag(sessionId); // Clear flag after first use
+    }
+    
     const runAgentFn = shouldUseDirectMode() ? runDirectAgent : runContainerAgent;
     const output = await runAgentFn(
       group,
@@ -353,7 +362,7 @@ async function runAgent(
         groupFolder: group.folder,
         chatJid,
         isMain,
-        forceNewSession: !sessionId, // Force new session when session ID is empty
+        forceNewSession: !sessionId || isFreshSession || sessionId === '', // Force new session when empty OR fresh from /new
       },
       (proc, containerName) => queue.registerProcess(chatJid, proc, containerName, group.folder),
       wrappedOnOutput,

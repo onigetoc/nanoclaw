@@ -395,8 +395,9 @@ class ApiService {
   }
 
   async removeAuthProvider(provider: string): Promise<{ success: boolean; message: string }> {
-    return this.request(`/auth/provider/${encodeURIComponent(provider)}`, {
-      method: 'DELETE',
+    return this.request('/auth/provider/remove', {
+      method: 'POST',
+      body: JSON.stringify({ provider }),
     });
   }
 
@@ -414,7 +415,7 @@ class ApiService {
   }
 
   async restartOpenCodeServer(): Promise<{ success: boolean; message: string }> {
-    return this.request('/system/restart-opencode', { method: 'POST' });
+    return this.request('/system/restart-opencode', { method: 'GET' });
   }
 
   private abortController: AbortController | null = null;

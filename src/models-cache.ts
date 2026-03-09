@@ -28,21 +28,24 @@ interface ProviderInfo {
   models: ModelInfo[];
 }
 
-interface ModelsDevResponse {
-  providers?: Array<{
-    id: string;
-    name: string;
-    models?: Array<{
-      id: string;
-      name: string;
-      context_length?: number;
-      pricing?: {
-        prompt?: number;
-        completion?: number;
-      };
-    }>;
-  }>;
+interface ModelsDevModel {
+  id: string;
+  name: string;
+  context_length?: number;
+  pricing?: {
+    prompt?: number;
+    completion?: number;
+  };
 }
+
+interface ModelsDevProvider {
+  id: string;
+  name: string;
+  models: Record<string, ModelsDevModel>;
+}
+
+// models.dev returns: { providerId: ProviderData }
+type ModelsDevResponse = Record<string, ModelsDevProvider>;
 
 interface CacheData {
   timestamp: number;
@@ -133,10 +136,6 @@ async function fetchModelsDevData(): Promise<ModelsDevResponse> {
  */
 export async function getProviders(): Promise<ProviderInfo[]> {
   const data = await fetchModelsDevData();
-  
-  if (!data.providers) {
-    return [];
-  }
 
   // Add OpenCode's own models first (not in models.dev)
   const openCodeProvider: ProviderInfo = {
@@ -152,23 +151,23 @@ export async function getProviders(): Promise<ProviderInfo[]> {
 
   const providers: ProviderInfo[] = [openCodeProvider];
 
-  // Filter and transform models.dev providers
-  for (const provider of data.providers) {
-    if (!OPENCODE_PROVIDER_FILTER.has(provider.id)) {
+  // Transform models.dev object format to array
+  for (const [providerId, providerData] of Object.entries(data)) {
+    if (!OPENCODE_PROVIDER_FILTER.has(providerId)) {
       continue;
     }
 
-    const models: ModelInfo[] = (provider.models || []).map((m) => ({
+    const models: ModelInfo[] = Object.values(providerData.models || {}).map((m) => ({
       id: m.id,
       name: m.name,
-      provider: provider.id,
+      provider: providerId,
       context_length: m.context_length,
       pricing: m.pricing,
     }));
 
     providers.push({
-      id: provider.id,
-      name: provider.name,
+      id: providerId,
+      name: providerData.name,
       models,
     });
   }

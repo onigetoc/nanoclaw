@@ -705,7 +705,7 @@ async function runQuery(
         AND is_bot_message = 0
         AND content NOT LIKE 'Andy:%'
       ORDER BY timestamp DESC
-      LIMIT 10
+      LIMIT 1
     `).all(containerInput.chatJid) as Array<{
       sender_name: string;
       content: string;

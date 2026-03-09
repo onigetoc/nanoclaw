@@ -57,9 +57,26 @@ function formatUptime(seconds: number): string {
 }
 
 export default function OverviewSection({ data, serverOnline, isDark }: OverviewSectionProps) {
-  const sys = data?.system;
-  const stats = data?.stats;
-  const sysInfo = data?.systemInfo;
+  // Show loading state while data is being fetched
+  if (!data) {
+    return (
+      <div>
+        <h1 className={`text-xl font-semibold mb-1 ${isDark ? 'text-zinc-100' : 'text-zinc-900'}`}>
+          Overview
+        </h1>
+        <p className={`text-sm mb-6 ${isDark ? 'text-zinc-500' : 'text-zinc-500'}`}>
+          System status and quick health read.
+        </p>
+        <div className="flex justify-center py-12">
+          <div className="h-8 w-8 animate-spin rounded-full border-2 border-zinc-400 border-t-transparent" />
+        </div>
+      </div>
+    );
+  }
+
+  const sys = data.system;
+  const stats = data.stats;
+  const sysInfo = data.systemInfo;
 
   // Determine container mode display
   const getContainerModeDisplay = () => {
@@ -336,7 +353,7 @@ export default function OverviewSection({ data, serverOnline, isDark }: Overview
         )}
 
         {/* Sessions */}
-        {data?.sessions && Object.keys(data.sessions).length > 0 && (
+        {data.sessions && Object.keys(data.sessions).length > 0 && (
           <div
             className={`rounded-xl border p-4 ${
               isDark ? 'border-zinc-800 bg-zinc-900/80' : 'border-zinc-200 bg-white'

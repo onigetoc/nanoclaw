@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { ArrowDown, Bug, MessageCircle, Moon, Sun } from 'lucide-react';
 import { apiService, type ChatInfo, type Message, type ApiToken, type ConnectionStatus } from './api';
 import { useSettings } from './useSettings';
-import { getUiModels } from './utils/models';
+import { getUiModelsSync, type UiModel } from './utils/models';
 import { formatDate } from './types';
 import type { ChatState } from './types';
 import { LoginScreen } from './components/LoginScreens';
@@ -35,8 +35,8 @@ function App() {
   const [isNearBottom, setIsNearBottom] = useState(true);
   const [hasMoreMessages, setHasMoreMessages] = useState(false);
   const [isLoadingOlder, setIsLoadingOlder] = useState(false);
-  const [availableModels, setAvailableModels] = useState(getUiModels());
-  const [selectedModelId, setSelectedModelId] = useState(getUiModels()[0]?.id || '');
+  const [availableModels, setAvailableModels] = useState<UiModel[]>([]);
+  const [selectedModelId, setSelectedModelId] = useState('');
   const [composerHeight, setComposerHeight] = useState(176);
   const [showSettingsPage, setShowSettingsPage] = useState(false);
   const [unreadChats, setUnreadChats] = useState<Set<string>>(new Set());
@@ -50,17 +50,46 @@ function App() {
 
   const isDark = theme === 'dark';
 
+  // Load models on mount
+  useEffect(() => {
+    const models = getUiModelsSync();
+    setAvailableModels(models);
+    if (models.length > 0) {
+      setSelectedModelId(models[0].id);
+    }
+  }, []);
+
   // Reload models when returning from settings
   useEffect(() => {
     if (!showSettingsPage) {
-      const models = getUiModels();
+      const models = getUiModelsSync();
       setAvailableModels(models);
       // Keep current selection if still available, otherwise pick first
-      if (!models.find(m => m.id === selectedModelId)) {
-        setSelectedModelId(models[0]?.id || '');
+      if (models.length > 0 && !models.find(m => m.id === selectedModelId)) {
+        setSelectedModelId(models[0].id);
+      } else if (models.length === 0) {
+        setSelectedModelId('');
       }
     }
   }, [showSettingsPage, selectedModelId]);
+
+  // Listen for localStorage changes (when models are checked/unchecked in settings)
+  useEffect(() => {
+    const handleStorageChange = () => {
+      const models = getUiModelsSync();
+      setAvailableModels(models);
+      // Update selected model if it's no longer available
+      if (models.length > 0 && !models.find(m => m.id === selectedModelId)) {
+        setSelectedModelId(models[0].id);
+      } else if (models.length === 0) {
+        setSelectedModelId('');
+      }
+    };
+
+    // Listen for custom event from ModelsSection
+    window.addEventListener('eureclaw-models-changed', handleStorageChange);
+    return () => window.removeEventListener('eureclaw-models-changed', handleStorageChange);
+  }, [selectedModelId]);
 
   // --- Data loading ---
   const loadChats = async () => {

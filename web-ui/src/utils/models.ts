@@ -6,13 +6,50 @@ export interface UiModel {
   provider: string;
 }
 
-// Get models from user selection in localStorage
-export function getUiModels(): UiModel[] {
-  return getSelectedModels();
+// Get models from user selection in localStorage (async)
+export async function getUiModels(): Promise<UiModel[]> {
+  return await getSelectedModels();
 }
 
-// Legacy export for compatibility
-export const UI_MODELS = getUiModels();
+// Sync version for initial render (returns only checked models from localStorage)
+export function getUiModelsSync(): UiModel[] {
+  const saved = localStorage.getItem('eureclaw_models_selections');
+  if (!saved) {
+    // Return empty array - models will be loaded after ModelsSection initializes
+    return [];
+  }
+  
+  try {
+    const parsed = JSON.parse(saved);
+    const modelIds = parsed.models || [];
+    
+    // Return empty if no models selected
+    if (modelIds.length === 0) {
+      return [];
+    }
+    
+    return modelIds.map((id: string) => ({
+      id,
+      name: extractModelName(id),
+      provider: extractProvider(id),
+    }));
+  } catch {
+    return [];
+  }
+}
+
+function extractModelName(id: string): string {
+  const parts = id.split('/');
+  if (parts.length > 1) {
+    return parts[1].split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+  }
+  return id;
+}
+
+function extractProvider(id: string): string {
+  const parts = id.split('/');
+  return parts[0] || 'unknown';
+}
 
 export function getProviderLogoUrl(provider: string): string {
   return `https://models.dev/logos/${provider}.svg`;

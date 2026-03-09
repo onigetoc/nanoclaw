@@ -26,7 +26,7 @@ export default function ModelSelector({ isDark, selectedModelId, onSelectModel, 
     );
   }, [query, availableModels]);
 
-  // Group models by provider
+  // Group models by provider, with OpenCode free models first
   const groupedModels = useMemo(() => {
     const groups: Record<string, UiModel[]> = {};
     for (const model of filteredModels) {
@@ -36,7 +36,15 @@ export default function ModelSelector({ isDark, selectedModelId, onSelectModel, 
       }
       groups[providerName].push(model);
     }
-    return groups;
+    
+    // Sort: OpenCode first, then alphabetically
+    const sortedEntries = Object.entries(groups).sort(([a], [b]) => {
+      if (a === 'Opencode') return -1;
+      if (b === 'Opencode') return 1;
+      return a.localeCompare(b);
+    });
+    
+    return Object.fromEntries(sortedEntries);
   }, [filteredModels]);
 
   useEffect(() => {

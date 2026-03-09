@@ -77,9 +77,12 @@ export default function ApiKeysSection({ isDark }: ApiKeysSectionProps) {
     try {
       const result = await apiService.removeAuthProvider(provider);
       setFeedback({ type: 'success', msg: result.message });
+      // No need to reload OpenCode when removing a key - it will just stop using it
       await fetchProviders();
     } catch (err: any) {
-      setFeedback({ type: 'error', msg: err.message || 'Failed to remove key' });
+      const errorMsg = err.message || err.toString() || 'Failed to remove key';
+      console.error('Remove provider error:', err);
+      setFeedback({ type: 'error', msg: errorMsg });
     } finally {
       setRemoving(null);
     }
@@ -123,23 +126,23 @@ export default function ApiKeysSection({ isDark }: ApiKeysSectionProps) {
           <div className="flex items-center justify-between">
             <div>
               <p className={`text-sm font-medium ${isDark ? 'text-amber-300' : 'text-amber-700'}`}>
-                Restart Required
+                EureClaw Reload Required
               </p>
               <p className={`text-xs mt-1 ${isDark ? 'text-amber-400/70' : 'text-amber-600'}`}>
-                API key changes require a server restart. This may interrupt active conversations or scheduled tasks.
+                New API keys require reloading EureClaw to take effect.
               </p>
             </div>
             <button
               type="button"
               onClick={handleRestart}
               disabled={restarting}
-              className={`rounded-lg px-4 py-2 text-sm font-medium transition ${
+              className={`cursor-pointer rounded-lg px-4 py-2 text-sm font-medium transition ${
                 restarting
-                  ? isDark ? 'bg-zinc-800 text-zinc-600 cursor-not-allowed' : 'bg-zinc-100 text-zinc-400 cursor-not-allowed'
+                  ? 'cursor-not-allowed ' + (isDark ? 'bg-zinc-800 text-zinc-600' : 'bg-zinc-100 text-zinc-400')
                   : isDark ? 'bg-amber-600 text-white hover:bg-amber-500' : 'bg-amber-600 text-white hover:bg-amber-500'
               }`}
             >
-              {restarting ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Restart'}
+              {restarting ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Reload EureClaw'}
             </button>
           </div>
         </div>
@@ -189,7 +192,7 @@ export default function ApiKeysSection({ isDark }: ApiKeysSectionProps) {
             <button
               type="button"
               onClick={() => setShowKey(!showKey)}
-              className={`absolute right-2 top-1/2 -translate-y-1/2 p-1 ${isDark ? 'text-zinc-500 hover:text-zinc-300' : 'text-zinc-400 hover:text-zinc-600'}`}
+              className={`cursor-pointer absolute right-2 top-1/2 -translate-y-1/2 p-1 ${isDark ? 'text-zinc-500 hover:text-zinc-300' : 'text-zinc-400 hover:text-zinc-600'}`}
             >
               {showKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
             </button>
@@ -199,9 +202,9 @@ export default function ApiKeysSection({ isDark }: ApiKeysSectionProps) {
             type="button"
             onClick={handleSave}
             disabled={!selectedProvider || !keyInput.trim() || saving}
-            className={`rounded-lg px-4 py-2 text-sm font-medium transition ${
+            className={`cursor-pointer rounded-lg px-4 py-2 text-sm font-medium transition ${
               !selectedProvider || !keyInput.trim() || saving
-                ? isDark ? 'bg-zinc-800 text-zinc-600 cursor-not-allowed' : 'bg-zinc-100 text-zinc-400 cursor-not-allowed'
+                ? 'cursor-not-allowed bg-zinc-800 text-zinc-600' + (isDark ? '' : ' bg-zinc-100 text-zinc-400')
                 : isDark ? 'bg-emerald-600 text-white hover:bg-emerald-500' : 'bg-emerald-600 text-white hover:bg-emerald-500'
             }`}
           >
@@ -229,9 +232,9 @@ export default function ApiKeysSection({ isDark }: ApiKeysSectionProps) {
                 type="button"
                 onClick={() => handleRemove(p.provider)}
                 disabled={removing === p.provider}
-                className={`rounded-md p-1.5 transition ${
+                className={`cursor-pointer rounded-md p-1.5 transition ${
                   isDark ? 'text-zinc-500 hover:bg-rose-500/10 hover:text-rose-400' : 'text-zinc-400 hover:bg-rose-50 hover:text-rose-500'
-                }`}
+                } ${removing === p.provider ? 'cursor-not-allowed opacity-50' : ''}`}
                 title="Remove key"
               >
                 {removing === p.provider ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}

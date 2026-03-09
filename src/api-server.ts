@@ -62,6 +62,7 @@ const fastify = Fastify({
 await fastify.register(cors, {
   origin: true,
   credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
 });
 
 // Register multipart support for file uploads
@@ -863,17 +864,20 @@ fastify.get('/system/info', { preHandler: authenticate }, async (request: Fastif
 /**
  * Restart OpenCode server (needed after API key changes)
  */
-fastify.post('/system/restart-opencode', { preHandler: authenticate }, async (request: FastifyRequest, reply: FastifyReply) => {
+fastify.get('/system/restart-opencode', { preHandler: authenticate }, async (request: FastifyRequest, reply: FastifyReply) => {
+  logger.info('=== Restart OpenCode endpoint hit ===');
   try {
     logger.info('Restart OpenCode server requested via API');
+    logger.info('About to call restartOpenCodeServer()');
     // Don't await - respond immediately and restart in background
     restartOpenCodeServer().catch((err) => {
       logger.error({ err }, 'Failed to restart OpenCode server');
     });
-    reply.code(200).send({ success: true, message: 'OpenCode server restart initiated' });
+    logger.info('Sending success response');
+    return reply.code(200).send({ success: true, message: 'EureClaw reload initiated' });
   } catch (err) {
     logger.error({ err }, 'Failed to initiate OpenCode server restart');
-    reply.code(500).send({ error: 'Failed to restart server' });
+    return reply.code(500).send({ error: 'Failed to restart server' });
   }
 });
 

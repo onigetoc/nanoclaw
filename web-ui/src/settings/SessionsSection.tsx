@@ -1,11 +1,28 @@
 import { Radio } from 'lucide-react';
 
 interface SessionsSectionProps {
-  sessions: Record<string, string>;
+  sessions: Record<string, string> | undefined;
   isDark: boolean;
 }
 
 export default function SessionsSection({ sessions, isDark }: SessionsSectionProps) {
+  // Show loading state while data is being fetched
+  if (sessions === undefined) {
+    return (
+      <div>
+        <h1 className={`text-xl font-semibold mb-1 ${isDark ? 'text-zinc-100' : 'text-zinc-900'}`}>
+          Sessions
+        </h1>
+        <p className={`text-sm mb-6 ${isDark ? 'text-zinc-500' : 'text-zinc-500'}`}>
+          Active OpenCode sessions per group.
+        </p>
+        <div className="flex justify-center py-12">
+          <div className="h-8 w-8 animate-spin rounded-full border-2 border-zinc-400 border-t-transparent" />
+        </div>
+      </div>
+    );
+  }
+
   const entries = Object.entries(sessions);
 
   return (

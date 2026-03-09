@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Check, RefreshCw, Info } from 'lucide-react';
-import { apiService } from '../api';
+import { getModelsDevData, clearModelsCache, loadSelections, saveSelections, getOpenCodeFreeModels } from '../services/models-cache';
 
 interface ModelInfo {
   id: string;
@@ -26,11 +26,13 @@ interface ModelsSectionProps {
 export default function ModelsSection({ isDark }: ModelsSectionProps) {
   const [providers, setProviders] = useState<ProviderInfo[]>([]);
   const [popularProviders, setPopularProviders] = useState<string[]>([]);
-  const [selectedProviders, setSelectedProviders] = useState<Set<string>>(new Set());
+  const [selectedProviderId, setSelectedProviderId] = useState<string>('opencode'); // Single provider selection
   const [selectedModels, setSelectedModels] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [providerSearch, setProviderSearch] = useState('');
+  const [modelSearch, setModelSearch] = useState('');
 
   useEffect(() => {
     loadProviders();
@@ -38,55 +40,99 @@ export default function ModelsSection({ isDark }: ModelsSectionProps) {
 
   // Load from localStorage on mount
   useEffect(() => {
-    const saved = localStorage.getItem('eureclaw_selected_models');
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        setSelectedProviders(new Set(parsed.providers || []));
-        setSelectedModels(new Set(parsed.models || []));
-      } catch (e) {
-        console.error('Failed to parse saved selections:', e);
-      }
+    const saved = loadSelections();
+    if (saved.models.length > 0) {
+      setSelectedModels(new Set(saved.models));
     }
   }, []);
 
   // Save to localStorage whenever selections change
   useEffect(() => {
-    if (selectedProviders.size > 0 || selectedModels.size > 0) {
-      localStorage.setItem('eureclaw_selected_models', JSON.stringify({
-        providers: Array.from(selectedProviders),
+    if (selectedModels.size > 0) {
+      saveSelections({
+        providers: [], // Not used anymore
         models: Array.from(selectedModels),
-      }));
+      });
+      // Trigger custom event so App.tsx can reload models immediately
+      window.dispatchEvent(new CustomEvent('eureclaw-models-changed'));
     }
-  }, [selectedProviders, selectedModels]);
+  }, [selectedModels]);
 
   const loadProviders = async () => {
     try {
       setLoading(true);
       setError(null);
-      const data = await apiService.getProviders();
-      setProviders(data.providers);
-      setPopularProviders(data.popular);
+      
+      // Fetch directly from models.dev (browser-side)
+      const modelsDevData = await getModelsDevData();
+      
+      // Transform to ProviderInfo array
+      const providersArray: ProviderInfo[] = [];
+      
+      // Get OpenCode free models dynamically
+      const openCodeFree = getOpenCodeFreeModels(modelsDevData);
+      
+      // Add OpenCode first with dynamic free models
+      const openCodeModels = [
+        { id: 'opencode/big-pickle', name: 'Big Pickle', provider: 'opencode' },
+        { id: 'opencode/gpt-5-nano', name: 'GPT-5 Nano', provider: 'opencode' },
+        ...openCodeFree.map(m => ({ 
+          id: m.id, 
+          name: `${m.name} (Free)`, 
+          provider: 'opencode' 
+        })),
+      ];
+      
+      providersArray.push({
+        id: 'opencode',
+        name: 'OpenCode',
+        models: openCodeModels,
+      });
+      
+      // Transform models.dev data
+      for (const [providerId, providerData] of Object.entries(modelsDevData)) {
+        if (providerId === 'opencode') continue; // Already added above
+        
+        const models: ModelInfo[] = Object.values(providerData.models).map((m) => ({
+          id: m.id,
+          name: m.name,
+          provider: providerId,
+          context_length: m.limit?.context,
+          pricing: m.cost ? {
+            prompt: m.cost.input,
+            completion: m.cost.output,
+          } : undefined,
+        }));
+        
+        providersArray.push({
+          id: providerId,
+          name: providerData.name,
+          models,
+        });
+      }
+      
+      setProviders(providersArray);
+      
+      // Popular providers
+      const popular = ['openai', 'anthropic', 'google', 'x-ai', 'meta', 'mistral', 'cohere'];
+      setPopularProviders(popular);
 
-      // Only pre-select if no saved selections
-      const saved = localStorage.getItem('eureclaw_selected_models');
-      if (!saved) {
-        // Pre-select popular providers and their models
-        const popularSet = new Set(data.popular);
-        const preSelectedProviders = new Set<string>();
-        const preSelectedModels = new Set<string>();
-
-        for (const provider of data.providers) {
-          if (popularSet.has(provider.id) || provider.id === 'opencode') {
-            preSelectedProviders.add(provider.id);
-            for (const model of provider.models) {
-              preSelectedModels.add(model.id);
-            }
-          }
+      // Load saved selections or pre-select free models
+      const saved = loadSelections();
+      if (saved.models.length > 0) {
+        setSelectedModels(new Set(saved.models));
+      } else {
+        // Pre-select only OpenCode free models
+        const freeModelIds = new Set(openCodeFree.map(m => m.id));
+        setSelectedModels(freeModelIds);
+        // Save immediately and notify
+        if (freeModelIds.size > 0) {
+          saveSelections({
+            providers: [],
+            models: Array.from(freeModelIds),
+          });
+          window.dispatchEvent(new CustomEvent('eureclaw-models-changed'));
         }
-
-        setSelectedProviders(preSelectedProviders);
-        setSelectedModels(preSelectedModels);
       }
     } catch (err) {
       console.error('Failed to load providers:', err);
@@ -99,7 +145,7 @@ export default function ModelsSection({ isDark }: ModelsSectionProps) {
   const handleRefreshCache = async () => {
     try {
       setRefreshing(true);
-      await apiService.clearModelsCache();
+      clearModelsCache();
       await loadProviders();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to refresh cache');
@@ -109,30 +155,7 @@ export default function ModelsSection({ isDark }: ModelsSectionProps) {
   };
 
   const toggleProvider = (providerId: string) => {
-    const newSelected = new Set(selectedProviders);
-    const provider = providers.find((p) => p.id === providerId);
-
-    if (newSelected.has(providerId)) {
-      newSelected.delete(providerId);
-      if (provider) {
-        const newModels = new Set(selectedModels);
-        for (const model of provider.models) {
-          newModels.delete(model.id);
-        }
-        setSelectedModels(newModels);
-      }
-    } else {
-      newSelected.add(providerId);
-      if (provider) {
-        const newModels = new Set(selectedModels);
-        for (const model of provider.models) {
-          newModels.add(model.id);
-        }
-        setSelectedModels(newModels);
-      }
-    }
-
-    setSelectedProviders(newSelected);
+    setSelectedProviderId(providerId);
   };
 
   const toggleModel = (modelId: string) => {
@@ -145,10 +168,42 @@ export default function ModelsSection({ isDark }: ModelsSectionProps) {
     setSelectedModels(newSelected);
   };
 
-  const selectedProvidersData = providers.filter((p) => selectedProviders.has(p.id));
-  const availableModels = selectedProvidersData.flatMap((p) =>
-    p.models.filter((m) => selectedModels.has(m.id))
+  const toggleAllModelsForProvider = (providerId: string) => {
+    const provider = providers.find((p) => p.id === providerId);
+    if (!provider) return;
+
+    const providerModelIds = provider.models.map(m => m.id);
+    const allSelected = providerModelIds.every(id => selectedModels.has(id));
+
+    const newSelected = new Set(selectedModels);
+    if (allSelected) {
+      // Deselect all
+      for (const id of providerModelIds) {
+        newSelected.delete(id);
+      }
+    } else {
+      // Select all
+      for (const id of providerModelIds) {
+        newSelected.add(id);
+      }
+    }
+    setSelectedModels(newSelected);
+  };
+
+  const filteredProviders = providers.filter(p => 
+    p.name.toLowerCase().includes(providerSearch.toLowerCase()) ||
+    p.id.toLowerCase().includes(providerSearch.toLowerCase())
   );
+
+  const selectedProvider = providers.find((p) => p.id === selectedProviderId);
+  
+  // Filter models based on search
+  const filteredModels = selectedProvider?.models.filter(m =>
+    m.name.toLowerCase().includes(modelSearch.toLowerCase()) ||
+    m.id.toLowerCase().includes(modelSearch.toLowerCase())
+  ) ?? [];
+  
+  const totalSelectedModels = selectedModels.size;
 
   return (
     <div className="space-y-6">
@@ -211,13 +266,44 @@ export default function ModelsSection({ isDark }: ModelsSectionProps) {
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-          {/* Left: Provider Selection */}
+          {/* Left: Provider Selection (single selection, no checkboxes) */}
           <div className={`rounded-lg border p-4 ${isDark ? 'border-zinc-800 bg-zinc-950' : 'border-zinc-200 bg-zinc-50'}`}>
-            <h3 className="mb-3 text-sm font-semibold">Providers ({selectedProviders.size} selected)</h3>
-            <div className="space-y-1">
-              {providers.map((provider) => {
-                const isSelected = selectedProviders.has(provider.id);
+            <h3 className="mb-3 text-sm font-semibold">Providers</h3>
+            
+            {/* Search input with clear button */}
+            <div className="relative mb-2">
+              <input
+                type="text"
+                value={providerSearch}
+                onChange={(e) => setProviderSearch(e.target.value)}
+                placeholder="Search providers..."
+                className={`w-full rounded-lg border px-3 py-2 pr-8 text-sm ${
+                  isDark
+                    ? 'border-zinc-700 bg-zinc-900 text-zinc-100 placeholder:text-zinc-500'
+                    : 'border-zinc-300 bg-white text-zinc-900 placeholder:text-zinc-400'
+                }`}
+              />
+              {providerSearch && (
+                <button
+                  type="button"
+                  onClick={() => setProviderSearch('')}
+                  className={`absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 transition ${
+                    isDark ? 'text-zinc-400 hover:text-zinc-200' : 'text-zinc-500 hover:text-zinc-700'
+                  }`}
+                >
+                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              )}
+            </div>
+            
+            {/* Scrollable provider list */}
+            <div className="max-h-96 space-y-1 overflow-y-auto">
+              {filteredProviders.map((provider) => {
+                const isSelected = selectedProviderId === provider.id;
                 const isPopular = popularProviders.includes(provider.id) || provider.id === 'opencode';
+                const hasSelectedModels = provider.models.some(m => selectedModels.has(m.id));
                 return (
                   <button
                     key={provider.id}
@@ -226,21 +312,14 @@ export default function ModelsSection({ isDark }: ModelsSectionProps) {
                     className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm transition ${
                       isSelected
                         ? isDark
-                          ? 'bg-blue-500/20 text-blue-300'
-                          : 'bg-blue-50 text-blue-700'
+                          ? 'bg-blue-500/20 text-blue-300 ring-1 ring-blue-500/50'
+                          : 'bg-blue-50 text-blue-700 ring-1 ring-blue-200'
                         : isDark
                         ? 'hover:bg-zinc-800 text-zinc-300'
                         : 'hover:bg-zinc-100 text-zinc-700'
                     }`}
                   >
                     <div className="flex items-center gap-2">
-                      <div className={`flex h-5 w-5 items-center justify-center rounded border ${
-                        isSelected
-                          ? isDark ? 'border-blue-500 bg-blue-500' : 'border-blue-600 bg-blue-600'
-                          : isDark ? 'border-zinc-600' : 'border-zinc-300'
-                      }`}>
-                        {isSelected && <Check className="h-3 w-3 text-white" />}
-                      </div>
                       <span>{provider.name}</span>
                       {isPopular && (
                         <span className={`rounded px-1.5 py-0.5 text-xs ${isDark ? 'bg-amber-500/20 text-amber-300' : 'bg-amber-100 text-amber-700'}`}>
@@ -248,75 +327,130 @@ export default function ModelsSection({ isDark }: ModelsSectionProps) {
                         </span>
                       )}
                     </div>
-                    <span className={`text-xs ${isDark ? 'text-zinc-500' : 'text-zinc-400'}`}>
-                      {provider.models.length}
-                    </span>
+                    <div className="flex items-center gap-1.5">
+                      {hasSelectedModels && (
+                        <span className="h-2 w-2 rounded-full bg-emerald-500" title="Has selected models" />
+                      )}
+                      <span className={`text-xs ${isDark ? 'text-zinc-500' : 'text-zinc-400'}`}>
+                        {provider.models.length}
+                      </span>
+                    </div>
                   </button>
                 );
               })}
             </div>
           </div>
 
-          {/* Right: Model Selection */}
+          {/* Right: Model Selection with checkboxes */}
           <div className={`lg:col-span-2 rounded-lg border p-4 ${isDark ? 'border-zinc-800 bg-zinc-950' : 'border-zinc-200 bg-zinc-50'}`}>
-            <h3 className="mb-3 text-sm font-semibold">
-              Models ({availableModels.length} selected)
-            </h3>
-            {selectedProvidersData.length === 0 ? (
+            <div className="mb-3 flex items-center justify-between">
+              <h3 className="text-sm font-semibold">
+                Models ({totalSelectedModels} selected)
+              </h3>
+            </div>
+            
+            {/* Model search input */}
+            {selectedProvider && (
+              <div className="relative mb-3">
+                <input
+                  type="text"
+                  value={modelSearch}
+                  onChange={(e) => setModelSearch(e.target.value)}
+                  placeholder="Filter models..."
+                  className={`w-full rounded-lg border px-3 py-2 pr-8 text-sm ${
+                    isDark
+                      ? 'border-zinc-700 bg-zinc-900 text-zinc-100 placeholder:text-zinc-500'
+                      : 'border-zinc-300 bg-white text-zinc-900 placeholder:text-zinc-400'
+                  }`}
+                />
+                {modelSearch && (
+                  <button
+                    type="button"
+                    onClick={() => setModelSearch('')}
+                    className={`absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 transition ${
+                      isDark ? 'text-zinc-400 hover:text-zinc-200' : 'text-zinc-500 hover:text-zinc-700'
+                    }`}
+                  >
+                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                )}
+              </div>
+            )}
+            
+            {!selectedProvider ? (
               <div className={`rounded-lg border p-8 text-center ${isDark ? 'border-zinc-800 text-zinc-500' : 'border-zinc-200 text-zinc-400'}`}>
-                Select a provider to see available models
+                Select a provider from the left to see available models
               </div>
             ) : (
-              <div className="space-y-4">
-                {selectedProvidersData.map((provider) => (
-                  <div key={provider.id}>
-                    <h4 className={`mb-2 text-xs font-semibold uppercase tracking-wide ${isDark ? 'text-zinc-400' : 'text-zinc-500'}`}>
-                      {provider.name}
+              <div className="max-h-96 space-y-4 overflow-y-auto">
+                <div>
+                  <div className="mb-2 flex items-center justify-between">
+                    <h4 className={`text-xs font-semibold uppercase tracking-wide ${isDark ? 'text-zinc-400' : 'text-zinc-500'}`}>
+                      {selectedProvider.name}
                     </h4>
+                    <button
+                      type="button"
+                      onClick={() => toggleAllModelsForProvider(selectedProvider.id)}
+                      className={`rounded px-2 py-1 text-xs font-medium transition ${
+                        isDark
+                          ? 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'
+                          : 'bg-zinc-200 text-zinc-700 hover:bg-zinc-300'
+                      }`}
+                    >
+                      {selectedProvider.models.every(m => selectedModels.has(m.id)) ? 'Deselect All' : 'Select All'}
+                    </button>
+                  </div>
+                  {filteredModels.length === 0 ? (
+                    <div className={`rounded-lg border p-6 text-center ${isDark ? 'border-zinc-800 text-zinc-500' : 'border-zinc-200 text-zinc-400'}`}>
+                      <p className="text-sm">No models match your search</p>
+                    </div>
+                  ) : (
                     <div className="grid grid-cols-1 gap-1 md:grid-cols-2">
-                      {provider.models.map((model) => {
-                        const isSelected = selectedModels.has(model.id);
-                        return (
-                          <button
-                            key={model.id}
-                            type="button"
-                            onClick={() => toggleModel(model.id)}
-                            className={`flex items-center justify-between rounded-lg px-3 py-2 text-left text-sm transition ${
+                      {filteredModels.map((model) => {
+                      const isSelected = selectedModels.has(model.id);
+                      return (
+                        <button
+                          key={model.id}
+                          type="button"
+                          onClick={() => toggleModel(model.id)}
+                          className={`flex items-center justify-between rounded-lg px-3 py-2 text-left text-sm transition ${
+                            isSelected
+                              ? isDark
+                                ? 'bg-green-500/20 text-green-300'
+                                : 'bg-green-50 text-green-700'
+                              : isDark
+                              ? 'hover:bg-zinc-800 text-zinc-300'
+                              : 'hover:bg-zinc-100 text-zinc-700'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2 min-w-0">
+                            <div className={`flex h-5 w-5 shrink-0 items-center justify-center rounded border ${
                               isSelected
-                                ? isDark
-                                  ? 'bg-green-500/20 text-green-300'
-                                  : 'bg-green-50 text-green-700'
-                                : isDark
-                                ? 'hover:bg-zinc-800 text-zinc-300'
-                                : 'hover:bg-zinc-100 text-zinc-700'
-                            }`}
-                          >
-                            <div className="flex items-center gap-2 min-w-0">
-                              <div className={`flex h-5 w-5 shrink-0 items-center justify-center rounded border ${
-                                isSelected
-                                  ? isDark ? 'border-green-500 bg-green-500' : 'border-green-600 bg-green-600'
-                                  : isDark ? 'border-zinc-600' : 'border-zinc-300'
-                              }`}>
-                                {isSelected && <Check className="h-3 w-3 text-white" />}
-                              </div>
-                              <div className="min-w-0">
-                                <div className="truncate">{model.name}</div>
-                                <div className={`truncate text-xs ${isDark ? 'text-zinc-500' : 'text-zinc-400'}`}>
-                                  {model.id}
-                                </div>
+                                ? isDark ? 'border-green-500 bg-green-500' : 'border-green-600 bg-green-600'
+                                : isDark ? 'border-zinc-600' : 'border-zinc-300'
+                            }`}>
+                              {isSelected && <Check className="h-3 w-3 text-white" />}
+                            </div>
+                            <div className="min-w-0">
+                              <div className="truncate">{model.name}</div>
+                              <div className={`truncate text-xs ${isDark ? 'text-zinc-500' : 'text-zinc-400'}`}>
+                                {model.id}
                               </div>
                             </div>
-                            {model.context_length && (
-                              <span className={`ml-2 shrink-0 text-xs ${isDark ? 'text-zinc-500' : 'text-zinc-400'}`}>
-                                {(model.context_length / 1000).toFixed(0)}k
-                              </span>
-                            )}
-                          </button>
-                        );
-                      })}
+                          </div>
+                          {model.context_length && (
+                            <span className={`ml-2 shrink-0 text-xs ${isDark ? 'text-zinc-500' : 'text-zinc-400'}`}>
+                              {(model.context_length / 1000).toFixed(0)}k
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
                     </div>
-                  </div>
-                ))}
+                  )}
+                </div>
               </div>
             )}
           </div>

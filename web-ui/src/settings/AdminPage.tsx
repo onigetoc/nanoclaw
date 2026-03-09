@@ -91,7 +91,7 @@ export default function AdminPage({
               <OverviewSection data={monitoringData} serverOnline={serverOnline} isDark={isDark} />
             )}
             {section === 'sessions' && (
-              <SessionsSection sessions={monitoringData?.sessions ?? {}} isDark={isDark} />
+              <SessionsSection sessions={monitoringData?.sessions} isDark={isDark} />
             )}
             {section === 'debug' && (
               <DebugSection
