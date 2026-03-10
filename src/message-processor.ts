@@ -22,7 +22,12 @@ import {
   storeMessageDirect,
 } from './db.js';
 import { GroupQueue } from './group-queue.js';
-import { findChannel, formatMessages, sendDeduped, isDuplicate } from './router.js';
+import {
+  findChannel,
+  formatMessages,
+  sendDeduped,
+  isDuplicate,
+} from './router.js';
 import {
   getRegisteredGroups,
   getSessions,
@@ -54,7 +59,21 @@ export async function processGroupMessages(
   if (!group) return true;
 
   const isMainGroup = group.folder === MAIN_GROUP_FOLDER;
-  const sinceTimestamp = getLastAgentTimestampForJid(chatJid);
+  const sessions = getSessions();
+  const sessionId = sessions[group.folder];
+  let isFreshSession: boolean = !!(sessionId && isSessionFresh(sessionId));
+
+  let sinceTimestamp = getLastAgentTimestampForJid(chatJid);
+
+  if (isFreshSession) {
+    logger.info(
+      { group: group.name, sessionId },
+      'Fresh session detected - will skip conversation history',
+    );
+    clearFreshSessionFlag(sessionId); // Clear flag after first use
+    sinceTimestamp = new Date().toISOString(); // Set timestamp to now to ignore old messages
+  }
+
   const missedMessages = chatJid.startsWith('web:')
     ? getMessagesSinceLinked(chatJid, sinceTimestamp, ASSISTANT_NAME)
     : getMessagesSince(chatJid, sinceTimestamp, ASSISTANT_NAME);
@@ -73,7 +92,10 @@ export async function processGroupMessages(
 
   // Advance cursor; save old cursor for rollback on error
   const previousCursor = getLastAgentTimestampForJid(chatJid);
-  setLastAgentTimestampForJid(chatJid, missedMessages[missedMessages.length - 1].timestamp);
+  setLastAgentTimestampForJid(
+    chatJid,
+    missedMessages[missedMessages.length - 1].timestamp,
+  );
   saveState();
 
   logger.info(
@@ -82,20 +104,22 @@ export async function processGroupMessages(
   );
 
   const monitoring = getMonitoring();
-  const sessions = getSessions();
   const executionId = monitoring.startExecution({
     groupName: group.name,
     groupFolder: group.folder,
     chatJid,
     messageCount: missedMessages.length,
-    sessionId: sessions[group.folder],
+    sessionId: sessionId,
   });
 
   let idleTimer: ReturnType<typeof setTimeout> | null = null;
   const resetIdleTimer = () => {
     if (idleTimer) clearTimeout(idleTimer);
     idleTimer = setTimeout(() => {
-      logger.debug({ group: group.name }, 'Idle timeout, closing container stdin');
+      logger.debug(
+        { group: group.name },
+        'Idle timeout, closing container stdin',
+      );
       queue.closeStdin(chatJid);
     }, IDLE_TIMEOUT);
   };
@@ -108,72 +132,90 @@ export async function processGroupMessages(
   let outputSentToUser = false;
   let lastErrorMessage = '';
 
-  const output = await runAgent(group, prompt, chatJid, queue, async (result) => {
-    if (result.result) {
-      const raw = typeof result.result === 'string' ? result.result : JSON.stringify(result.result);
-      const text = raw.replace(/<internal>[\s\S]*?<\/internal>/g, '').trim();
-      logger.info({ group: group.name }, `Agent output: ${raw.slice(0, 200)}`);
-      if (text) {
-        const msgMetadata = result.metadata ? {
-          modelID: result.metadata.modelID,
-          providerID: result.metadata.providerID,
-          mode: result.metadata.mode,
-          agent: result.metadata.agent,
-          tokens: result.metadata.tokens,
-          cost: result.metadata.cost,
-        } : undefined;
+  const output = await runAgent(
+    group,
+    prompt,
+    chatJid,
+    queue,
+    isFreshSession,
+    async (result) => {
+      if (result.result) {
+        const raw =
+          typeof result.result === 'string'
+            ? result.result
+            : JSON.stringify(result.result);
+        const text = raw.replace(/<internal>[\s\S]*?<\/internal>/g, '').trim();
+        logger.info(
+          { group: group.name },
+          `Agent output: ${raw.slice(0, 200)}`,
+        );
+        if (text) {
+          const msgMetadata = result.metadata
+            ? {
+                modelID: result.metadata.modelID,
+                providerID: result.metadata.providerID,
+                mode: result.metadata.mode,
+                agent: result.metadata.agent,
+                tokens: result.metadata.tokens,
+                cost: result.metadata.cost,
+              }
+            : undefined;
 
-        // For web: JIDs, bypass sendDeduped (which uses WebUIChannel.sendMessage
-        // and loses metadata). Instead, check dedup directly and broadcast with
-        // metadata via broadcastToToken.
-        const isWebJid = chatJid.startsWith('web:');
-        if (isWebJid) {
-          if (isDuplicate(chatJid, text)) return; // Duplicate — skip
-        } else {
-          const wasSent = await sendDeduped(channel, chatJid, text);
-          if (!wasSent) return; // Duplicate — skip store & broadcast
+          // For web: JIDs, bypass sendDeduped (which uses WebUIChannel.sendMessage
+          // and loses metadata). Instead, check dedup directly and broadcast with
+          // metadata via broadcastToToken.
+          const isWebJid = chatJid.startsWith('web:');
+          if (isWebJid) {
+            if (isDuplicate(chatJid, text)) return; // Duplicate — skip
+          } else {
+            const wasSent = await sendDeduped(channel, chatJid, text);
+            if (!wasSent) return; // Duplicate — skip store & broadcast
+          }
+          outputSentToUser = true;
+          monitoring.markOutputSent(executionId);
+
+          const msgId = `bot_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+          const msgTimestamp = new Date().toISOString();
+
+          storeMessageDirect({
+            id: msgId,
+            chat_jid: chatJid,
+            sender: 'bot',
+            sender_name: ASSISTANT_NAME,
+            content: text,
+            timestamp: msgTimestamp,
+            is_from_me: true,
+            is_bot_message: true,
+            metadata: msgMetadata,
+          });
+
+          // Broadcast to web UI SSE clients — always include metadata.
+          // For web: JIDs we broadcast directly here (not via WebUIChannel)
+          // so metadata is preserved. For non-web JIDs this provides
+          // cross-channel sync to any connected web clients.
+          broadcastToToken(chatJid, {
+            id: msgId,
+            content: text,
+            sender_name: ASSISTANT_NAME,
+            timestamp: msgTimestamp,
+            is_from_me: true,
+            is_bot_message: true,
+            metadata: msgMetadata,
+          });
         }
-        outputSentToUser = true;
-        monitoring.markOutputSent(executionId);
+        resetIdleTimer();
+      }
 
-        const msgId = `bot_${Date.now()}_${Math.random().toString(36).substring(7)}`;
-        const msgTimestamp = new Date().toISOString();
-
-        storeMessageDirect({
-          id: msgId,
-          chat_jid: chatJid,
-          sender: 'bot',
-          sender_name: ASSISTANT_NAME,
-          content: text,
-          timestamp: msgTimestamp,
-          is_from_me: true,
-          is_bot_message: true,
-          metadata: msgMetadata,
-        });
-
-        // Broadcast to web UI SSE clients — always include metadata.
-        // For web: JIDs we broadcast directly here (not via WebUIChannel)
-        // so metadata is preserved. For non-web JIDs this provides
-        // cross-channel sync to any connected web clients.
-        broadcastToToken(chatJid, {
-          id: msgId,
-          content: text,
-          sender_name: ASSISTANT_NAME,
-          timestamp: msgTimestamp,
-          is_from_me: true,
-          is_bot_message: true,
-          metadata: msgMetadata,
+      if (result.status === 'error') {
+        hadError = true;
+        lastErrorMessage = result.error || 'Unknown error';
+        monitoring.updateExecution(executionId, {
+          status: 'error',
+          error: result.error,
         });
       }
-      resetIdleTimer();
-    }
-
-    if (result.status === 'error') {
-      hadError = true;
-      lastErrorMessage = result.error || 'Unknown error';
-      monitoring.updateExecution(executionId, { status: 'error', error: result.error });
-    }
-  });
+    },
+  );
 
   await channel.setTyping?.(chatJid, false);
   if (idleTimer) clearTimeout(idleTimer);
@@ -206,14 +248,23 @@ export async function processGroupMessages(
     });
 
     if (outputSentToUser) {
-      logger.warn({ group: group.name }, 'Agent error after output was sent, skipping cursor rollback to prevent duplicates');
+      logger.warn(
+        { group: group.name },
+        'Agent error after output was sent, skipping cursor rollback to prevent duplicates',
+      );
       monitoring.updateExecution(executionId, { status: 'completed' });
       return true;
     }
     setLastAgentTimestampForJid(chatJid, previousCursor);
     saveState();
-    logger.warn({ group: group.name }, 'Agent error, rolled back message cursor for retry');
-    monitoring.updateExecution(executionId, { status: 'error', error: errorDetail });
+    logger.warn(
+      { group: group.name },
+      'Agent error, rolled back message cursor for retry',
+    );
+    monitoring.updateExecution(executionId, {
+      status: 'error',
+      error: errorDetail,
+    });
     return false;
   }
 
@@ -229,47 +280,97 @@ function formatErrorForUser(rawError: string): string {
   const lower = rawError.toLowerCase();
 
   // Rate limit / quota exceeded
-  if (lower.includes('429') || lower.includes('rate') || lower.includes('quota') || lower.includes('limit exceeded') || lower.includes('too many requests')) {
+  if (
+    lower.includes('429') ||
+    lower.includes('rate') ||
+    lower.includes('quota') ||
+    lower.includes('limit exceeded') ||
+    lower.includes('too many requests')
+  ) {
     return `⚠️ Rate limit reached — the AI provider is throttling requests. Try again in a minute.\n\n\`Details: ${rawError}\``;
   }
 
   // Network / connectivity
-  if (lower.includes('fetch failed') || lower.includes('econnrefused') || lower.includes('enotfound') || lower.includes('network') || lower.includes('dns') || lower.includes('apiconnectionerror') || lower.includes('connectivity')) {
+  if (
+    lower.includes('fetch failed') ||
+    lower.includes('econnrefused') ||
+    lower.includes('enotfound') ||
+    lower.includes('network') ||
+    lower.includes('dns') ||
+    lower.includes('apiconnectionerror') ||
+    lower.includes('connectivity')
+  ) {
     return `⚠️ Network error — could not reach the AI provider. Check your internet connection.\n\n\`Details: ${rawError}\``;
   }
 
   // OpenCode server unreachable
-  if (lower.includes('opencode server') || lower.includes('unreachable') || lower.includes('localhost:4096')) {
+  if (
+    lower.includes('opencode server') ||
+    lower.includes('unreachable') ||
+    lower.includes('localhost:4096')
+  ) {
     return `⚠️ OpenCode server is not responding. Make sure the OpenCode process is running.\n\n\`Details: ${rawError}\``;
   }
 
   // Timeout
-  if (lower.includes('timeout') || lower.includes('abort') || lower.includes('timed out')) {
+  if (
+    lower.includes('timeout') ||
+    lower.includes('abort') ||
+    lower.includes('timed out')
+  ) {
     return `⚠️ Request timed out — the AI took too long to respond. This can happen with complex prompts or slow providers.\n\n\`Details: ${rawError}\``;
   }
 
   // Context overflow
-  if (lower.includes('contextoverflow') || lower.includes('context_length') || lower.includes('context window') || lower.includes('token limit') || lower.includes('maximum context length')) {
+  if (
+    lower.includes('contextoverflow') ||
+    lower.includes('context_length') ||
+    lower.includes('context window') ||
+    lower.includes('token limit') ||
+    lower.includes('maximum context length')
+  ) {
     return `⚠️ Context window full — the conversation is too long. A new session will be created automatically on the next message.\n\n\`Details: ${rawError}\``;
   }
 
   // Auth / API key
-  if (lower.includes('401') || lower.includes('403') || lower.includes('unauthorized') || lower.includes('forbidden') || lower.includes('api key') || lower.includes('invalid key')) {
+  if (
+    lower.includes('401') ||
+    lower.includes('403') ||
+    lower.includes('unauthorized') ||
+    lower.includes('forbidden') ||
+    lower.includes('api key') ||
+    lower.includes('invalid key')
+  ) {
     return `⚠️ Authentication error — the API key may be invalid or expired. Check your provider credentials.\n\n\`Details: ${rawError}\``;
   }
 
   // Server error (500, 502, 503)
-  if (lower.includes('500') || lower.includes('502') || lower.includes('503') || lower.includes('internal server error') || lower.includes('bad gateway') || lower.includes('service unavailable') || lower.includes('overloaded')) {
+  if (
+    lower.includes('500') ||
+    lower.includes('502') ||
+    lower.includes('503') ||
+    lower.includes('internal server error') ||
+    lower.includes('bad gateway') ||
+    lower.includes('service unavailable') ||
+    lower.includes('overloaded')
+  ) {
     return `⚠️ The AI provider is experiencing issues (server error). Try again shortly.\n\n\`Details: ${rawError}\``;
   }
 
   // Container / spawn errors
-  if (lower.includes('container') || lower.includes('spawn error') || lower.includes('exited with code')) {
+  if (
+    lower.includes('container') ||
+    lower.includes('spawn error') ||
+    lower.includes('exited with code')
+  ) {
     return `⚠️ Agent container error — the execution environment failed.\n\n\`Details: ${rawError}\``;
   }
 
   // Session management
-  if (lower.includes('session') && (lower.includes('failed') || lower.includes('not found'))) {
+  if (
+    lower.includes('session') &&
+    (lower.includes('failed') || lower.includes('not found'))
+  ) {
     return `⚠️ Session error — could not create or resume the conversation session.\n\n\`Details: ${rawError}\``;
   }
 
@@ -285,6 +386,7 @@ async function runAgent(
   prompt: string,
   chatJid: string,
   queue: GroupQueue,
+  isFreshSession: boolean,
   onOutput?: (output: ContainerOutput) => Promise<void>,
 ): Promise<'success' | 'error'> {
   const isMain = group.folder === MAIN_GROUP_FOLDER;
@@ -294,12 +396,16 @@ async function runAgent(
 
   const serverOk = await ensureServerHealthy();
   if (!serverOk) {
-    logger.error({ group: group.name }, 'OpenCode server unreachable, skipping agent run');
+    logger.error(
+      { group: group.name },
+      'OpenCode server unreachable, skipping agent run',
+    );
     if (onOutput) {
       await onOutput({
         status: 'error',
         result: null,
-        error: 'OpenCode server is unreachable. Check that the OpenCode process is running.',
+        error:
+          'OpenCode server is unreachable. Check that the OpenCode process is running.',
       });
     }
     return 'error';
@@ -337,7 +443,11 @@ async function runAgent(
           // The agent-runner reports back the session it used, but if /new already
           // set a different session ID in state, we must not overwrite it.
           const currentInState = getSessions()[group.folder];
-          if (!currentInState || currentInState === sessionId || currentInState === output.newSessionId) {
+          if (
+            !currentInState ||
+            currentInState === sessionId ||
+            currentInState === output.newSessionId
+          ) {
             setGroupSession(group.folder, output.newSessionId);
           }
         }
@@ -346,14 +456,9 @@ async function runAgent(
     : undefined;
 
   try {
-    // Check if this is a fresh session (just created by /new command)
-    const isFreshSession = sessionId && isSessionFresh(sessionId);
-    if (isFreshSession) {
-      logger.info({ group: group.name, sessionId }, 'Fresh session detected - will skip conversation history');
-      clearFreshSessionFlag(sessionId); // Clear flag after first use
-    }
-    
-    const runAgentFn = shouldUseDirectMode() ? runDirectAgent : runContainerAgent;
+    const runAgentFn = shouldUseDirectMode()
+      ? runDirectAgent
+      : runContainerAgent;
     const output = await runAgentFn(
       group,
       {
@@ -364,14 +469,19 @@ async function runAgent(
         isMain,
         forceNewSession: !sessionId || isFreshSession || sessionId === '', // Force new session when empty OR fresh from /new
       },
-      (proc, containerName) => queue.registerProcess(chatJid, proc, containerName, group.folder),
+      (proc, containerName) =>
+        queue.registerProcess(chatJid, proc, containerName, group.folder),
       wrappedOnOutput,
     );
 
     if (output.newSessionId) {
       // Same guard: don't overwrite if /new changed the session externally
       const currentInState = getSessions()[group.folder];
-      if (!currentInState || currentInState === sessionId || currentInState === output.newSessionId) {
+      if (
+        !currentInState ||
+        currentInState === sessionId ||
+        currentInState === output.newSessionId
+      ) {
         setGroupSession(group.folder, output.newSessionId);
       }
     }

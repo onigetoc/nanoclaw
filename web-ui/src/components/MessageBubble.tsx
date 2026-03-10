@@ -101,7 +101,7 @@ export default function MessageBubble({ msg, isDark, onSendCommand }: MessageBub
           </div>
         )}
 
-        <div className={`break-words text-[15px] leading-relaxed [&_a]:cursor-pointer [&_a]:text-emerald-300 [&_a]:underline [&_a]:underline-offset-2 [&_a:hover]:text-emerald-200 [&_code]:rounded [&_code]:px-1.5 [&_code]:py-0.5 [&_ol]:my-2 [&_ol]:list-inside [&_ol]:list-decimal [&_ol]:pl-1 [&_p]:mb-2 [&_p:last-child]:mb-0 [&_pre]:my-2 [&_pre]:overflow-x-auto [&_pre]:rounded-lg [&_pre]:p-3 [&_ul]:my-2 [&_ul]:list-inside [&_ul]:list-disc [&_ul]:pl-1 [&_li]:my-0.5 ${isDark ? 'text-zinc-300 [&_code]:bg-zinc-800 [&_code]:text-emerald-300 [&_pre]:bg-zinc-900 [&_pre]:text-zinc-200' : 'text-zinc-800 [&_code]:bg-zinc-200 [&_code]:text-zinc-700 [&_pre]:bg-zinc-100 [&_pre]:text-zinc-800'}`}>
+        <div className={`break-words text-base leading-relaxed [&_a]:cursor-pointer [&_a]:text-emerald-300 [&_a]:underline [&_a]:underline-offset-2 [&_a:hover]:text-emerald-200 [&_code]:rounded [&_code]:px-1.5 [&_code]:py-0.5 [&_ol]:my-2 [&_ol]:list-inside [&_ol]:list-decimal [&_ol]:pl-1 [&_p]:mb-2 [&_p:last-child]:mb-0 [&_pre]:my-2 [&_pre]:overflow-x-auto [&_pre]:rounded-lg [&_pre]:p-3 [&_ul]:my-2 [&_ul]:list-inside [&_ul]:list-disc [&_ul]:pl-1 [&_li]:my-0.5 ${isDark ? 'text-zinc-300 [&_code]:bg-zinc-800 [&_code]:text-emerald-300 [&_pre]:bg-zinc-900 [&_pre]:text-zinc-200' : 'text-zinc-800 [&_code]:bg-zinc-200 [&_code]:text-zinc-700 [&_pre]:bg-zinc-100 [&_pre]:text-zinc-800'}`}>
           <ReactMarkdown
             remarkPlugins={[remarkGfm, remarkBreaks]}
             urlTransform={(url) => url}

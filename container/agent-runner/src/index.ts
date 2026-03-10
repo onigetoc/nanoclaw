@@ -685,7 +685,7 @@ async function runQuery(
     ? path.join(containerInput.directMode!.projectDir!, 'store', 'messages.db')
     : '/workspace/project/store/messages.db';
 
-  // Load recent conversation history from SQLite (last 10 messages)
+  // Load recent conversation history from SQLite (last message only)
   // Note: OpenCode sessions maintain full conversation memory automatically.
   // These messages serve as initial context for new sessions or after crashes.
   // Skip when forceNewSession is true (user used /new command)
@@ -705,7 +705,7 @@ async function runQuery(
         AND is_bot_message = 0
         AND content NOT LIKE 'Andy:%'
       ORDER BY timestamp DESC
-      LIMIT 1
+      LIMIT 2
     `).all(containerInput.chatJid) as Array<{
       sender_name: string;
       content: string;
