@@ -169,6 +169,17 @@ function App() {
       setState((s) => {
         if (s.selectedChat?.jid === message.chat_jid) {
           if (s.messages.some((m) => m.id === message.id)) return s;
+          
+          // Detect /new command response - clear message history for fresh session
+          const isNewSessionMessage = message.is_bot_message && 
+            message.content.includes('New session created') &&
+            message.content.match(/ses_[a-zA-Z0-9]+/);
+          
+          if (isNewSessionMessage) {
+            console.log('🆕 New session detected - clearing message history');
+            return { ...s, messages: [message] };
+          }
+          
           return { ...s, messages: [...s.messages, message] };
         }
         // Message for a different chat - mark as unread

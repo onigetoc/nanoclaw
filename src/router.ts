@@ -98,6 +98,25 @@ export function stripInternalTags(text: string): string {
 }
 
 /**
+ * Strip XML message tags that the agent might accidentally include in its response.
+ * Gemini sometimes echoes the input XML format instead of just responding.
+ * This removes: <messages>...</messages> and <message>...</message> tags.
+ */
+export function stripMessageXml(text: string): string {
+  // Remove <messages> wrapper
+  let cleaned = text.replace(/<\/?messages>/g, '');
+  
+  // Remove <message sender="..." time="...">content</message> tags
+  // Keep only the content between tags
+  cleaned = cleaned.replace(/<message\s+sender="[^"]*"\s+time="[^"]*">([^<]*)<\/message>/g, '$1');
+  
+  // Remove any remaining message tags
+  cleaned = cleaned.replace(/<\/?message[^>]*>/g, '');
+  
+  return cleaned.trim();
+}
+
+/**
  * Convert markdown formatting based on channel type
  * - WhatsApp/Telegram: Remove headers (## Title -> Title)
  * - Web UI (future): Keep standard markdown
@@ -116,7 +135,10 @@ export function convertMarkdownForChannel(text: string, jid: string): string {
 }
 
 export function formatOutbound(rawText: string, jid?: string): string {
-  const text = stripInternalTags(rawText);
+  // First strip internal tags and message XML that agent might echo
+  let text = stripInternalTags(rawText);
+  text = stripMessageXml(text);
+  
   if (!text) return '';
   
   // Apply channel-specific formatting if JID provided

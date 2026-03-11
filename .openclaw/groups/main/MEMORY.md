@@ -26,7 +26,6 @@
 - Memory system architecture (SQLite + MEMORY.md hybrid)
 - Hybrid LLM system: OpenCode for actions + OpenRouter for multimodal
 - **Voice transcription via Groq** (free Whisper API - working!)
-- **TODO**: Figure out how to automatically read files sent via Telegram/WhatsApp
 
 ## OpenCode Free Models (4 available)
 
@@ -64,7 +63,7 @@
 - OpenCode's system prompt enforces brevity, not EureClaw's config
 - SQLite database exists but wasn't being used for context loading
 - Container mode only works on macOS - Windows uses direct mode
-- **2026-02-18**: Ping system added to keep assistant awake
+- **2026-03-10**: Proactively check conversation logs or SQLite for past information when context is lacking.
 
 ## Things to Remember
 
