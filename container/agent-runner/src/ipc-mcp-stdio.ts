@@ -274,7 +274,10 @@ Use available_groups.json to find the JID for a group. The folder name should be
   },
 );
 
-// Model Management Tools
+// Model Management Tools - DISABLED
+// These tools caused agents to obsessively change models
+// Model configuration should only be done via opencode.json and agent frontmatter
+/*
 server.tool(
   'get_current_model',
   'Get the current AI model configuration (primary, small, fallback models)',
@@ -483,6 +486,7 @@ server.tool(
     };
   }
 );
+*/
 
 server.tool(
   'show_opencode_stats',
@@ -1078,6 +1082,163 @@ Returns messages matching the query, ordered by most recent first.`,
     }
   }
 );
+
+// --- File Download Tools ---
+
+// Downloads go to workspace/downloads/ in the group folder
+const groupDir = process.env.EURECLAW_GROUP_DIR || '/workspace/group';
+const DOWNLOADS_DIR = path.join(groupDir, 'workspace', 'downloads');
+
+server.tool(
+  'create_downloadable_file',
+  `Create a file that the user can download via the web UI. Use this when:
+- You generate a report, document, or any file the user needs to download
+- The user asks for an export, backup, or file output
+- You create content that should be accessible outside the chat
+
+The tool returns a download URL that you should share with the user.
+Files are stored in the group's workspace/downloads/ folder and accessible via the web UI.
+
+Supported formats: .md, .txt, .json, .csv, .html, .xml, .yaml, .yml`,
+  {
+    filename: z.string().describe('Filename with extension (e.g., "report-2026-03.md", "data-export.csv")'),
+    content: z.string().describe('File content (text-based files only)'),
+    description: z.string().optional().describe('Brief description of the file for the download list'),
+  },
+  async (args) => {
+    // Validate filename
+    const ext = path.extname(args.filename).toLowerCase();
+    const supportedTypes = ['.md', '.txt', '.json', '.csv', '.html', '.xml', '.yaml', '.yml'];
+    
+    if (!supportedTypes.includes(ext)) {
+      return {
+        content: [{
+          type: 'text' as const,
+          text: `✗ Unsupported file type: ${ext}\nSupported: ${supportedTypes.join(', ')}`
+        }],
+        isError: true,
+      };
+    }
+
+    // Sanitize filename (remove path traversal attempts)
+    const safeFilename = path.basename(args.filename).replace(/[^a-zA-Z0-9._-]/g, '_');
+    
+    // Generate unique file ID
+    const fileId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const storedFilename = `${fileId}_${safeFilename}`;
+    
+    // Create downloads directory
+    fs.mkdirSync(DOWNLOADS_DIR, { recursive: true });
+    
+    // Write the file
+    const filePath = path.join(DOWNLOADS_DIR, storedFilename);
+    fs.writeFileSync(filePath, args.content, 'utf-8');
+    
+    // Write IPC notification for the host
+    const ipcData = {
+      type: 'file_created',
+      fileId,
+      filename: safeFilename,
+      storedFilename,
+      description: args.description || `File: ${safeFilename}`,
+      size: Buffer.byteLength(args.content, 'utf-8'),
+      mimeType: getMimeType(ext),
+      chatJid,
+      groupFolder,
+      timestamp: new Date().toISOString(),
+    };
+    
+    writeIpcFile(path.join(IPC_DIR, 'files'), ipcData);
+    
+    // Return download URL
+    const downloadUrl = `/api/files/${groupFolder}/${fileId}`;
+    
+    return {
+      content: [{
+        type: 'text' as const,
+        text: `✓ File created: ${safeFilename}\n\n📥 Download: ${downloadUrl}\n\nShare this link with the user so they can download the file.`
+      }]
+    };
+  }
+);
+
+server.tool(
+  'list_downloadable_files',
+  'List all downloadable files created for this group. Shows recent files with their download links.',
+  {
+    limit: z.number().optional().default(20).describe('Maximum number of files to return (default: 20)'),
+  },
+  async (args) => {
+    try {
+      if (!fs.existsSync(DOWNLOADS_DIR)) {
+        return {
+          content: [{ type: 'text' as const, text: 'No downloadable files found.' }],
+        };
+      }
+
+      const files = fs.readdirSync(DOWNLOADS_DIR)
+        .filter(f => !f.endsWith('.tmp'))
+        .map(f => {
+          const stat = fs.statSync(path.join(DOWNLOADS_DIR, f));
+          // Parse fileId and original filename from stored filename
+          const match = f.match(/^(\d+-[a-z0-9]+)_(.+)$/);
+          const fileId = match ? match[1] : f;
+          const originalName = match ? match[2] : f;
+          
+          return {
+            fileId,
+            filename: originalName,
+            size: stat.size,
+            created: stat.mtime.toISOString(),
+            downloadUrl: `/api/files/${groupFolder}/${fileId}`,
+          };
+        })
+        .sort((a, b) => b.created.localeCompare(a.created))
+        .slice(0, args.limit);
+
+      if (files.length === 0) {
+        return {
+          content: [{ type: 'text' as const, text: 'No downloadable files found.' }],
+        };
+      }
+
+      const formatted = files.map(f => {
+        const sizeKB = (f.size / 1024).toFixed(1);
+        const date = new Date(f.created).toLocaleString();
+        return `• ${f.filename} (${sizeKB}KB) - ${date}\n  📥 ${f.downloadUrl}`;
+      }).join('\n\n');
+
+      return {
+        content: [{
+          type: 'text' as const,
+          text: `Found ${files.length} downloadable file(s):\n\n${formatted}`
+        }]
+      };
+    } catch (err) {
+      return {
+        content: [{
+          type: 'text' as const,
+          text: `✗ Error listing files: ${err instanceof Error ? err.message : String(err)}`
+        }],
+        isError: true,
+      };
+    }
+  }
+);
+
+function getMimeType(ext: string): string {
+  const mimeTypes: Record<string, string> = {
+    '.md': 'text/markdown',
+    '.txt': 'text/plain',
+    '.json': 'application/json',
+    '.csv': 'text/csv',
+    '.html': 'text/html',
+    '.xml': 'application/xml',
+    '.yaml': 'application/x-yaml',
+    '.yml': 'application/x-yaml',
+  };
+  return mimeTypes[ext] || 'application/octet-stream';
+}
 
 // Start the stdio transport
 const transport = new StdioServerTransport();

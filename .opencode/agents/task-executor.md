@@ -1,7 +1,7 @@
 ---
 description: Executes task plans from groups/{group}/tasks/
 mode: subagent
-model: opencode/trinity-large-preview-free
+model: google/gemini-3.1-flash-lite-preview
 temperature: 0.1
 tools:
   write: true

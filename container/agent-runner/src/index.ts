@@ -619,7 +619,11 @@ async function runQuery(
   let closedDuringQuery = false;
 
   // Load global AGENTS.md as additional system context (shared across all groups)
-  const globalAgentsMdPath = globalDir ? path.join(globalDir, 'AGENTS.md') : '/workspace/global/AGENTS.md';
+  // Check both new structure (dna/) and legacy (root)
+  const globalDnaDir = globalDir ? path.join(globalDir, 'dna') : '/workspace/global/dna';
+  const globalAgentsMdPath = fs.existsSync(path.join(globalDnaDir, 'AGENTS.md'))
+    ? path.join(globalDnaDir, 'AGENTS.md')
+    : globalDir ? path.join(globalDir, 'AGENTS.md') : '/workspace/global/AGENTS.md';
   let globalAgentsMd: string | undefined;
   if (!containerInput.isMain && fs.existsSync(globalAgentsMdPath)) {
     globalAgentsMd = fs.readFileSync(globalAgentsMdPath, 'utf-8');
@@ -628,15 +632,21 @@ async function runQuery(
 
   // Load group-specific context files (AGENTS.md, GUIDELINES.md, IDENTITY.md, SOUL.md, TOOLS.md)
   // These files contain group-specific instructions, personality, and capabilities
-  const groupContextFiles = ['AGENTS.md', 'GUIDELINES.md', 'IDENTITY.md', 'SOUL.md', 'TOOLS.md'];
+  // Check both new structure (dna/) and legacy (root) for backward compatibility
+  const dnaDir = path.join(groupDir, 'dna');
+  const groupContextFiles = ['AGENTS.md', 'GUIDELINES.md', 'IDENTITY.md', 'SOUL.md', 'TOOLS.md', 'USER.md'];
   const groupContexts: string[] = [];
   
   for (const filename of groupContextFiles) {
-    const filePath = path.join(groupDir, filename);
+    // Try dna/ first (new structure), then root (legacy)
+    const dnaPath = path.join(dnaDir, filename);
+    const legacyPath = path.join(groupDir, filename);
+    const filePath = fs.existsSync(dnaPath) ? dnaPath : legacyPath;
+    
     if (fs.existsSync(filePath)) {
       const content = fs.readFileSync(filePath, 'utf-8');
       groupContexts.push(`\n## ${filename}\n\n${content}`);
-      log(`Loaded ${filename} (${content.length} chars)`);
+      log(`Loaded ${filename} from ${filePath.includes('/dna/') ? 'dna/' : 'root'} (${content.length} chars)`);
     } else {
       log(`${filename} not found - skipping`);
     }
@@ -645,12 +655,16 @@ async function runQuery(
   const groupContext = groupContexts.length > 0 ? groupContexts.join('\n\n') : undefined;
 
   // Load MEMORY.md for long-term context (main group only)
+  // Check both new structure (dna/) and legacy (root)
   let memoryContext: string | undefined;
   if (containerInput.isMain) {
-    const memoryPath = path.join(groupDir, 'MEMORY.md');
+    const dnaMemoryPath = path.join(dnaDir, 'MEMORY.md');
+    const legacyMemoryPath = path.join(groupDir, 'MEMORY.md');
+    const memoryPath = fs.existsSync(dnaMemoryPath) ? dnaMemoryPath : legacyMemoryPath;
+    
     if (fs.existsSync(memoryPath)) {
       memoryContext = fs.readFileSync(memoryPath, 'utf-8');
-      log(`Loaded MEMORY.md (${memoryContext.length} chars)`);
+      log(`Loaded MEMORY.md from ${memoryPath.includes('/dna/') ? 'dna/' : 'root'} (${memoryContext.length} chars)`);
     } else {
       log('MEMORY.md not found - will be created when needed');
     }

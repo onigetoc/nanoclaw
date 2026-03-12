@@ -325,7 +325,7 @@ export default function ComposerBar({
               placeholder="Write a message… (Shift+Enter to start a new line)"
               disabled={!connected}
               rows={textareaRows}
-              className={`w-full resize-none border-0 bg-transparent px-2 py-1 text-sm outline-none placeholder:text-zinc-500 disabled:cursor-not-allowed disabled:opacity-50 ${isDark ? 'text-zinc-100' : 'text-zinc-900'}`}
+              className={`w-full resize-none border-0 bg-transparent px-2 py-1 text-[15px] outline-none placeholder:text-zinc-500 disabled:cursor-not-allowed disabled:opacity-50 ${isDark ? 'text-zinc-100' : 'text-zinc-900'}`}
             />
 
             <div className="mt-2 flex items-center justify-between gap-2">
@@ -386,7 +386,7 @@ export default function ComposerBar({
                 <button
                   type="button"
                   onClick={() => setUseWebSearch((v) => !v)}
-                  className={`inline-flex h-9 cursor-pointer items-center gap-1 rounded-lg px-2.5 text-xs transition ${useWebSearch ? 'text-emerald-500' : 'text-zinc-400 hover:text-emerald-500'}`}
+                  className={`inline-flex h-9 cursor-pointer items-center gap-1 rounded-lg px-2.5 text-sm transition ${useWebSearch ? 'text-emerald-500' : 'text-zinc-400 hover:text-emerald-500'}`}
                   title="Web search (UI)"
                 >
                   <Globe className="h-4 w-4" />

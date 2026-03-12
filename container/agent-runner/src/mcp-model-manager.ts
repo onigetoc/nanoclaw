@@ -101,10 +101,11 @@ export const tool_list_models = {
     const category = args.category || 'all';
     
     const freeModels = [
-      { id: 'opencode/minimax-m2.5-free', name: 'MiniMax M2.5 Free', note: 'Current default, supports vision' },
-      { id: 'opencode/glm-5-free', name: 'GLM-5 Free', note: 'Good for Chinese' },
+      { id: 'google/gemini-3.1-flash-lite-preview', name: 'Gemini 3.1 Flash Lite Preview', note: 'Fast, efficient' },
+      { id: 'google/gemini-2.5-flash-lite', name: 'Gemini 2.5 Flash Lite', note: 'Latest lite version, supports vision' },
       { id: 'google/gemini-2.0-flash-lite', name: 'Gemini 2.0 Flash Lite', note: 'Fast, lightweight, supports vision' },
-      { id: 'google/gemini-2.5-flash-lite', name: 'Gemini 2.5 Flash Lite', note: 'Latest lite version, supports vision' }
+      { id: 'opencode/minimax-m2.5-free', name: 'MiniMax M2.5 Free', note: 'Supports vision' },
+      { id: 'opencode/glm-5-free', name: 'GLM-5 Free', note: 'Good for Chinese' }
     ];
 
     const premiumModels = [
@@ -117,9 +118,10 @@ export const tool_list_models = {
     ];
 
     const visionModels = [
-      { id: 'opencode/minimax-m2.5-free', name: 'MiniMax M2.5 Free', note: 'Free, good vision support' },
-      { id: 'google/gemini-2.0-flash-lite', name: 'Gemini 2.0 Flash Lite', note: 'Free, fast vision' },
+      { id: 'google/gemini-3.1-flash-lite-preview', name: 'Gemini 3.1 Flash Lite Preview', note: 'Fast, good vision' },
       { id: 'google/gemini-2.5-flash-lite', name: 'Gemini 2.5 Flash Lite', note: 'Free, latest' },
+      { id: 'google/gemini-2.0-flash-lite', name: 'Gemini 2.0 Flash Lite', note: 'Free, fast vision' },
+      { id: 'opencode/minimax-m2.5-free', name: 'MiniMax M2.5 Free', note: 'Free, good vision support' },
       { id: 'anthropic/claude-3-5-sonnet', name: 'Claude 3.5 Sonnet', note: 'Premium, excellent vision' },
       { id: 'openai/gpt-4o', name: 'GPT-4 Omni', note: 'Premium, multimodal' },
       { id: 'google/gemini-2.0-pro', name: 'Gemini 2.0 Pro', note: 'Premium, best vision' }

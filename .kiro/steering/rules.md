@@ -53,7 +53,6 @@ Existing tools include:
 - `send_message` - Send messages to users
 - `schedule_task`, `list_tasks`, `pause_task`, `resume_task`, `cancel_task` - Task scheduling
 - `register_group` - Register new WhatsApp/Telegram groups
-- `get_current_model`, `change_model`, `set_small_model`, `list_models` - Model management
 - `show_opencode_stats` - Usage statistics
 - `send_image` - Send images/files
 - `list_logs`, `read_log` - Read execution logs (for debugging)

@@ -40,23 +40,23 @@
       }
     },
     "researcher": {
-      "model": "google/gemini-2.5-flash-lite",
+      "model": "google/gemini-3.1-flash-lite-preview",
       "description": "Fast web research with small model"
     },
     "summarizer": {
-      "model": "google/gemini-2.5-flash-lite",
+      "model": "google/gemini-3.1-flash-lite-preview",
       "description": "Quick synthesis with small model"
     },
     "planner": {
-      "model": "google/gemini-2.5-flash",
+      "model": "google/gemini-3.1-flash-lite-preview",
       "description": "Deep planning with full model"
     },
     "task-planner": {
-      "model": "google/gemini-2.5-flash",
+      "model": "google/gemini-3.1-flash-lite-preview",
       "description": "Creates task plans in groups/{group}/tasks/"
     },
     "task-executor": {
-      "model": "google/gemini-2.5-flash",
+      "model": "google/gemini-3.1-flash-lite-preview",
       "description": "Executes task plans from groups/{group}/tasks/"
     }
   },

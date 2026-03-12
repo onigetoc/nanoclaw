@@ -17,6 +17,9 @@ export const EURECLAW_COMMANDS = new Set([
   'status',
   'help',
   'chatid',
+  'new',
+  'undo',
+  'redo',
 ]);
 
 /**

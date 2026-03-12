@@ -881,6 +881,169 @@ fastify.get('/system/restart-opencode', { preHandler: authenticate }, async (req
   }
 });
 
+// === File Download Routes ===
+
+/**
+ * List downloadable files for a group.
+ * Files are stored in groups/{groupFolder}/workspace/downloads/ with format: {fileId}_{filename}
+ */
+fastify.get(
+  '/files/:groupFolder',
+  { preHandler: authenticate },
+  async (request: FastifyRequest, reply: FastifyReply) => {
+    const params = request.params as Record<string, string>;
+    const groupFolder = params.groupFolder;
+    const query = request.query as Record<string, string>;
+    const limit = query.limit ? parseInt(query.limit, 10) : 50;
+
+    const downloadsDir = path.join(GROUPS_DIR, groupFolder, 'workspace', 'downloads');
+
+    if (!fs.existsSync(downloadsDir)) {
+      return { files: [] };
+    }
+
+    try {
+      const files = fs.readdirSync(downloadsDir)
+        .filter(f => !f.endsWith('.tmp'))
+        .map(f => {
+          const filePath = path.join(downloadsDir, f);
+          const stat = fs.statSync(filePath);
+          // Parse fileId and original filename from stored filename
+          const match = f.match(/^(\d+-[a-z0-9]+)_(.+)$/);
+          const fileId = match ? match[1] : f;
+          const originalName = match ? match[2] : f;
+
+          return {
+            fileId,
+            filename: originalName,
+            size: stat.size,
+            created: stat.mtime.toISOString(),
+            downloadUrl: `/files/${groupFolder}/${fileId}`,
+          };
+        })
+        .sort((a, b) => b.created.localeCompare(a.created))
+        .slice(0, limit);
+
+      return { files };
+    } catch (err) {
+      logger.error({ err, groupFolder }, 'Failed to list downloadable files');
+      reply.code(500).send({ error: 'Failed to list files' });
+    }
+  },
+);
+
+/**
+ * Download a specific file by ID.
+ * Supports both inline viewing and attachment download via ?download=true
+ */
+fastify.get(
+  '/files/:groupFolder/:fileId',
+  { preHandler: authenticate },
+  async (request: FastifyRequest, reply: FastifyReply) => {
+    const params = request.params as Record<string, string>;
+    const { groupFolder, fileId } = params;
+    const query = request.query as Record<string, string>;
+    const forceDownload = query.download === 'true';
+
+    const downloadsDir = path.join(GROUPS_DIR, groupFolder, 'workspace', 'downloads');
+
+    if (!fs.existsSync(downloadsDir)) {
+      reply.code(404).send({ error: 'File not found' });
+      return;
+    }
+
+    // Find file matching the fileId prefix
+    const files = fs.readdirSync(downloadsDir);
+    const matchingFile = files.find(f => f.startsWith(`${fileId}_`));
+
+    if (!matchingFile) {
+      reply.code(404).send({ error: 'File not found' });
+      return;
+    }
+
+    const filePath = path.join(downloadsDir, matchingFile);
+    const originalName = matchingFile.replace(/^\d+-[a-z0-9]+_/, '');
+    const ext = path.extname(originalName).toLowerCase();
+
+    // Determine MIME type
+    const mimeTypes: Record<string, string> = {
+      '.md': 'text/markdown',
+      '.txt': 'text/plain',
+      '.json': 'application/json',
+      '.csv': 'text/csv',
+      '.html': 'text/html',
+      '.xml': 'application/xml',
+      '.yaml': 'application/x-yaml',
+      '.yml': 'application/x-yaml',
+      '.pdf': 'application/pdf',
+      '.zip': 'application/zip',
+    };
+    const mimeType = mimeTypes[ext] || 'application/octet-stream';
+
+    // Set headers
+    const disposition = forceDownload ? 'attachment' : 'inline';
+    reply.header('Content-Type', mimeType);
+    reply.header('Content-Disposition', `${disposition}; filename="${originalName}"`);
+
+    // Stream the file
+    const stream = fs.createReadStream(filePath);
+    return reply.send(stream);
+  },
+);
+
+/**
+ * Download multiple files as a ZIP archive.
+ * POST body: { fileIds: string[] }
+ */
+fastify.post(
+  '/files/:groupFolder/zip',
+  { preHandler: authenticate },
+  async (request: FastifyRequest, reply: FastifyReply) => {
+    const params = request.params as Record<string, string>;
+    const { groupFolder } = params;
+    const body = request.body as { fileIds?: string[]; filename?: string } | undefined;
+    const fileIds = body?.fileIds || [];
+    const zipFilename = body?.filename || `${groupFolder}-files.zip`;
+
+    if (fileIds.length === 0) {
+      reply.code(400).send({ error: 'No file IDs provided' });
+      return;
+    }
+
+    const downloadsDir = path.join(GROUPS_DIR, groupFolder, 'workspace', 'downloads');
+
+    if (!fs.existsSync(downloadsDir)) {
+      reply.code(404).send({ error: 'No files found' });
+      return;
+    }
+
+    try {
+      const archiver = (await import('archiver')).default;
+      const archive = archiver('zip', { zlib: { level: 9 } });
+
+      reply.header('Content-Type', 'application/zip');
+      reply.header('Content-Disposition', `attachment; filename="${zipFilename}"`);
+
+      archive.pipe(reply.raw);
+
+      const allFiles = fs.readdirSync(downloadsDir);
+      for (const fileId of fileIds) {
+        const matchingFile = allFiles.find(f => f.startsWith(`${fileId}_`));
+        if (matchingFile) {
+          const filePath = path.join(downloadsDir, matchingFile);
+          const originalName = matchingFile.replace(/^\d+-[a-z0-9]+_/, '');
+          archive.file(filePath, { name: originalName });
+        }
+      }
+
+      await archive.finalize();
+    } catch (err) {
+      logger.error({ err, groupFolder, fileIds }, 'Failed to create ZIP archive');
+      reply.code(500).send({ error: 'Failed to create ZIP' });
+    }
+  },
+);
+
 // Register auth routes (API key management)
 registerAuthRoutes(fastify, authenticate);
 

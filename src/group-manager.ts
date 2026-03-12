@@ -13,6 +13,18 @@ import type { AvailableGroup } from './container-runner.js';
 
 /**
  * Register a new group and create its folder structure.
+ * 
+ * New structure:
+ * groups/{name}/
+ * ├── dna/           ← Personality files (AGENTS.md, IDENTITY.md, etc.)
+ * ├── workspace/     ← Agent-generated content
+ * │   ├── screenshots/
+ * │   ├── reports/
+ * │   ├── tasks/
+ * │   └── downloads/
+ * ├── uploads/       ← User-uploaded files
+ * ├── logs/          ← Execution logs
+ * └── conversations/ ← Conversation archives
  */
 export function registerGroup(jid: string, group: RegisteredGroup): void {
   const registeredGroups = getRegisteredGroups();
@@ -20,7 +32,16 @@ export function registerGroup(jid: string, group: RegisteredGroup): void {
   setRegisteredGroup(jid, group);
 
   const groupDir = path.join(GROUPS_DIR, group.folder);
+  
+  // Create folder structure
+  fs.mkdirSync(path.join(groupDir, 'dna'), { recursive: true });
+  fs.mkdirSync(path.join(groupDir, 'workspace', 'screenshots'), { recursive: true });
+  fs.mkdirSync(path.join(groupDir, 'workspace', 'reports'), { recursive: true });
+  fs.mkdirSync(path.join(groupDir, 'workspace', 'tasks'), { recursive: true });
+  fs.mkdirSync(path.join(groupDir, 'workspace', 'downloads'), { recursive: true });
+  fs.mkdirSync(path.join(groupDir, 'uploads'), { recursive: true });
   fs.mkdirSync(path.join(groupDir, 'logs'), { recursive: true });
+  fs.mkdirSync(path.join(groupDir, 'conversations'), { recursive: true });
 
   copyTemplatesToGroup(groupDir);
 
@@ -31,12 +52,15 @@ export function registerGroup(jid: string, group: RegisteredGroup): void {
 }
 
 /**
- * Copy template files from groups/templates/ into a new group folder.
+ * Copy template files from groups/templates/ into a new group's dna/ folder.
  * Renames .tpl.md → .md and substitutes {{ASSISTANT_NAME}}.
- * Skips if the group already has .md files (not a fresh group).
+ * Skips if the group already has .md files in dna/ (not a fresh group).
  */
 export function copyTemplatesToGroup(groupDir: string): void {
-  const existingFiles = fs.readdirSync(groupDir);
+  const dnaDir = path.join(groupDir, 'dna');
+  fs.mkdirSync(dnaDir, { recursive: true });
+  
+  const existingFiles = fs.readdirSync(dnaDir);
   const hasMdFiles = existingFiles.some(
     (f) => f.endsWith('.md') && !f.endsWith('.tpl.md'),
   );
@@ -63,12 +87,12 @@ export function copyTemplatesToGroup(groupDir: string): void {
     }
 
     const outputName = tplFile.replace('.tpl.md', '.md');
-    fs.writeFileSync(path.join(groupDir, outputName), content, 'utf-8');
+    fs.writeFileSync(path.join(dnaDir, outputName), content, 'utf-8');
   }
 
   logger.info(
-    { groupDir, templateCount: templates.length },
-    'Copied templates to new group',
+    { groupDir, dnaDir, templateCount: templates.length },
+    'Copied templates to new group dna/',
   );
 }
 
