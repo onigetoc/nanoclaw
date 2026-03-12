@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkBreaks from 'remark-breaks';
@@ -13,7 +14,7 @@ interface MessageBubbleProps {
   onSendCommand?: (cmd: string) => void;
 }
 
-export default function MessageBubble({ msg, isDark, onSendCommand }: MessageBubbleProps) {
+function MessageBubble({ msg, isDark, onSendCommand }: MessageBubbleProps) {
   const sanitizedContent = sanitizeMessageContent(msg.content);
   const { visibleContent, reasoning } = extractReasoning(sanitizedContent);
   const isAssistant = Boolean(msg.is_bot_message);
@@ -160,3 +161,11 @@ export default function MessageBubble({ msg, isDark, onSendCommand }: MessageBub
     </div>
   );
 }
+
+export default memo(MessageBubble, (prev, next) => {
+  return (
+    prev.msg.id === next.msg.id &&
+    prev.msg.content === next.msg.content &&
+    prev.isDark === next.isDark
+  );
+});

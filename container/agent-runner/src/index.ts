@@ -47,7 +47,7 @@ interface ContainerOutput {
     providerID?: string;
     mode?: string;
     agent?: string;
-    tokens?: { total: number; input: number; output: number; reasoning: number };
+    tokens?: { total: number; input: number; output: number; reasoning: number; cacheRead?: number; cacheWrite?: number };
     cost?: number;
   };
 }
@@ -338,40 +338,16 @@ function detectComplexTask(prompt: string): boolean {
   }
 
   // Always treat explicit task-workflow signals as complex.
-  // Use structural markers / fixed agent IDs (language-agnostic) instead of natural-language keywords.
   if (
     lowerPrompt.includes('/tasks/') ||
     lowerPrompt.includes('\\tasks\\') ||
-    lowerPrompt.includes('/groups/') ||
-    lowerPrompt.includes('\\groups\\') ||
     lowerPrompt.includes('plan_created') ||
     /-\s*\[\s?[x ]\s?\]/i.test(prompt)
   ) {
     return true;
   }
-  
-  // Keywords that indicate complex multi-step tasks
-  const complexKeywords = [
-    'recherche', 'search', 'find',
-    'analyse', 'analyze', 'compare',
-    'résume', 'summarize', 'synthétise',
-    'plusieurs', 'multiple', 'many',
-    'étapes', 'steps',
-    'plan', 'planifie',
-    'et', 'and', 'puis', 'then',
-    'créer un', 'create a',
-    'génère', 'generate',
-  ];
-  
-  // Count how many complex keywords are present
-  const matchCount = complexKeywords.filter(kw => lowerPrompt.includes(kw)).length;
-  
-  // If 2+ complex keywords, or specific multi-step patterns, use orchestrator
-  if (matchCount >= 2) {
-    return true;
-  }
-  
-  // Specific patterns that indicate multi-step tasks
+
+  // Specific multi-step patterns that clearly need orchestrator
   const multiStepPatterns = [
     /recherche.*et.*résume/i,
     /search.*and.*summarize/i,
@@ -379,14 +355,15 @@ function detectComplexTask(prompt: string): boolean {
     /analyse.*et.*compare/i,
     /cherche.*puis.*fait/i,
   ];
-  
+
   if (multiStepPatterns.some(pattern => pattern.test(prompt))) {
     return true;
   }
-  
-  // Default to simple task (build agent)
+
+  // Default to simple task (build agent) — orchestrator is opt-in via @orchestrator
   return false;
 }
+
 
 /**
  * Add deterministic path hints for common virtual paths used by users.
@@ -560,7 +537,7 @@ async function runQuery(
   resumeAt?: string,
   existingClient?: any,
   contextAlreadyInjected?: boolean
-): Promise<{ newSessionId?: string; lastAssistantUuid?: string; closedDuringQuery: boolean; client: any; contextInjected: boolean }> {
+): Promise<{ newSessionId?: string; lastAssistantUuid?: string; closedDuringQuery: boolean; client: any; contextInjected: boolean; hadError?: boolean }> {
   const effectivePrompt = applyPathHints(prompt, groupDir);
 
   // Reuse existing OpenCode client or create a new one
@@ -630,7 +607,8 @@ async function runQuery(
       newSessionId: sessionId
     });
     
-    throw error; // Re-throw to exit runQuery
+    // Return gracefully instead of throwing — don't crash the process
+    return { newSessionId: sessionId, lastAssistantUuid: undefined, closedDuringQuery: false, client, contextInjected: contextAlreadyInjected || false, hadError: true };
   }
 
   // Track the session ID for return (Requirements 2.3, 2.4)
@@ -705,7 +683,7 @@ async function runQuery(
         AND is_bot_message = 0
         AND content NOT LIKE 'Andy:%'
       ORDER BY timestamp DESC
-      LIMIT 2
+      LIMIT 1
     `).all(containerInput.chatJid) as Array<{
       sender_name: string;
       content: string;
@@ -1028,7 +1006,8 @@ Use the Task tool to invoke agents when appropriate.
         newSessionId: currentSessionId
       });
       
-      throw error; // Re-throw to exit runQuery
+      // Return gracefully instead of throwing — don't crash the process
+      return { newSessionId: currentSessionId, lastAssistantUuid: undefined, closedDuringQuery: false, client, contextInjected: false, hadError: true };
     }
   } else {
     log(`Skipping context injection (already injected for this session)`);
@@ -1196,6 +1175,8 @@ Use the Task tool to invoke agents when appropriate.
         input: info.tokens.input || 0,
         output: info.tokens.output || 0,
         reasoning: info.tokens.reasoning || 0,
+        cacheRead: info.tokens.cache?.read || 0,
+        cacheWrite: info.tokens.cache?.write || 0,
       } : undefined,
       cost: info.cost ?? undefined,
     };
@@ -1270,14 +1251,16 @@ Use the Task tool to invoke agents when appropriate.
       newSessionId: currentSessionId
     });
 
-    throw error;
+    // Don't throw — return gracefully so the query loop can continue.
+    // Model timeouts and network errors should not crash the entire agent process.
+    return { newSessionId: currentSessionId, lastAssistantUuid: undefined, closedDuringQuery: false, client, contextInjected, hadError: true };
   }
 
   log(`Query completed successfully`);
   log(`Summary: events=${messageCount}, results=${resultCount}, lastAssistantUuid=${lastAssistantUuid || 'none'}, closedDuringQuery=${closedDuringQuery}`);
   debugLog(`Query statistics: sessionId=${currentSessionId}, groupFolder=${containerInput.groupFolder}, chatJid=${containerInput.chatJid}, timestamp=${new Date().toISOString()}`);
   
-  return { newSessionId, lastAssistantUuid, closedDuringQuery, client, contextInjected };
+  return { newSessionId, lastAssistantUuid, closedDuringQuery, client, contextInjected, hadError: false };
 }
 
 async function main(): Promise<void> {
@@ -1470,7 +1453,23 @@ async function main(): Promise<void> {
       log(`Session: ${sessionId || 'new'}, ResumeAt: ${resumeAt || 'latest'}`);
       debugLog(`Query context: chatJid=${containerInput.chatJid}, groupFolder=${containerInput.groupFolder}, timestamp=${new Date().toISOString()}`);
 
-      const queryResult = await runQuery(prompt, sessionId, mcpServerPath, containerInput, sdkEnv, groupDir, ipcBaseDir, globalDir, resumeAt, clientInstance, contextInjected);
+      let queryResult;
+      try {
+        queryResult = await runQuery(prompt, sessionId, mcpServerPath, containerInput, sdkEnv, groupDir, ipcBaseDir, globalDir, resumeAt, clientInstance, contextInjected);
+      } catch (queryErr) {
+        // Query failed catastrophically (e.g. session creation failed).
+        // Write error output but DON'T crash — exit the loop gracefully.
+        const errMsg = queryErr instanceof Error ? queryErr.message : String(queryErr);
+        log(`ERROR: Query #${queryCount} failed: ${errMsg}`);
+        writeOutput({
+          status: 'error',
+          result: null,
+          newSessionId: sessionId,
+          error: errMsg
+        });
+        // Exit the loop gracefully instead of process.exit(1)
+        break;
+      }
       
       // Store OpenCode client for reuse across queries
       if (!clientInstance) {
@@ -1490,6 +1489,14 @@ async function main(): Promise<void> {
       if (queryResult.lastAssistantUuid) {
         resumeAt = queryResult.lastAssistantUuid;
         debugLog(`Resume point updated: ${resumeAt}`);
+      }
+
+      // If the query had a model/network error, the error output was already
+      // written inside runQuery. Exit the loop gracefully — the host process
+      // will see the error and report it to the user without a crash.
+      if (queryResult.hadError) {
+        log(`Query #${queryCount} had an error, exiting loop gracefully`);
+        break;
       }
       
       // Archive conversation periodically (OpenCode SDK doesn't have PreCompact hooks)
@@ -1540,7 +1547,9 @@ async function main(): Promise<void> {
       newSessionId: sessionId,
       error: errorMessage
     });
-    process.exit(1);
+    // Exit gracefully (code 0) — the error is reported via the output protocol.
+    // process.exit(1) was causing the host to show "Agent exited with code 1"
+    // which is misleading — it's a model/network error, not a system crash.
   } finally {
     // Note: OpenCode client doesn't need explicit cleanup
     // The client just makes HTTP requests to the OpenCode server

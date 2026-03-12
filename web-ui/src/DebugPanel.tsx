@@ -149,15 +149,27 @@ function MetadataCard({
                     {tokens.reasoning.toLocaleString()}
                   </span>
                 )}
+                {(tokens.cacheRead ?? 0) > 0 && (
+                  <span
+                    className={isDark ? 'text-sky-400' : 'text-sky-600'}
+                  >
+                    <span
+                      className={`text-[10px] uppercase ${isDark ? 'text-zinc-500' : 'text-zinc-400'}`}
+                    >
+                      cached{' '}
+                    </span>
+                    {(tokens.cacheRead ?? 0).toLocaleString()}
+                  </span>
+                )}
                 <span
                   className={isDark ? 'text-emerald-400' : 'text-emerald-600'}
                 >
                   <span
                     className={`text-[10px] uppercase ${isDark ? 'text-zinc-500' : 'text-zinc-400'}`}
                   >
-                    total{' '}
+                    used{' '}
                   </span>
-                  {tokens.total?.toLocaleString() ?? '—'}
+                  {(tokens.input + tokens.output + tokens.reasoning).toLocaleString()}
                 </span>
               </div>
             </div>
@@ -190,11 +202,19 @@ export default function DebugPanel({
 }: DebugPanelProps) {
   const [lastRefreshedAt, setLastRefreshedAt] = useState<Date>(new Date());
   const [sessionId, setSessionId] = useState<string | null>(null);
+  const [lastMessageCount, setLastMessageCount] = useState(0);
+  const [previousSessionId, setPreviousSessionId] = useState<string | null>(null);
 
   // Update timestamp whenever messages change
   useEffect(() => {
     setLastRefreshedAt(new Date());
-  }, [messages]);
+    
+    // Detect if message history was cleared (e.g., /new command)
+    if (messages.length < lastMessageCount) {
+      console.log('📊 Message history cleared, resetting stats');
+    }
+    setLastMessageCount(messages.length);
+  }, [messages, lastMessageCount]);
 
   // Poll sessions every 5s to get live session ID
   useEffect(() => {
@@ -207,7 +227,15 @@ export default function DebugPanel({
     const fetchSession = async () => {
       try {
         const sessions = await apiService.getSessions();
-        if (!cancelled) setSessionId(sessions[chatFolder] ?? null);
+        if (!cancelled) {
+          const newSessionId = sessions[chatFolder] ?? null;
+          // Detect session change
+          if (newSessionId && previousSessionId && newSessionId !== previousSessionId) {
+            console.log('🔄 Session changed, resetting stats');
+          }
+          setPreviousSessionId(newSessionId);
+          setSessionId(newSessionId);
+        }
       } catch {
         /* ignore */
       }
@@ -219,23 +247,40 @@ export default function DebugPanel({
       cancelled = true;
       clearInterval(interval);
     };
-  }, [chatFolder]);
+  }, [chatFolder, previousSessionId]);
 
-  // Only show bot messages with metadata
-  const botMessages = messages.filter((m) => m.is_bot_message && m.metadata);
+  // Find the index of the last /new command
+  let lastNewIndex = -1;
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (messages[i].content.trim() === '/new' || messages[i].content.includes('New session created')) {
+      lastNewIndex = i;
+      break;
+    }
+  }
+
+  // Only count messages AFTER the last /new command
+  const messagesAfterNew = lastNewIndex >= 0 ? messages.slice(lastNewIndex + 1) : messages;
+  
+  // Only show bot messages with metadata from messages after /new
+  const botMessages = messagesAfterNew.filter((m) => m.is_bot_message && m.metadata);
 
   // Always show the latest response
   const activeMsg = botMessages[botMessages.length - 1];
 
-  // Aggregate stats
+  // Aggregate stats from messages after /new only
   const totalCost = botMessages.reduce(
     (sum, m) => sum + (m.metadata?.cost ?? 0),
     0,
   );
-  const totalTokens = botMessages.reduce((sum, m) => {
+  const totalUsed = botMessages.reduce((sum, m) => {
     const t = m.metadata?.tokens;
-    return sum + (t?.total ?? (t?.input ?? 0) + (t?.output ?? 0));
+    if (!t) return sum;
+    return sum + t.input + t.output + t.reasoning;
   }, 0);
+  const totalCached = botMessages.reduce((sum, m) => {
+    return sum + (m.metadata?.tokens?.cacheRead ?? 0);
+  }, 0);
+  const responseCount = botMessages.length;
 
   return (
     <aside
@@ -291,13 +336,19 @@ export default function DebugPanel({
       </div>
 
       {/* Aggregate stats bar */}
-      {botMessages.length > 0 && (
+      {responseCount > 0 && (
         <div
           className={`flex items-center gap-3 border-b px-4 py-2.5 text-[11px] ${isDark ? 'border-zinc-800 bg-zinc-900/50 text-zinc-400' : 'border-zinc-200 bg-zinc-100 text-zinc-500'}`}
         >
-          <span title="Total responses">{botMessages.length} responses</span>
+          <span title="Total responses">{responseCount} responses</span>
           <span className={isDark ? 'text-zinc-700' : 'text-zinc-300'}>|</span>
-          <span title="Total tokens">{totalTokens.toLocaleString()} tok</span>
+          <span title="Total tokens utilisés">{totalUsed.toLocaleString()} tok</span>
+          {totalCached > 0 && (
+            <>
+              <span className={isDark ? 'text-zinc-700' : 'text-zinc-300'}>|</span>
+              <span title="Tokens en cache (gratuits ou réduits)" className={isDark ? 'text-sky-400/70' : 'text-sky-600/70'}>{totalCached.toLocaleString()} cached</span>
+            </>
+          )}
           {totalCost > 0 && (
             <>
               <span className={isDark ? 'text-zinc-700' : 'text-zinc-300'}>

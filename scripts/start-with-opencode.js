@@ -92,7 +92,20 @@ async function main() {
     log('   EureClaw will manage it automatically. Killing stale process...', colors.yellow);
     try {
       if (process.platform === 'win32') {
-        execSync('for /f "tokens=5" %a in (\'netstat -ano ^| findstr :4100 ^| findstr LISTENING\') do taskkill /F /PID %a', { stdio: 'pipe', shell: true });
+        // Find PIDs listening on port 4100 and kill them
+        const netstatOutput = execSync('netstat -ano | findstr :4100 | findstr LISTENING', { encoding: 'utf8', stdio: 'pipe' }).trim();
+        if (netstatOutput) {
+          const pids = netstatOutput.split('\n').map(line => {
+            const parts = line.trim().split(/\s+/);
+            return parts[parts.length - 1];
+          }).filter(pid => pid && /^\d+$/.test(pid));
+          
+          for (const pid of [...new Set(pids)]) {
+            try {
+              execSync(`taskkill /F /PID ${pid}`, { stdio: 'pipe' });
+            } catch {}
+          }
+        }
       } else {
         execSync('kill $(lsof -t -i :4100) 2>/dev/null || true', { stdio: 'pipe' });
       }

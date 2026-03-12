@@ -4,12 +4,13 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "kill-stale": "node -e \"try{require('child_process').execSync(process.platform==='win32'?'powershell -Command \\\"Get-NetTCPConnection -LocalPort 5173 -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }\\\"':'fuser -k 5173/tcp 2>/dev/null',{stdio:'ignore'})}catch{}\"",
+    "kill-stale": "node -e \"try{require('child_process').execSync(process.platform==='win32'?'powershell -Command \\\"Get-NetTCPConnection -LocalPort 8174 -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }\\\"':'fuser -k 8174/tcp 2>/dev/null',{stdio:'ignore'})}catch{}\"",
     "predev": "bun run kill-stale",
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "serve": "vite preview --host"
   },
   "dependencies": {
     "lucide-react": "^0.575.0",
@@ -27,6 +28,7 @@
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^5.1.1",
     "autoprefixer": "^10.4.27",
+    "babel-plugin-react-compiler": "^1.0.0",
     "eslint": "^9.39.1",
     "eslint-plugin-react-hooks": "^7.0.1",
     "eslint-plugin-react-refresh": "^0.4.24",

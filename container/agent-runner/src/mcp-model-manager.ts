@@ -2,139 +2,67 @@
  * MCP Server: Model Manager
  * 
  * Provides tools for the agent to:
- * - View current model configuration
- * - Change models dynamically
+ * - View current model configuration (read-only from opencode.json)
  * - List available models
  * 
- * This allows the agent to adapt its model based on task complexity.
+ * NOTE: Model changes will be handled via Web UI in the future.
+ * The old models-config.json system has been deprecated.
  */
 import fs from 'fs';
 import path from 'path';
 
-interface ModelConfig {
+interface OpencodeConfig {
   model?: string;
   small_model?: string;
   fallback_model?: string;
   vision_model?: string;
+  agent?: Record<string, any>;
   provider?: Record<string, any>;
 }
 
 /**
- * Get the path to models-config.json in the project root.
- * In container mode: /workspace/project/models-config.json
- * In direct mode: passed via environment variable
+ * Read current model configuration from opencode.json (source of truth)
  */
-function getConfigPath(): string {
+export function getCurrentModelConfig(): OpencodeConfig {
   const projectDir = process.env.PROJECT_DIR || '/workspace/project';
-  return path.join(projectDir, 'models-config.json');
-}
-
-/**
- * Read current model configuration from models-config.json
- */
-export function getCurrentModelConfig(): ModelConfig {
-  const configPath = getConfigPath();
+  const configPath = path.join(projectDir, 'opencode.json');
   
   if (!fs.existsSync(configPath)) {
-    // Return sensible defaults if file doesn't exist
-    return {
-      model: 'opencode/minimax-m2.5-free',
-      small_model: 'opencode/trinity-large-preview-free',
-      vision_model: 'opencode/big-pickle',
-      fallback_model: 'opencode/big-pickle'
-    };
+    throw new Error('opencode.json not found - this is the source of truth for model configuration');
   }
 
   try {
     const content = fs.readFileSync(configPath, 'utf-8');
     return JSON.parse(content);
   } catch (err) {
-    throw new Error(`Failed to read models-config.json: ${err instanceof Error ? err.message : String(err)}`);
+    throw new Error(`Failed to read opencode.json: ${err instanceof Error ? err.message : String(err)}`);
   }
 }
 
 /**
- * Update model configuration in models-config.json
- */
-export function updateModelConfig(updates: {
-  model?: string;
-  small_model?: string;
-  fallback_model?: string;
-  vision_model?: string;
-}): void {
-  const configPath = getConfigPath();
-  const config = getCurrentModelConfig();
-
-  // Apply updates
-  if (updates.model !== undefined) config.model = updates.model;
-  if (updates.small_model !== undefined) config.small_model = updates.small_model;
-  if (updates.fallback_model !== undefined) config.fallback_model = updates.fallback_model;
-  if (updates.vision_model !== undefined) config.vision_model = updates.vision_model;
-
-  try {
-    fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf-8');
-  } catch (err) {
-    throw new Error(`Failed to write models-config.json: ${err instanceof Error ? err.message : String(err)}`);
-  }
-}
-
-
-/**
- * MCP tool: Get current model configuration
+ * MCP tool: Get current model configuration (read-only)
  */
 export const tool_get_current_model = {
   name: 'get_current_model',
-  description: 'Get the current AI model configuration (primary, small, fallback models)',
+  description: 'Get the current AI model configuration from opencode.json (read-only)',
   inputSchema: {
     type: 'object',
     properties: {},
     required: []
   },
   handler: async () => {
-    const config = getCurrentModelConfig();
-    return {
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify({
-            primary_model: config.model || 'opencode/minimax-m2.5-free',
-            small_model: config.small_model || 'opencode/minimax-m2.5-free',
-            vision_model: config.vision_model || 'opencode/minimax-m2.5-free',
-            fallback_model: config.fallback_model || 'opencode/glm-5-free',
-            note: 'Changes require OpenCode server restart to take effect'
-          }, null, 2)
-        }
-      ]
-    };
-  }
-};
-
-/**
- * MCP tool: Change the primary model
- */
-export const tool_change_model = {
-  name: 'change_model',
-  description: 'Change the primary AI model used for complex reasoning tasks. Requires server restart.',
-  inputSchema: {
-    type: 'object',
-    properties: {
-      model: {
-        type: 'string',
-        description: 'Model identifier (e.g., "anthropic/claude-3-5-sonnet", "google/gemini-2.0-flash-lite")'
-      }
-    },
-    required: ['model']
-  },
-  handler: async (args: { model: string }) => {
     try {
-      updateModelConfig({ model: args.model });
+      const config = getCurrentModelConfig();
       return {
         content: [
           {
             type: 'text',
-            text: `✓ Primary model changed to: ${args.model}\n\n` +
-                  `⚠️  OpenCode server restart required for changes to take effect.\n` +
-                  `The user needs to restart EureClaw for the new model to be used.`
+            text: JSON.stringify({
+              primary_model: config.model || 'not configured',
+              small_model: config.small_model || 'not configured',
+              source: 'opencode.json',
+              note: 'Model configuration is read from opencode.json. Changes will be handled via Web UI in the future.'
+            }, null, 2)
           }
         ]
       };
@@ -143,134 +71,7 @@ export const tool_change_model = {
         content: [
           {
             type: 'text',
-            text: `✗ Failed to change model: ${err instanceof Error ? err.message : String(err)}`
-          }
-        ],
-        isError: true
-      };
-    }
-  }
-};
-
-/**
- * MCP tool: Set the small model for lightweight tasks
- */
-export const tool_set_small_model = {
-  name: 'set_small_model',
-  description: 'Set the lightweight model for simple tasks (searches, summaries). Requires server restart.',
-  inputSchema: {
-    type: 'object',
-    properties: {
-      model: {
-        type: 'string',
-        description: 'Model identifier for lightweight tasks (e.g., "google/gemini-2.0-flash-lite")'
-      }
-    },
-    required: ['model']
-  },
-  handler: async (args: { model: string }) => {
-    try {
-      updateModelConfig({ small_model: args.model });
-      return {
-        content: [
-          {
-            type: 'text',
-            text: `✓ Small model changed to: ${args.model}\n\n` +
-                  `⚠️  OpenCode server restart required for changes to take effect.`
-          }
-        ]
-      };
-    } catch (err) {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: `✗ Failed to set small model: ${err instanceof Error ? err.message : String(err)}`
-          }
-        ],
-        isError: true
-      };
-    }
-  }
-};
-
-/**
- * MCP tool: Set fallback model
- */
-export const tool_set_fallback_model = {
-  name: 'set_fallback_model',
-  description: 'Set the fallback model to use if the primary model fails. Requires server restart.',
-  inputSchema: {
-    type: 'object',
-    properties: {
-      model: {
-        type: 'string',
-        description: 'Model identifier for fallback (e.g., "openai/gpt-4o")'
-      }
-    },
-    required: ['model']
-  },
-  handler: async (args: { model: string }) => {
-    try {
-      updateModelConfig({ fallback_model: args.model });
-      return {
-        content: [
-          {
-            type: 'text',
-            text: `✓ Fallback model set to: ${args.model}\n\n` +
-                  `⚠️  OpenCode server restart required for changes to take effect.`
-          }
-        ]
-      };
-    } catch (err) {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: `✗ Failed to set fallback model: ${err instanceof Error ? err.message : String(err)}`
-          }
-        ],
-        isError: true
-      };
-    }
-  }
-};
-
-/**
- * MCP tool: Set vision model for image analysis
- */
-export const tool_set_vision_model = {
-  name: 'set_vision_model',
-  description: 'Set the model for image/vision tasks. Use this when you want a different model for image analysis than your primary text model. Requires server restart.',
-  inputSchema: {
-    type: 'object',
-    properties: {
-      model: {
-        type: 'string',
-        description: 'Model identifier with vision support (e.g., "opencode/minimax-m2.5-free", "google/gemini-2.0-flash-lite", "anthropic/claude-3-5-sonnet")'
-      }
-    },
-    required: ['model']
-  },
-  handler: async (args: { model: string }) => {
-    try {
-      updateModelConfig({ vision_model: args.model });
-      return {
-        content: [
-          {
-            type: 'text',
-            text: `✓ Vision model set to: ${args.model}\n\n` +
-                  `This model will be used for image analysis tasks.\n` +
-                  `⚠️  OpenCode server restart required for changes to take effect.`
-          }
-        ]
-      };
-    } catch (err) {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: `✗ Failed to set vision model: ${err instanceof Error ? err.message : String(err)}`
+            text: `✗ Failed to read model config: ${err instanceof Error ? err.message : String(err)}`
           }
         ],
         isError: true
@@ -358,9 +159,5 @@ export const tool_list_models = {
 // Export all tools for registration
 export const modelManagerTools = [
   tool_get_current_model,
-  tool_change_model,
-  tool_set_small_model,
-  tool_set_fallback_model,
-  tool_set_vision_model,
   tool_list_models
 ];

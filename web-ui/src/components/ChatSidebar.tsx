@@ -19,7 +19,7 @@ export default function ChatSidebar({
   onSelectChat, onOpenSettings, onDisconnect,
 }: ChatSidebarProps) {
   return (
-    <aside className={`flex w-64 shrink-0 flex-col border-r ${isDark ? 'border-zinc-800 bg-zinc-950' : 'border-zinc-200 bg-zinc-50'}`}>
+    <aside className={`flex w-72 shrink-0 flex-col border-r ${isDark ? 'border-zinc-800 bg-zinc-950' : 'border-zinc-200 bg-zinc-50'}`}>
       <div className={`flex h-16 items-center justify-between border-b px-5 ${isDark ? 'border-zinc-800' : 'border-zinc-300'}`}>
         <h1 className="text-xl font-semibold">EureClaw Chat</h1>
         <span

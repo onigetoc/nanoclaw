@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 import Database from 'better-sqlite3';
 
-const db = new Database('data/eureclaw.db');
+const db = new Database('store/messages.db');
 
 const groupFolder = process.argv[2] || 'main';
 

@@ -10,26 +10,38 @@
 **Timezone**: [Timezone]  
 **Communication Style**: [How they prefer to communicate]
 
+## Memory & Data
+
+- **Architecture**: Système hybride combinant SQLite (pour l'historique complet des conversations) et fichiers Markdown (pour la mémoire curatée).
+- **SQLite**: Stocke l'intégralité des messages (utilisateur et assistant).
+- **Outils personnalisés**:
+  - `tools/sqlite-helper.js` : Outil CLI pour interroger ou modifier `store/messages.db`.
+  - _Usage_: `bun tools/sqlite-helper.js <dbPath> "<query>"`
+
 ## Current Projects
 
 ### [Project Name]
+
 - [Brief description]
 - [Key details]
 
 ## Important Context
 
 ### Technical Setup
+
 - [Environment details]
 - [API keys available]
 - [Special configurations]
 
 ### Preferences
+
 - [User preferences]
 - [Things they like/dislike]
 
 ## Recent Decisions
 
 **YYYY-MM-DD**: [Decision Title]
+
 - [Context]
 - [Decision made]
 - [Reasoning]
@@ -48,4 +60,4 @@
 
 ---
 
-*Last updated: YYYY-MM-DD*
+_Last updated: YYYY-MM-DD_

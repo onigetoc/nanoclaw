@@ -47,7 +47,7 @@ export default function SettingsNav({ active, onSelect, onBack, isDark }: Settin
 
   return (
     <aside
-      className={`flex w-64 shrink-0 flex-col border-r ${
+      className={`flex w-72 shrink-0 flex-col border-r ${
         isDark ? 'border-zinc-800 bg-zinc-950' : 'border-zinc-200 bg-zinc-50'
       }`}
     >

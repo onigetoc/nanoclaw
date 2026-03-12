@@ -4,13 +4,29 @@ import { VitePWA } from 'vite-plugin-pwa'
 
 // https://vite.dev/config/
 export default defineConfig({
+  server: {
+    port: 8174,
+    strictPort: false,
+  },
+  preview: {
+    port: 8174,
+    strictPort: false,
+  },
   plugins: [
-    react(),
+    react({
+      babel: {
+        plugins: [
+          ['babel-plugin-react-compiler', {
+            target: '19'
+          }]
+        ]
+      }
+    }),
     VitePWA({
       registerType: 'autoUpdate',
       includeAssets: ['icon-512.png'],
       devOptions: {
-        enabled: true
+        enabled: true  // Re-enabled now that we have unique port 8174
       },
       manifest: {
         name: 'EureClaw',
@@ -21,7 +37,8 @@ export default defineConfig({
         display: 'standalone',
         start_url: '/',
         lang: 'en',
-        scope: '/',
+        scope: '/',  // CRITICAL: Limits SW to this origin only
+        id: 'eureclaw-web-ui',  // Unique ID to prevent conflicts
         icons: [
           {
             src: '/icon-512.png',
@@ -54,5 +71,5 @@ export default defineConfig({
         ]
       }
     })
-  ],
+  ]
 })

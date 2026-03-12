@@ -258,7 +258,7 @@ systemctl --user restart eureclaw
 2. Wait for acknowledgment
 3. Check the database:
    ```bash
-   sqlite3 data/eureclaw.db "SELECT * FROM tasks WHERE status='active';"
+   sqlite3 store/messages.db "SELECT * FROM tasks WHERE status='active';"
    ```
 
 **Expected Result:**
@@ -324,7 +324,7 @@ systemctl --user restart eureclaw
 
 1. Check for existing sessions in database:
    ```bash
-   sqlite3 data/eureclaw.db "SELECT id, group_folder, created_at FROM sessions LIMIT 5;"
+   sqlite3 store/messages.db "SELECT id, group_folder, created_at FROM sessions LIMIT 5;"
    ```
 2. If you have existing sessions, send a message to resume one
 3. Verify context is preserved
@@ -419,7 +419,7 @@ journalctl --user -u eureclaw -n 50
 **Check:**
 1. Service is running: `launchctl list | grep eureclaw`
 2. Container logs: `cat groups/main/logs/container-*.log | tail -100`
-3. Database connection: `sqlite3 data/eureclaw.db "SELECT COUNT(*) FROM messages;"`
+3. Database connection: `sqlite3 store/messages.db "SELECT COUNT(*) FROM messages;"`
 
 **Common causes:**
 - Container timeout (check timeout settings)
@@ -429,7 +429,7 @@ journalctl --user -u eureclaw -n 50
 ### Issue: "Session not found" errors
 
 **Check:**
-1. Database has sessions: `sqlite3 data/eureclaw.db "SELECT * FROM sessions;"`
+1. Database has sessions: `sqlite3 store/messages.db "SELECT * FROM sessions;"`
 2. Session IDs are valid UUIDs
 3. OpenCode SDK is configured correctly
 
@@ -464,7 +464,7 @@ If you encounter issues during testing:
    cat groups/main/logs/container-*.log > migration-test-container.log
    
    # Database state
-   sqlite3 data/eureclaw.db ".dump" > migration-test-db.sql
+   sqlite3 store/messages.db ".dump" > migration-test-db.sql
    ```
 
 2. **Document the issue:**

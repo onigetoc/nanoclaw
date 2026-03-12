@@ -773,7 +773,7 @@ export function getAllSessions(): Record<string, string> {
 /**
  * Read the current model from opencode.json.
  */
-function getCurrentModel(): string | undefined {
+export function getCurrentModel(): string | undefined {
   try {
     const configPath = path.join(process.cwd(), 'opencode.json');
     const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));

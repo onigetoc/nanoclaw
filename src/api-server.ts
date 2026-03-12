@@ -892,6 +892,37 @@ export function setSendMessageFunction(
   sendMessageFn = fn;
 }
 
+/**
+ * Broadcast a processing status event to web UI clients.
+ * Used to show real-time progress indicators (e.g. "Connecting to model...", "Waiting for response...").
+ */
+export function broadcastStatus(
+  chatJid: string,
+  status: 'processing' | 'connecting' | 'waiting' | 'responding' | 'error' | 'done',
+  detail?: string,
+): void {
+  const linkedJids = getLinkedChatJids(chatJid);
+  if (!linkedJids.includes(chatJid)) linkedJids.push(chatJid);
+
+  for (const [tokenId, connections] of sseConnections.entries()) {
+    const mappings = getApiTokenChatMappings(tokenId);
+    const hasChat = mappings.length === 0 || linkedJids.some((jid) => mappings.includes(jid));
+
+    if (hasChat) {
+      for (const targetJid of linkedJids) {
+        const payload = JSON.stringify({ type: 'status', chatJid: targetJid, status, detail, timestamp: new Date().toISOString() });
+        for (const sendEvent of connections) {
+          try {
+            sendEvent(payload);
+          } catch (e) {
+            connections.delete(sendEvent);
+          }
+        }
+      }
+    }
+  }
+}
+
 export function broadcastToToken(
   chatJid: string,
   message: {
@@ -910,6 +941,7 @@ export function broadcastToToken(
   // If chatJid itself isn't in the linked list (non-web), include it
   if (!linkedJids.includes(chatJid)) linkedJids.push(chatJid);
 
+  let totalSent = 0;
   for (const [tokenId, connections] of sseConnections.entries()) {
     const mappings = getApiTokenChatMappings(tokenId);
 
@@ -922,12 +954,16 @@ export function broadcastToToken(
         for (const sendEvent of connections) {
           try {
             sendEvent(messageStr);
+            totalSent++;
           } catch (e) {
             connections.delete(sendEvent);
           }
         }
       }
     }
+  }
+  if (totalSent === 0 && sseConnections.size === 0) {
+    logger.debug({ chatJid, linkedJids }, 'broadcastToToken: no SSE connections active');
   }
 }
 

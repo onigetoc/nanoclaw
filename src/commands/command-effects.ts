@@ -14,7 +14,6 @@ import {
   setGroupSession,
   setLastAgentTimestampForJid,
   saveState,
-  markSessionAsFresh,
 } from '../state.js';
 import { CommandResponse } from './index.js';
 import { RegisteredGroup } from '../types.js';
@@ -59,7 +58,6 @@ export async function handleCommandSideEffects(
       if (newSessionId && typeof newSessionId === 'string') {
         setGroupSession(group.folder, newSessionId);
         clearUndoState(newSessionId); // Clear undo/redo history for new session
-        markSessionAsFresh(newSessionId); // Mark as fresh so conversation history is skipped
         const shortId = newSessionId.slice(0, 12) + '...';
         commandResult.reply = `🆕 New session created (${shortId}).`;
         logger.info({ chatJid, groupFolder: group.folder, newSessionId }, '/new: Session created');

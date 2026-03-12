@@ -20,7 +20,7 @@ export interface MessageMetadata {
   providerID?: string;
   mode?: string;
   agent?: string;
-  tokens?: { total: number; input: number; output: number; reasoning: number };
+  tokens?: { total: number; input: number; output: number; reasoning: number; cacheRead?: number; cacheWrite?: number };
   cost?: number;
 }
 
@@ -112,6 +112,13 @@ export interface ProviderInfo {
   label: string;
   placeholder: string;
   configured: boolean;
+}
+
+export interface StatusEvent {
+  chatJid: string;
+  status: 'processing' | 'connecting' | 'waiting' | 'responding' | 'error' | 'done';
+  detail?: string;
+  timestamp: string;
 }
 
 class ApiService {
@@ -420,6 +427,7 @@ class ApiService {
 
   private abortController: AbortController | null = null;
   private messageListeners: ((message: Message) => void)[] = [];
+  private statusListeners: ((event: StatusEvent) => void)[] = [];
   private connectionListeners: ((status: ConnectionStatus) => void)[] = [];
   private healthInterval: ReturnType<typeof setInterval> | null = null;
   private _serverOnline = false;
@@ -525,7 +533,15 @@ class ApiService {
             if (line.startsWith('data: ')) {
               try {
                 const data = JSON.parse(line.slice(6));
-                if (data.type === 'message' && data.content && !data.id?.startsWith('typing_')) {
+                if (data.type === 'status') {
+                  const statusEvent: StatusEvent = {
+                    chatJid: data.chatJid,
+                    status: data.status,
+                    detail: data.detail,
+                    timestamp: data.timestamp,
+                  };
+                  this.statusListeners.forEach((listener) => listener(statusEvent));
+                } else if (data.type === 'message' && data.content && !data.id?.startsWith('typing_')) {
                   const message: Message = {
                     id: data.id,
                     chat_jid: data.chatJid,
@@ -547,13 +563,17 @@ class ApiService {
             }
           }
         }
-        // Stream ended (server closed connection)
+        // Stream ended (server closed connection) — reconnect automatically
         this.setSseConnected(false);
+        if (!this.abortController?.signal.aborted) {
+          console.log('SSE stream ended, reconnecting in 2s...');
+          setTimeout(() => this.connectToEvents(), 2000);
+        }
       })
       .catch((err) => {
         this.setSseConnected(false);
         if (err.name !== 'AbortError') {
-          console.error('SSE connection error, reconnecting...');
+          console.error('SSE connection error, reconnecting in 5s...');
           setTimeout(() => this.connectToEvents(), 5000);
         }
       });
@@ -572,6 +592,14 @@ class ApiService {
     return () => {
       const index = this.messageListeners.indexOf(callback);
       if (index > -1) this.messageListeners.splice(index, 1);
+    };
+  }
+
+  onStatus(callback: (event: StatusEvent) => void): () => void {
+    this.statusListeners.push(callback);
+    return () => {
+      const index = this.statusListeners.indexOf(callback);
+      if (index > -1) this.statusListeners.splice(index, 1);
     };
   }
 }

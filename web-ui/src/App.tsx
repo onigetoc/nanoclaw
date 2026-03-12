@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { ArrowDown, Bug, MessageCircle, Moon, Sun } from 'lucide-react';
-import { apiService, type ChatInfo, type Message, type ApiToken, type ConnectionStatus } from './api';
+import { apiService, type ChatInfo, type Message, type ApiToken, type ConnectionStatus, type StatusEvent } from './api';
 import { useSettings } from './useSettings';
 import { getUiModelsSync, type UiModel } from './utils/models';
 import { formatDate } from './types';
@@ -40,6 +40,7 @@ function App() {
   const [composerHeight, setComposerHeight] = useState(176);
   const [showSettingsPage, setShowSettingsPage] = useState(false);
   const [unreadChats, setUnreadChats] = useState<Set<string>>(new Set());
+  const [agentStatus, setAgentStatus] = useState<StatusEvent | null>(null);
   const { settings, updateSetting, resetSettings } = useSettings();
 
   const messagesContainerRef = useRef<HTMLDivElement>(null);
@@ -171,9 +172,14 @@ function App() {
           if (s.messages.some((m) => m.id === message.id)) return s;
           
           // Detect /new command response - clear message history for fresh session
+          console.log('📨 Message received:', {
+            is_bot_message: message.is_bot_message,
+            content: message.content.substring(0, 50),
+            includes_new: message.content.includes('New session created')
+          });
+          
           const isNewSessionMessage = message.is_bot_message && 
-            message.content.includes('New session created') &&
-            message.content.match(/ses_[a-zA-Z0-9]+/);
+            message.content.includes('New session created');
           
           if (isNewSessionMessage) {
             console.log('🆕 New session detected - clearing message history');
@@ -188,13 +194,22 @@ function App() {
       });
     });
 
+    const unsubscribeStatus = apiService.onStatus((event) => {
+      if (event.status === 'done') {
+        setTimeout(() => setAgentStatus(null), 2000);
+        setAgentStatus({ ...event, detail: 'Done' });
+      } else {
+        setAgentStatus(event);
+      }
+    });
+
     const unsubscribeConn = apiService.onConnectionChange((status) => {
       setServerStatus(status);
       if (status.serverOnline && !status.sseConnected) { void loadChats(); apiService.connectToEvents(); }
       setState((s) => ({ ...s, connected: status.serverOnline, error: status.serverOnline ? null : s.error }));
     });
 
-    return () => { unsubscribeMsg(); unsubscribeConn(); apiService.disconnectFromEvents(); apiService.stopHealthMonitor(); };
+    return () => { unsubscribeMsg(); unsubscribeStatus(); unsubscribeConn(); apiService.disconnectFromEvents(); apiService.stopHealthMonitor(); };
   }, [token]);
 
   useEffect(() => { if (state.selectedChat) void loadMessages(state.selectedChat.jid); }, [state.selectedChat]);
@@ -234,6 +249,11 @@ function App() {
       if (container.scrollTop < 100) loadOlderRef.current();
     });
   }, []);
+
+  // Throttle scroll events
+  const throttledUpdateScrollState = useCallback(() => {
+    updateScrollState();
+  }, [updateScrollState]);
 
   useEffect(() => { if (isNearBottom) scrollToBottom(); else setShowScrollToBottom(true); }, [state.messages, isNearBottom]);
   useEffect(() => () => { if (scrollRafRef.current !== null) window.cancelAnimationFrame(scrollRafRef.current); }, []);
@@ -427,7 +447,7 @@ function App() {
                 </div>
               </header>
 
-              <div ref={messagesContainerRef} onScroll={updateScrollState} className="flex-1 overflow-y-auto px-3 py-4 md:px-6">
+              <div ref={messagesContainerRef} onScroll={throttledUpdateScrollState} className="flex-1 overflow-y-auto px-3 py-4 md:px-6" style={{ willChange: 'scroll-position' }}>
                 <div className="mx-auto w-full max-w-4xl">
                   {isLoadingOlder && (
                     <div className="flex justify-center py-3"><div className="h-5 w-5 animate-spin rounded-full border-2 border-zinc-400 border-t-transparent" /></div>
@@ -466,6 +486,23 @@ function App() {
                 >
                   <ArrowDown className="h-5 w-5" />
                 </button>
+              )}
+
+              {agentStatus && agentStatus.status !== 'done' && agentStatus.chatJid === state.selectedChat.jid && (
+                <div className={`flex items-center gap-2 px-4 py-2 text-xs ${
+                  agentStatus.status === 'error'
+                    ? isDark ? 'bg-red-950/40 text-red-400' : 'bg-red-50 text-red-600'
+                    : isDark ? 'bg-zinc-800/80 text-emerald-400' : 'bg-zinc-100 text-emerald-600'
+                }`}>
+                  {agentStatus.status !== 'error' && (
+                    <span className="flex gap-1">
+                      <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-current [animation-delay:-0.3s]" />
+                      <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-current [animation-delay:-0.15s]" />
+                      <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-current" />
+                    </span>
+                  )}
+                  <span>{agentStatus.detail || agentStatus.status}</span>
+                </div>
               )}
 
               <ComposerBar

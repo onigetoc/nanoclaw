@@ -18,7 +18,6 @@ let sessions: Record<string, string> = {};
 let registeredGroups: Record<string, RegisteredGroup> = {};
 let lastAgentTimestamp: Record<string, string> = {};
 let messageLoopRunning = false;
-let freshSessions: Set<string> = new Set(); // Track sessions just created by /new
 
 // --- Getters ---
 
@@ -55,18 +54,6 @@ export function setMessageLoopRunning(running: boolean): void {
 export function setGroupSession(folder: string, sessionId: string): void {
   sessions[folder] = sessionId;
   setSession(folder, sessionId);
-}
-
-export function markSessionAsFresh(sessionId: string): void {
-  freshSessions.add(sessionId);
-}
-
-export function isSessionFresh(sessionId: string): boolean {
-  return freshSessions.has(sessionId);
-}
-
-export function clearFreshSessionFlag(sessionId: string): void {
-  freshSessions.delete(sessionId);
 }
 
 export function setLastAgentTimestampForJid(jid: string, ts: string): void {

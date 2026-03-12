@@ -191,13 +191,13 @@ tail -n 100 ~/eureclaw/logs/eureclaw.log | grep -i error
 **Verification:**
 ```bash
 # Check database integrity
-sqlite3 ~/eureclaw/data/eureclaw.db "PRAGMA integrity_check;"
+sqlite3 ~/eureclaw/store/messages.db "PRAGMA integrity_check;"
 
 # Verify session count
-sqlite3 ~/eureclaw/data/eureclaw.db "SELECT COUNT(*) FROM sessions;"
+sqlite3 ~/eureclaw/store/messages.db "SELECT COUNT(*) FROM sessions;"
 
 # Check recent sessions
-sqlite3 ~/eureclaw/data/eureclaw.db "SELECT chat_jid, session_id, created_at FROM sessions ORDER BY created_at DESC LIMIT 10;"
+sqlite3 ~/eureclaw/store/messages.db "SELECT chat_jid, session_id, created_at FROM sessions ORDER BY created_at DESC LIMIT 10;"
 ```
 
 ### File System Preservation
@@ -245,7 +245,7 @@ To minimize risk, consider a gradual migration strategy instead of immediate ful
 1. **Identify Test Groups:**
    ```bash
    # List all registered groups
-   sqlite3 ~/eureclaw/data/eureclaw.db "SELECT jid, name FROM chats WHERE is_active = 1;"
+   sqlite3 ~/eureclaw/store/messages.db "SELECT jid, name FROM chats WHERE is_active = 1;"
    
    # Select 1-2 low-traffic groups for OpenCode SDK testing
    ```
@@ -278,7 +278,7 @@ To minimize risk, consider a gradual migration strategy instead of immediate ful
    tail -f ~/eureclaw/groups/main/logs/*.log &
    
    # Compare session behavior
-   sqlite3 ~/eureclaw/data/eureclaw.db "SELECT chat_jid, COUNT(*) as msg_count FROM messages WHERE created_at > datetime('now', '-1 day') GROUP BY chat_jid;"
+   sqlite3 ~/eureclaw/store/messages.db "SELECT chat_jid, COUNT(*) as msg_count FROM messages WHERE created_at > datetime('now', '-1 day') GROUP BY chat_jid;"
    ```
 
 ### Phase 2: Incremental Group Migration
@@ -490,10 +490,10 @@ git clean -fdx container/agent-runner/node_modules
 **Solution:**
 ```bash
 # Check database for session IDs
-sqlite3 ~/eureclaw/data/eureclaw.db "SELECT * FROM sessions WHERE chat_jid = 'YOUR_CHAT_JID';"
+sqlite3 ~/eureclaw/store/messages.db "SELECT * FROM sessions WHERE chat_jid = 'YOUR_CHAT_JID';"
 
 # If session IDs are corrupted, clear and start fresh
-sqlite3 ~/eureclaw/data/eureclaw.db "DELETE FROM sessions WHERE chat_jid = 'YOUR_CHAT_JID';"
+sqlite3 ~/eureclaw/store/messages.db "DELETE FROM sessions WHERE chat_jid = 'YOUR_CHAT_JID';"
 ```
 
 ### Issue 3: MCP Tools Not Working

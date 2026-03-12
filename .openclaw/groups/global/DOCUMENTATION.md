@@ -596,7 +596,7 @@ setInterval(async () => {
 
 EureClaw uses multiple complementary memory systems to store different types of information:
 
-### 1. SQLite Database (`data/EureClaw.db`)
+### 1. SQLite Database (`store/messages.db`)
 
 **Purpose:** Structured data, history, system state
 

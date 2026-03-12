@@ -1,6 +1,6 @@
 {
   "$schema": "https://opencode.ai/config.json",
-  "model": "openrouter/google/gemini-2.5-flash",
+  "model": "google/gemini-3.1-flash-lite-preview",
   "small_model": "opencode/trinity-large-preview-free",
   "provider": {
     "opencode": {
@@ -40,11 +40,11 @@
       }
     },
     "researcher": {
-      "model": "google/gemini-2.5-flash",
+      "model": "google/gemini-2.5-flash-lite",
       "description": "Fast web research with small model"
     },
     "summarizer": {
-      "model": "google/gemini-2.5-flash",
+      "model": "google/gemini-2.5-flash-lite",
       "description": "Quick synthesis with small model"
     },
     "planner": {

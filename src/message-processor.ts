@@ -35,15 +35,13 @@ import {
   setLastAgentTimestampForJid,
   setGroupSession,
   saveState,
-  isSessionFresh,
-  clearFreshSessionFlag,
 } from './state.js';
 import { getAvailableGroups } from './group-manager.js';
 import { RegisteredGroup, Channel } from './types.js';
 import { logger } from './logger.js';
 import { ensureServerHealthy } from './opencode-server.js';
 import { getMonitoring } from './monitoring.js';
-import { broadcastToToken } from './api-server.js';
+import { broadcastToToken, broadcastStatus } from './api-server.js';
 
 /**
  * Process all pending messages for a group.
@@ -61,18 +59,8 @@ export async function processGroupMessages(
   const isMainGroup = group.folder === MAIN_GROUP_FOLDER;
   const sessions = getSessions();
   const sessionId = sessions[group.folder];
-  let isFreshSession: boolean = !!(sessionId && isSessionFresh(sessionId));
 
-  let sinceTimestamp = getLastAgentTimestampForJid(chatJid);
-
-  if (isFreshSession) {
-    logger.info(
-      { group: group.name, sessionId },
-      'Fresh session detected - will skip conversation history',
-    );
-    clearFreshSessionFlag(sessionId); // Clear flag after first use
-    sinceTimestamp = new Date().toISOString(); // Set timestamp to now to ignore old messages
-  }
+  const sinceTimestamp = getLastAgentTimestampForJid(chatJid);
 
   const missedMessages = chatJid.startsWith('web:')
     ? getMessagesSinceLinked(chatJid, sinceTimestamp, ASSISTANT_NAME)
@@ -90,8 +78,7 @@ export async function processGroupMessages(
 
   const prompt = formatMessages(missedMessages);
 
-  // Advance cursor; save old cursor for rollback on error
-  const previousCursor = getLastAgentTimestampForJid(chatJid);
+  // Advance cursor
   setLastAgentTimestampForJid(
     chatJid,
     missedMessages[missedMessages.length - 1].timestamp,
@@ -102,6 +89,9 @@ export async function processGroupMessages(
     { group: group.name, messageCount: missedMessages.length },
     'Processing messages',
   );
+
+  // Broadcast status to web UI
+  broadcastStatus(chatJid, 'processing', `Processing ${missedMessages.length} message(s)…`);
 
   const monitoring = getMonitoring();
   const executionId = monitoring.startExecution({
@@ -129,7 +119,6 @@ export async function processGroupMessages(
 
   await channel.setTyping?.(chatJid, true);
   let hadError = false;
-  let outputSentToUser = false;
   let lastErrorMessage = '';
 
   const output = await runAgent(
@@ -137,9 +126,9 @@ export async function processGroupMessages(
     prompt,
     chatJid,
     queue,
-    isFreshSession,
     async (result) => {
       if (result.result) {
+        broadcastStatus(chatJid, 'responding');
         const raw =
           typeof result.result === 'string'
             ? result.result
@@ -171,7 +160,6 @@ export async function processGroupMessages(
             const wasSent = await sendDeduped(channel, chatJid, text);
             if (!wasSent) return; // Duplicate — skip store & broadcast
           }
-          outputSentToUser = true;
           monitoring.markOutputSent(executionId);
 
           const msgId = `bot_${Date.now()}_${Math.random().toString(36).substring(7)}`;
@@ -219,6 +207,7 @@ export async function processGroupMessages(
 
   await channel.setTyping?.(chatJid, false);
   if (idleTimer) clearTimeout(idleTimer);
+  broadcastStatus(chatJid, 'done');
 
   if (output === 'error' || hadError) {
     // Send a user-visible error message in the conversation so the user knows what happened
@@ -247,25 +236,19 @@ export async function processGroupMessages(
       is_bot_message: true,
     });
 
-    if (outputSentToUser) {
-      logger.warn(
-        { group: group.name },
-        'Agent error after output was sent, skipping cursor rollback to prevent duplicates',
-      );
-      monitoring.updateExecution(executionId, { status: 'completed' });
-      return true;
-    }
-    setLastAgentTimestampForJid(chatJid, previousCursor);
-    saveState();
+    // Always keep the cursor advanced after showing the error to the user.
+    // Rolling back causes infinite retry loops where the same messages keep
+    // failing and the group appears "dead". The user sees the error message
+    // and can simply send a new message to retry.
     logger.warn(
-      { group: group.name },
-      'Agent error, rolled back message cursor for retry',
+      { group: group.name, error: errorDetail },
+      'Agent error — cursor kept advanced, user notified',
     );
     monitoring.updateExecution(executionId, {
       status: 'error',
       error: errorDetail,
     });
-    return false;
+    return true; // Return true so the queue doesn't retry automatically
   }
 
   monitoring.updateExecution(executionId, { status: 'completed' });
@@ -287,20 +270,27 @@ function formatErrorForUser(rawError: string): string {
     lower.includes('limit exceeded') ||
     lower.includes('too many requests')
   ) {
-    return `⚠️ Rate limit reached — the AI provider is throttling requests. Try again in a minute.\n\n\`Details: ${rawError}\``;
+    return `⚠️ Rate limit reached — the AI provider is throttling requests.\n\nYou can:\n• Wait a minute and send your message again\n• Use \`/model\` to switch to a different model`;
   }
 
-  // Network / connectivity
+  // Network / connectivity — "fetch failed" from the agent-runner usually means
+  // the model provider timed out or is unreachable, not a local network issue.
   if (
     lower.includes('fetch failed') ||
     lower.includes('econnrefused') ||
     lower.includes('enotfound') ||
+    lower.includes('apiconnectionerror')
+  ) {
+    return `⚠️ The AI model didn't respond — the provider may be slow or unreachable.\n\nYou can:\n• Send your message again to retry\n• Use \`/model\` to switch to a different model\n• Use \`/models\` to see available models`;
+  }
+
+  // General network
+  if (
     lower.includes('network') ||
     lower.includes('dns') ||
-    lower.includes('apiconnectionerror') ||
     lower.includes('connectivity')
   ) {
-    return `⚠️ Network error — could not reach the AI provider. Check your internet connection.\n\n\`Details: ${rawError}\``;
+    return `⚠️ Network error — check your internet connection.\n\n\`Details: ${rawError}\``;
   }
 
   // OpenCode server unreachable
@@ -318,7 +308,7 @@ function formatErrorForUser(rawError: string): string {
     lower.includes('abort') ||
     lower.includes('timed out')
   ) {
-    return `⚠️ Request timed out — the AI took too long to respond. This can happen with complex prompts or slow providers.\n\n\`Details: ${rawError}\``;
+    return `⚠️ The AI took too long to respond.\n\nYou can:\n• Send your message again to retry\n• Use \`/model\` to switch to a faster model`;
   }
 
   // Context overflow
@@ -354,16 +344,15 @@ function formatErrorForUser(rawError: string): string {
     lower.includes('service unavailable') ||
     lower.includes('overloaded')
   ) {
-    return `⚠️ The AI provider is experiencing issues (server error). Try again shortly.\n\n\`Details: ${rawError}\``;
+    return `⚠️ The AI provider is experiencing issues (server error).\n\nYou can:\n• Wait a moment and send your message again\n• Use \`/model\` to switch to a different provider`;
   }
 
-  // Container / spawn errors
+  // Agent process errors (spawn/exit) — don't say "container" since we may be in direct mode
   if (
-    lower.includes('container') ||
     lower.includes('spawn error') ||
     lower.includes('exited with code')
   ) {
-    return `⚠️ Agent container error — the execution environment failed.\n\n\`Details: ${rawError}\``;
+    return `⚠️ Agent process error — the execution failed.\n\n\`Details: ${rawError}\``;
   }
 
   // Session management
@@ -386,7 +375,6 @@ async function runAgent(
   prompt: string,
   chatJid: string,
   queue: GroupQueue,
-  isFreshSession: boolean,
   onOutput?: (output: ContainerOutput) => Promise<void>,
 ): Promise<'success' | 'error'> {
   const isMain = group.folder === MAIN_GROUP_FOLDER;
@@ -400,6 +388,7 @@ async function runAgent(
       { group: group.name },
       'OpenCode server unreachable, skipping agent run',
     );
+    broadcastStatus(chatJid, 'error', 'OpenCode server unreachable');
     if (onOutput) {
       await onOutput({
         status: 'error',
@@ -440,8 +429,6 @@ async function runAgent(
     ? async (output: ContainerOutput) => {
         if (output.newSessionId) {
           // Only update session if it wasn't changed externally (e.g. by /new).
-          // The agent-runner reports back the session it used, but if /new already
-          // set a different session ID in state, we must not overwrite it.
           const currentInState = getSessions()[group.folder];
           if (
             !currentInState ||
@@ -459,6 +446,9 @@ async function runAgent(
     const runAgentFn = shouldUseDirectMode()
       ? runDirectAgent
       : runContainerAgent;
+
+    broadcastStatus(chatJid, 'connecting', 'Starting agent…');
+
     const output = await runAgentFn(
       group,
       {
@@ -467,15 +457,16 @@ async function runAgent(
         groupFolder: group.folder,
         chatJid,
         isMain,
-        forceNewSession: !sessionId || isFreshSession || sessionId === '', // Force new session when empty OR fresh from /new
+        forceNewSession: !sessionId || sessionId === '',
       },
-      (proc, containerName) =>
-        queue.registerProcess(chatJid, proc, containerName, group.folder),
+      (proc, containerName) => {
+        queue.registerProcess(chatJid, proc, containerName, group.folder);
+        broadcastStatus(chatJid, 'waiting', 'Waiting for model response…');
+      },
       wrappedOnOutput,
     );
 
     if (output.newSessionId) {
-      // Same guard: don't overwrite if /new changed the session externally
       const currentInState = getSessions()[group.folder];
       if (
         !currentInState ||
@@ -491,7 +482,6 @@ async function runAgent(
         { group: group.name, error: output.error },
         'Container agent error',
       );
-      // Ensure onOutput is called with the error so the user sees it
       if (onOutput && output.error) {
         await onOutput({ status: 'error', result: null, error: output.error });
       }
@@ -501,6 +491,7 @@ async function runAgent(
     return 'success';
   } catch (err) {
     logger.error({ group: group.name, err }, 'Agent error');
+    broadcastStatus(chatJid, 'error', err instanceof Error ? err.message : String(err));
     if (onOutput) {
       const errMsg = err instanceof Error ? err.message : String(err);
       await onOutput({ status: 'error', result: null, error: errMsg });

@@ -100,9 +100,35 @@ export function stripInternalTags(text: string): string {
 /**
  * Strip XML message tags that the agent might accidentally include in its response.
  * Gemini sometimes echoes the input XML format instead of just responding.
- * This removes: <messages>...</messages> and <message>...</message> tags.
+ * 
+ * IMPORTANT: Only strips our specific message format tags, not all XML.
+ * This allows the agent to generate XML files when requested.
+ * 
+ * Only removes:
+ * - <messages> wrapper (our format)
+ * - <message sender="..." time="..."> tags (our format)
+ * 
+ * Does NOT remove:
+ * - Other XML tags (e.g., <config>, <data>, etc.)
+ * - XML in code blocks
  */
 export function stripMessageXml(text: string): string {
+  // Don't strip if this looks like intentional XML/code
+  // Check for common indicators: code blocks, XML declaration, or diverse XML tags
+  if (
+    text.includes('```') ||                    // Code block
+    text.includes('<?xml') ||                  // XML declaration
+    /<[a-z]+[^>]*>[^<]*<\/[a-z]+>/i.test(text) && !/<message/.test(text)  // Other XML tags without <message>
+  ) {
+    return text;
+  }
+  
+  // Only strip if we see our specific message format pattern
+  const hasOurMessageFormat = /<message\s+sender="[^"]*"\s+time="[^"]*">/.test(text);
+  if (!hasOurMessageFormat) {
+    return text;
+  }
+  
   // Remove <messages> wrapper
   let cleaned = text.replace(/<\/?messages>/g, '');
   
@@ -110,7 +136,7 @@ export function stripMessageXml(text: string): string {
   // Keep only the content between tags
   cleaned = cleaned.replace(/<message\s+sender="[^"]*"\s+time="[^"]*">([^<]*)<\/message>/g, '$1');
   
-  // Remove any remaining message tags
+  // Remove any remaining message tags (our format only)
   cleaned = cleaned.replace(/<\/?message[^>]*>/g, '');
   
   return cleaned.trim();

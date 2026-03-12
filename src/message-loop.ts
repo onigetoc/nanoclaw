@@ -152,18 +152,38 @@ export async function startMessageLoop(
 
 /**
  * Startup recovery: check for unprocessed messages in registered groups.
+ * Only recovers messages from the last 5 minutes to avoid replaying
+ * stale conversations from before a restart.
  */
 export function recoverPendingMessages(queue: GroupQueue): void {
   const registeredGroups = getRegisteredGroups();
+  const MAX_RECOVERY_AGE_MS = 5 * 60 * 1000; // 5 minutes
+  const cutoff = new Date(Date.now() - MAX_RECOVERY_AGE_MS).toISOString();
+
   for (const [chatJid, group] of Object.entries(registeredGroups)) {
     const sinceTimestamp = getLastAgentTimestampForJid(chatJid);
     const pending = getMessagesSince(chatJid, sinceTimestamp, ASSISTANT_NAME);
     if (pending.length > 0) {
-      logger.info(
-        { group: group.name, pendingCount: pending.length },
-        'Recovery: found unprocessed messages',
-      );
-      queue.enqueueMessageCheck(chatJid);
+      // Only recover messages that are recent (within the last 5 minutes).
+      // Older messages are stale — replaying them would cause the agent to
+      // resume old conversations or re-execute tool calls unprompted.
+      const recentPending = pending.filter((m) => m.timestamp >= cutoff);
+      if (recentPending.length > 0) {
+        logger.info(
+          { group: group.name, pendingCount: recentPending.length, skipped: pending.length - recentPending.length },
+          'Recovery: found recent unprocessed messages',
+        );
+        queue.enqueueMessageCheck(chatJid);
+      } else {
+        // Advance the cursor past stale messages so they're never replayed
+        const lastStale = pending[pending.length - 1];
+        setLastAgentTimestampForJid(chatJid, lastStale.timestamp);
+        saveState();
+        logger.info(
+          { group: group.name, staleCount: pending.length, oldestAge: lastStale.timestamp },
+          'Recovery: skipped stale messages (older than 5 min), advanced cursor',
+        );
+      }
     }
   }
 }

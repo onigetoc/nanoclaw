@@ -1,6 +1,6 @@
 /**
  * Browser daemon — keeps Chrome open, executes commands via file-based IPC.
- * 
+ *
  * Start: node daemon.js
  * Commands are written to data/browser-ipc/command.json
  * Results are written to data/browser-ipc/result.json
@@ -11,7 +11,8 @@ import fs from 'fs';
 import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const PROJECT_ROOT = process.env.PROJECT_DIR || path.resolve(__dirname, '..', '..', '..', '..');
+const PROJECT_ROOT =
+  process.env.PROJECT_DIR || path.resolve(__dirname, '..', '..', '..', '..');
 const IPC_DIR = path.join(PROJECT_ROOT, 'data', 'browser-ipc');
 const PROFILE_DIR = path.join(PROJECT_ROOT, 'data', 'browser-profile');
 const CMD_FILE = path.join(IPC_DIR, 'command.json');
@@ -29,7 +30,10 @@ function findChrome() {
   const paths = [
     'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
     'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
-    path.join(process.env.LOCALAPPDATA || '', 'Google\\Chrome\\Application\\chrome.exe'),
+    path.join(
+      process.env.LOCALAPPDATA || '',
+      'Google\\Chrome\\Application\\chrome.exe',
+    ),
   ];
   for (const p of paths) {
     if (fs.existsSync(p)) return p;
@@ -81,7 +85,9 @@ async function handleCommand(page, cmd) {
     }
     case 'wait': {
       if (cmd.selector) {
-        await page.waitForSelector(cmd.selector, { timeout: cmd.timeout || 10000 });
+        await page.waitForSelector(cmd.selector, {
+          timeout: cmd.timeout || 10000,
+        });
       } else if (cmd.ms) {
         await page.waitForTimeout(cmd.ms);
       } else {
@@ -152,20 +158,28 @@ async function main() {
   // Stealth
   await context.addInitScript(() => {
     Object.defineProperty(navigator, 'webdriver', { get: () => false });
-    window.chrome = { runtime: {}, loadTimes: function(){}, csi: function(){} };
+    window.chrome = {
+      runtime: {},
+      loadTimes: function () {},
+      csi: function () {},
+    };
     Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3, 4, 5] });
-    Object.defineProperty(navigator, 'languages', { get: () => ['en-US', 'en'] });
+    Object.defineProperty(navigator, 'languages', {
+      get: () => ['en-US', 'en'],
+    });
   });
 
-  let page = context.pages()[0] || await context.newPage();
+  let page = context.pages()[0] || (await context.newPage());
 
   // Write PID so CLI can check if daemon is running
   fs.writeFileSync(PID_FILE, String(process.pid));
-  console.log(`Browser daemon running (PID ${process.pid}). Waiting for commands...`);
+  console.log(
+    `Browser daemon running (PID ${process.pid}). Waiting for commands...`,
+  );
 
   // Poll for commands
   while (true) {
-    await new Promise(r => setTimeout(r, 200));
+    await new Promise((r) => setTimeout(r, 200));
 
     if (!fs.existsSync(CMD_FILE)) continue;
 
@@ -178,7 +192,9 @@ async function main() {
       continue;
     }
 
-    console.log(`> ${cmd.action}${cmd.url ? ' ' + cmd.url : ''}${cmd.selector ? ' ' + cmd.selector : ''}`);
+    console.log(
+      `> ${cmd.action}${cmd.url ? ' ' + cmd.url : ''}${cmd.selector ? ' ' + cmd.selector : ''}`,
+    );
 
     try {
       const result = await handleCommand(page, cmd);
@@ -201,7 +217,7 @@ async function main() {
   process.exit(0);
 }
 
-main().catch(err => {
+main().catch((err) => {
   console.error('Daemon crashed:', err.message);
   if (fs.existsSync(PID_FILE)) fs.unlinkSync(PID_FILE);
   process.exit(1);
