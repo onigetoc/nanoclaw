@@ -261,4 +261,4 @@ Pour ajouter de nouvelles métriques :
 1. Ajoutez les champs dans `AgentExecution` (`src/monitoring.ts`)
 2. Mettez à jour `writeSystemStatus()` dans `src/monitoring-writer.ts`
 3. Ajoutez l'affichage dans les outils MCP (`container/agent-runner/src/ipc-mcp-stdio.ts`)
-4. Mettez à jour la documentation dans `groups/global/TOOLS.md`
+4. Mettez à jour la documentation dans `groups/global/dna/TOOLS.md`

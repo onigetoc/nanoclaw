@@ -19,7 +19,7 @@ EureClaw is a personal Opencode assistant that runs securely in containers. Sing
 | `src/container-runner.ts` | Spawns agent containers with mounts |
 | `src/task-scheduler.ts` | Runs scheduled tasks |
 | `src/db.ts` | SQLite operations |
-| `groups/{name}/AGENTS.md` | Per-group memory (isolated) |
+| `groups/{name}/dna/AGENTS.md` | Per-group memory (isolated) |
 
 ## Development Commands
 

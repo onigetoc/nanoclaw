@@ -103,7 +103,7 @@ export default function ModelSelector({ isDark, selectedModelId, onSelectModel, 
                         : isDark ? 'text-zinc-200 hover:bg-zinc-800/70' : 'text-zinc-700 hover:bg-zinc-100'
                     }`}
                   >
-                    <span className={`inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-sm ${isDark ? 'bg-zinc-400' : 'bg-zinc-200'}`}>
+                    <span className={`inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-sm ${isDark ? 'bg-zinc-300' : 'bg-zinc-200'}`}>
                       <img src={getProviderLogoUrl(model.provider)} alt={model.provider} className="h-4 w-4" loading="lazy" />
                     </span>
                     <span className="min-w-0 flex-1 truncate text-sm">{model.name}</span>

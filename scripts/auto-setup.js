@@ -103,12 +103,20 @@ if (!mainGroup) {
   console.log(`   Name: ${mainGroup.name}`);
 }
 
-// Create main group directory structure
+// Create main group directory structure (new dna/workspace structure)
+const mainDnaDir = path.join(mainGroupDir, 'dna');
+const mainWorkspaceDir = path.join(mainGroupDir, 'workspace');
+fs.mkdirSync(mainDnaDir, { recursive: true });
+fs.mkdirSync(path.join(mainWorkspaceDir, 'screenshots'), { recursive: true });
+fs.mkdirSync(path.join(mainWorkspaceDir, 'reports'), { recursive: true });
+fs.mkdirSync(path.join(mainWorkspaceDir, 'tasks'), { recursive: true });
+fs.mkdirSync(path.join(mainWorkspaceDir, 'downloads'), { recursive: true });
+fs.mkdirSync(path.join(mainGroupDir, 'uploads'), { recursive: true });
 fs.mkdirSync(path.join(mainGroupDir, 'logs'), { recursive: true });
 fs.mkdirSync(path.join(mainGroupDir, 'conversations'), { recursive: true });
 
-// Create AGENTS.md if it doesn't exist
-const agentsMdPath = path.join(mainGroupDir, 'AGENTS.md');
+// Create AGENTS.md in dna/ if it doesn't exist
+const agentsMdPath = path.join(mainDnaDir, 'AGENTS.md');
 if (!fs.existsSync(agentsMdPath)) {
   fs.writeFileSync(agentsMdPath, `# Memory for Main Chat
 
@@ -126,14 +134,14 @@ This is your personal chat memory. You can store information here that you want 
 
 [Information about your projects]
 `);
-  console.log('📄 Created groups/main/AGENTS.md');
+  console.log('📄 Created groups/main/dna/AGENTS.md');
 }
 
-// Create global directory
-const globalDir = path.join(groupsDir, 'global');
-fs.mkdirSync(globalDir, { recursive: true });
+// Create global directory with dna/ structure
+const globalDnaDir = path.join(groupsDir, 'global', 'dna');
+fs.mkdirSync(globalDnaDir, { recursive: true });
 
-const globalAgentsMdPath = path.join(globalDir, 'AGENTS.md');
+const globalAgentsMdPath = path.join(globalDnaDir, 'AGENTS.md');
 if (!fs.existsSync(globalAgentsMdPath)) {
   fs.writeFileSync(globalAgentsMdPath, `# Global Memory
 
@@ -151,7 +159,7 @@ Skills are located in \`.opencode/skills/\`. To use a skill, read its SKILL.md f
 - Task scheduling
 - Multi-group management
 `);
-  console.log('📄 Created groups/global/AGENTS.md');
+  console.log('📄 Created groups/global/dna/AGENTS.md');
 }
 
 db.close();

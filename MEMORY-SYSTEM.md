@@ -39,7 +39,7 @@ EureClaw uses a hybrid memory system combining SQLite and markdown files for opt
 
 Each group has its own memory:
 
-- `groups/{name}/MEMORY.md` - Long-term memory for this group
+- `groups/{name}/dna/MEMORY.md` - Long-term memory for this group
 - `groups/{name}/conversations/` - Archived conversations
 - SQLite database (shared) - Recent messages for all groups
 
@@ -47,8 +47,8 @@ Each group has its own memory:
 
 Shared across all groups:
 
-- `groups/global/MEMORY.template.md` - Template for new groups
-- `groups/global/AGENTS.md` - Global instructions
+- `groups/templates/MEMORY.tpl.md` - Template for new groups
+- `groups/global/dna/AGENTS.md` - Global instructions
 
 ## How It Works
 
@@ -127,7 +127,7 @@ if (containerInput.isMain) {
 
 ### Agent doesn't remember conversations
 
-1. Check if MEMORY.md exists: `groups/main/MEMORY.md`
+1. Check if MEMORY.md exists: `groups/main/dna/MEMORY.md`
 2. Check SQLite has messages: `sqlite3 store/messages.db "SELECT COUNT(*) FROM messages;"`
 3. Check agent logs for "Loaded MEMORY.md" and "Loaded X recent messages"
 
@@ -152,6 +152,23 @@ sqlite3 store/messages.db "
 ```
 
 Or check archived conversations in `groups/main/conversations/`.
+
+## Folder Structure
+
+Each group follows this structure:
+
+```
+groups/{name}/
+├── dna/           ← Personality files (AGENTS.md, IDENTITY.md, MEMORY.md, SOUL.md, TOOLS.md, USER.md, GUIDELINES.md)
+├── workspace/     ← Agent-generated content
+│   ├── screenshots/
+│   ├── reports/
+│   ├── tasks/
+│   └── downloads/
+├── uploads/       ← User-uploaded files
+├── logs/          ← Execution logs
+└── conversations/ ← Conversation archives
+```
 
 ## Future Enhancements
 
@@ -201,8 +218,8 @@ Total context size: ~5-10K tokens
 
 - Implementation: `container/agent-runner/src/index.ts`
 - Database functions: `src/db.ts`
-- Documentation: `groups/main/AGENTS.md`
-- Architecture decision: `groups/main/decisions.md`
+- Documentation: `groups/main/dna/AGENTS.md`
+- Architecture decision: `groups/main/workspace/decisions.md`
 
 ---
 

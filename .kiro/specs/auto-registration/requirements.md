@@ -68,9 +68,9 @@ This creates friction and is error-prone. The user wants a setup experience like
 **Acceptance Criteria:**
 - 5.1: `scripts/auto-setup.js` runs before `npm start` (already implemented)
 - 5.2: Database schema is created if it doesn't exist
-- 5.3: `groups/main/` folder structure is created
-- 5.4: `groups/main/AGENTS.md` is created with default content
-- 5.5: `groups/global/AGENTS.md` is created with default content
+- 5.3: `groups/main/` folder structure is created (dna/, workspace/, uploads/, logs/, conversations/)
+- 5.4: `groups/main/dna/AGENTS.md` is created with default content
+- 5.5: `groups/global/dna/AGENTS.md` is created with default content
 
 ## Non-Functional Requirements
 

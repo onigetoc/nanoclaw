@@ -52,7 +52,7 @@ A personal opencode assistant accessible via WhatsApp, with persistent memory pe
 │  │                                                                │   │
 │  │  Working directory: /workspace/group (mounted from host)       │   │
 │  │  Volume mounts:                                                │   │
-│  │    • groups/{name}/ → /workspace/group                         │   │
+│  │    • groups/{name}/ → /workspace/group (includes dna/, workspace/)│   │
 │  │    • groups/global/ → /workspace/global/ (non-main only)        │   │
 │  │    • data/sessions/{group}/.opencode/ → /home/node/.opencode/      │   │
 │  │    • Additional dirs → /workspace/extra/*                      │   │
@@ -140,14 +140,27 @@ eureclaw/
 │       └── add-parallel/SKILL.md       # /add-parallel - Parallel agents
 │
 ├── groups/
-│   ├── AGENTS.md                  # Global memory (all groups read this)
+│   ├── global/                    # Global memory (all groups read this)
+│   │   └── dna/                   # Global DNA files
+│   │       └── AGENTS.md          # Global instructions
+│   ├── templates/                 # Templates for new groups
+│   │   └── *.tpl.md               # Template files
 │   ├── main/                      # Self-chat (main control channel)
-│   │   ├── AGENTS.md              # Main channel memory
-│   │   └── logs/                  # Task execution logs
+│   │   ├── dna/                   # DNA files (AGENTS.md, SOUL.md, etc.)
+│   │   ├── workspace/             # Agent-generated content
+│   │   │   ├── screenshots/
+│   │   │   ├── reports/
+│   │   │   ├── tasks/
+│   │   │   └── downloads/
+│   │   ├── uploads/               # User-uploaded files
+│   │   ├── logs/                  # Task execution logs
+│   │   └── conversations/         # Archived conversations
 │   └── {Group Name}/              # Per-group folders (created on registration)
-│       ├── AGENTS.md              # Group-specific memory
+│       ├── dna/                   # Group-specific DNA files
+│       ├── workspace/             # Agent-generated content
+│       ├── uploads/               # User uploads
 │       ├── logs/                  # Task logs for this group
-│       └── *.md                   # Files created by the agent
+│       └── conversations/         # Archived conversations
 │
 ├── store/                         # Local data (gitignored)
 │   ├── auth/                      # WhatsApp authentication state
@@ -271,22 +284,21 @@ EureClaw uses a hierarchical memory system based on AGENTS.md files.
 
 | Level | Location | Read By | Written By | Purpose |
 |-------|----------|---------|------------|---------|
-| **Global** | `groups/AGENTS.md` | All groups | Main only | Preferences, facts, context shared across all conversations |
-| **Group** | `groups/{name}/AGENTS.md` | That group | That group | Group-specific context, conversation memory |
-| **Files** | `groups/{name}/*.md` | That group | That group | Notes, research, documents created during conversation |
+| **Global** | `groups/global/dna/AGENTS.md` | All groups | Main only | Preferences, facts, context shared across all conversations |
+| **Group DNA** | `groups/{name}/dna/AGENTS.md` | That group | That group | Group-specific context, conversation memory |
+| **Group Workspace** | `groups/{name}/workspace/*.md` | That group | That group | Notes, research, documents created during conversation |
 
 ### How Memory Works
 
 1. **Agent Context Loading**
    - Agent runs with `cwd` set to `groups/{group-name}/`
-   - OpenCode SDK with `settingSources: ['project']` automatically loads:
-     - `../AGENTS.md` (parent directory = global memory)
-     - `./AGENTS.md` (current directory = group memory)
+   - DNA files are loaded from `dna/` subfolder (AGENTS.md, IDENTITY.md, SOUL.md, etc.)
+   - Global memory is loaded from `groups/global/dna/AGENTS.md`
 
 2. **Writing Memory**
-   - When user says "remember this", agent writes to `./AGENTS.md`
-   - When user says "remember this globally" (main channel only), agent writes to `../AGENTS.md`
-   - Agent can create files like `notes.md`, `research.md` in the group folder
+   - When user says "remember this", agent writes to `dna/MEMORY.md`
+   - When user says "remember this globally" (main channel only), agent writes to global memory
+   - Agent creates files in `workspace/` folder (reports, tasks, downloads, etc.)
 
 3. **Main Channel Privileges**
    - Only the "main" group (self-chat) can write to global memory

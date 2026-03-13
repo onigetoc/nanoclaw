@@ -6,7 +6,7 @@
 - **What to call them:** Gino
 - **Pronouns:** *(optional)*
 - **Timezone:** 
-- **Notes:** Parle français. Ne parle PAS italien. Teste le groupe "work" aujourd'hui.
+- **Notes:** Parle français. Teste le groupe "work" aujourd'hui.
 
 ## Context
 

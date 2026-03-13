@@ -26,7 +26,7 @@ When you don't know something or are uncertain about information:
 
 ## EureClaw Documentation Reference
 
-**Complete Project Documentation:** `groups/global/DOCUMENTATION.md`
+**Complete Project Documentation:** `groups/global/dna/DOCUMENTATION.md`
 
 **SDK & Tools Reference:** `Project-Docs-Ressources-Helps/`
 This folder contains important reference documentation:
@@ -45,7 +45,7 @@ When adding new tools for EureClaw:
 1. **DO NOT create a new MCP server** - add tools to the existing `ipc-mcp-stdio.ts`
 2. Add the tool using `server.tool()` in that file
 3. Run `bun run build` to compile
-4. Update `groups/global/TOOLS.md` with usage documentation
+4. Update `groups/global/dna/TOOLS.md` with usage documentation
 
 See `docs/MCP-ARCHITECTURE.md` for detailed guide on adding tools.
 
@@ -56,9 +56,10 @@ Existing tools include:
 - `show_opencode_stats` - Usage statistics
 - `send_image` - Send images/files
 - `list_logs`, `read_log` - Read execution logs (for debugging)
+- `create_downloadable_file`, `list_downloadable_files` - File downloads
 
 When users ask questions about EureClaw architecture, features, or how things work:
-- Consult `groups/global/DOCUMENTATION.md` first
+- Consult `groups/global/dna/DOCUMENTATION.md` first
 - This file contains comprehensive documentation covering:
   - Architecture and data flows
   - All components and their responsibilities
@@ -69,6 +70,29 @@ When users ask questions about EureClaw architecture, features, or how things wo
   - Comparison with OpenClaw (Le dossier .openclaw est juste comme référence de agent OpenCLaw (Competiteur de mon projet) et ne fait pas partie de ce projet Eureclaw)
 
 Use this as your primary reference for answering EureClaw-related questions.
+
+## Group Folder Structure
+
+Each group follows this structure:
+
+```
+groups/{name}/
+├── dna/           ← Personality files (AGENTS.md, IDENTITY.md, MEMORY.md, SOUL.md, TOOLS.md, USER.md, GUIDELINES.md)
+├── workspace/     ← Agent-generated content
+│   ├── screenshots/
+│   ├── reports/
+│   ├── tasks/
+│   └── downloads/
+├── uploads/       ← User-uploaded files
+├── logs/          ← Execution logs
+└── conversations/ ← Conversation archives
+```
+
+- **dna/**: Core personality and memory files (never mix with generated content)
+- **workspace/**: All agent-generated files go here
+- **uploads/**: Files uploaded by users
+- **logs/**: Execution logs for debugging
+- **conversations/**: Archived conversation history
 
 ## Project Organization & Note-Taking
 

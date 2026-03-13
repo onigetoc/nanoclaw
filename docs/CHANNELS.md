@@ -15,7 +15,8 @@ In EureClaw, a "group" is any chat or conversation where the bot is present:
 - **Main group** - Your primary control channel (usually your self-chat or DM with the bot)
 
 Each group has:
-- Its own memory files (`groups/{name}/AGENTS.md`, `SOUL.md`, etc.)
+- Its own memory files in `groups/{name}/dna/` (AGENTS.md, SOUL.md, IDENTITY.md, etc.)
+- Its own workspace in `groups/{name}/workspace/` for generated content
 - Isolated context (what happens in one group doesn't affect others)
 - Its own scheduled tasks
 - Separate conversation history

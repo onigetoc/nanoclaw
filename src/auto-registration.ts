@@ -23,23 +23,34 @@ export function hasMainGroup(): boolean {
 /**
  * Initialize the main group folder structure and files.
  * Creates:
- * - groups/main/
+ * - groups/main/dna/
+ * - groups/main/workspace/ (screenshots, reports, tasks, downloads)
+ * - groups/main/uploads/
  * - groups/main/logs/
  * - groups/main/conversations/
- * - groups/main/AGENTS.md
- * - groups/global/AGENTS.md (if not exists)
+ * - groups/main/dna/AGENTS.md
+ * - groups/global/dna/AGENTS.md (if not exists)
  * 
  * @param groupFolder - The folder name (always 'main' for auto-registration)
  */
 export function initializeGroupFolders(groupFolder: string): void {
   const groupPath = path.join(GROUPS_DIR, groupFolder);
+  const dnaPath = path.join(groupPath, 'dna');
+  const workspacePath = path.join(groupPath, 'workspace');
   const logsPath = path.join(groupPath, 'logs');
   const conversationsPath = path.join(groupPath, 'conversations');
-  const agentsPath = path.join(groupPath, 'AGENTS.md');
-  const globalAgentsPath = path.join(GROUPS_DIR, 'global', 'AGENTS.md');
+  const uploadsPath = path.join(groupPath, 'uploads');
+  const agentsPath = path.join(dnaPath, 'AGENTS.md');
+  const globalDnaPath = path.join(GROUPS_DIR, 'global', 'dna');
+  const globalAgentsPath = path.join(globalDnaPath, 'AGENTS.md');
 
   // Create folder structure
-  fs.mkdirSync(groupPath, { recursive: true });
+  fs.mkdirSync(dnaPath, { recursive: true });
+  fs.mkdirSync(path.join(workspacePath, 'screenshots'), { recursive: true });
+  fs.mkdirSync(path.join(workspacePath, 'reports'), { recursive: true });
+  fs.mkdirSync(path.join(workspacePath, 'tasks'), { recursive: true });
+  fs.mkdirSync(path.join(workspacePath, 'downloads'), { recursive: true });
+  fs.mkdirSync(uploadsPath, { recursive: true });
   fs.mkdirSync(logsPath, { recursive: true });
   fs.mkdirSync(conversationsPath, { recursive: true });
 
@@ -65,8 +76,7 @@ This is your personal chat memory. You can store information here that you want 
   }
 
   // Create global AGENTS.md if it doesn't exist
-  const globalPath = path.join(GROUPS_DIR, 'global');
-  fs.mkdirSync(globalPath, { recursive: true });
+  fs.mkdirSync(globalDnaPath, { recursive: true });
   
   if (!fs.existsSync(globalAgentsPath)) {
     const globalTemplate = `# Global Memory

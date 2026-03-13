@@ -1,11 +1,10 @@
-<p align="center">
-  <img src="assets/eureclaw-logo.png" alt="EureClaw" width="400">
-</p>
+<center>
+  <img src="assets/eureclaw-logo.png" alt="EureClaw" width="340">
+</center>
 
 <p align="center">
   My personal OpenCode assistant that runs securely in containers. Lightweight and built to be understood and customized for your own needs.
 </p>
-
 <p align="center">
   <a href="README_zh.md"> </a>
   <a href="https://discord.gg/VGWXrf8x"><img src="https://img.shields.io/discord/1470188214710046894?label=Discord&logo=discord&v=2" alt="Discord" valign="middle"></a>&nbsp; • &nbsp;
@@ -94,8 +93,8 @@ To check your own usage, just ask your assistant: "what's my OpenCode usage?"
 
 While EureClaw works great with free models, we **recommend** adding Google Gemini 2.5 Flash Lite as your "small model" for multimodal capabilities:
 
-**Why Gemini 2.5 Flash Lite?**
-- ✅ **FREE tier** with generous limits (500 requests/day)
+**Why Gemini 3.1 Flash Lite?**
+- ✅ **FREE tier** with generous limits (1000 requests/day)
 - ✅ **Multimodal** - Handles text, images, videos, audio, documents
 - ✅ **Fast** - Optimized for speed
 - ✅ **Cheap** - Only $0.10-0.40 per 1M tokens when you exceed free tier
@@ -137,6 +136,8 @@ While EureClaw works great with free models, we **recommend** adding Google Gemi
 
 ## Why I Built This
 
+  <img src="assets/eureclaw-GIF.gif" alt="Eureclaw">
+  
 [OpenClaw](https://github.com/openclaw/openclaw) is an impressive project with a great vision. But I can't sleep well running software I don't understand with access to my life. OpenClaw has 52+ modules, 8 config management files, 45+ dependencies, and abstractions for 15 channel providers. Security is application-level (allowlists, pairing codes) rather than OS isolation. Everything runs in one Node process with shared memory.
 
 EureClaw gives you the same core functionality in a codebase you can understand in 8 minutes. One process. A handful of files. Agents run in actual Linux containers with filesystem isolation, not behind permission checks.
@@ -354,7 +355,8 @@ Key files:
 - `src/container-runner.ts` - Spawns streaming agent containers with OpenCode SDK
 - `src/task-scheduler.ts` - Runs scheduled tasks
 - `src/db.ts` - SQLite operations (messages, groups, sessions, state)
-- `groups/*/AGENTS.md` - Per-group memory and context
+- `groups/*/dna/AGENTS.md` - Per-group memory and context
+- `groups/*/workspace/` - Agent-generated content (screenshots, reports, downloads)
 
 ## Environment Variables
 
