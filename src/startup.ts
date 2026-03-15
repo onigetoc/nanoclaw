@@ -38,6 +38,7 @@ import { executeCommand } from './commands/index.js';
 import { handleCommandSideEffects } from './commands/command-effects.js';
 import './commands/builtin-commands.js';
 import './commands/opencode-commands.js';
+import './commands/agent-commands.js';
 import {
   loadSleepState,
   isSleeping,
@@ -63,6 +64,7 @@ import {
   setSendMessageFunction,
   setProcessApiMessageFn,
   broadcastToToken,
+  broadcastStatus,
 } from './api-server.js';
 import { processGroupMessages } from './message-processor.js';
 import { startMessageLoop, recoverPendingMessages } from './message-loop.js';
@@ -412,6 +414,12 @@ export async function main(): Promise<void> {
   const channels: Channel[] = [];
   const queue = new GroupQueue();
 
+  // Wire queue status broadcasts to web UI
+  queue.setStatusCallback((chatJid, status, detail) => {
+    if (status === 'queued') {
+      broadcastStatus(chatJid, 'queued', detail);
+    }
+  });
   // Setup wake callback
   setOnWakeCallback(async (chatJid: string, message: string) => {
     const channel = findChannel(channels, chatJid);
@@ -480,6 +488,103 @@ export async function main(): Promise<void> {
       });
 
       if (commandResult) {
+        // Check if this is an agent-switching command (has data.agent or data.model with data.prompt)
+        const isAgentCommand = commandResult.data?.agent || commandResult.data?.model;
+        const hasPrompt = commandResult.data?.prompt;
+        
+        if (isAgentCommand && hasPrompt) {
+          // Agent command with inline prompt: rewrite the message and process normally
+          // e.g. "/plan aide moi avec mon budget" → agent=plan, message="aide moi avec mon budget"
+          const agentOverride = commandResult.data.agent as string | undefined;
+          const modelOverride = commandResult.data.model as string | undefined;
+          
+          logger.info(
+            { chatJid, agent: agentOverride, model: modelOverride, promptLength: hasPrompt.length },
+            'Agent command with inline prompt — rewriting message',
+          );
+          
+          // Rewrite the message content to just the prompt (without the /command)
+          msg.content = hasPrompt;
+          
+          // Store the original message (with /command) in history
+          storeMessage(msg);
+          broadcastToToken(chatJid, {
+            id: msg.id,
+            content: msg.content,
+            sender_name: msg.sender_name,
+            timestamp: msg.timestamp,
+            is_from_me: false,
+            is_bot_message: false,
+          });
+          
+          // Set agent/model preferences for this message
+          queue.setMessagePreferences(chatJid, {
+            agent: agentOverride,
+            model: modelOverride,
+          });
+          
+          // Continue to normal message processing (don't return)
+          if (!queue.sendMessage(chatJid, '')) {
+            queue.enqueueMessageCheck(chatJid);
+          }
+          return;
+        }
+        
+        if (isAgentCommand && !hasPrompt) {
+          // Agent command without prompt: just acknowledge and set preference for next message
+          storeMessage(msg);
+          broadcastToToken(chatJid, {
+            id: msg.id,
+            content: msg.content,
+            sender_name: msg.sender_name,
+            timestamp: msg.timestamp,
+            is_from_me: false,
+            is_bot_message: false,
+          });
+          
+          setLastAgentTimestampForJid(chatJid, msg.timestamp);
+          saveState();
+          
+          // Set preferences for the NEXT message
+          const agentOverride = commandResult.data.agent as string | undefined;
+          const modelOverride = commandResult.data.model as string | undefined;
+          queue.setMessagePreferences(chatJid, {
+            agent: agentOverride,
+            model: modelOverride,
+          });
+          
+          // Send acknowledgment reply if any
+          if (commandResult.reply) {
+            const channel = findChannel(channels, chatJid);
+            if (channel) {
+              await channel.sendMessage(chatJid, commandResult.reply);
+            }
+
+            const replyMsgId = `bot_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+            const replyTimestamp = new Date().toISOString();
+            storeMessageDirect({
+              id: replyMsgId,
+              chat_jid: chatJid,
+              sender: 'bot',
+              sender_name: ASSISTANT_NAME,
+              content: commandResult.reply,
+              timestamp: replyTimestamp,
+              is_from_me: true,
+              is_bot_message: true,
+            });
+            broadcastToToken(chatJid, {
+              id: replyMsgId,
+              content: commandResult.reply,
+              sender_name: ASSISTANT_NAME,
+              timestamp: replyTimestamp,
+              is_from_me: true,
+              is_bot_message: true,
+            });
+          }
+          return;
+        }
+        
+        // Regular command (not agent-switching): handle normally
         // Store the user's command message in history
         storeMessage(msg);
         broadcastToToken(chatJid, {
@@ -628,7 +733,11 @@ export async function main(): Promise<void> {
   // Trigger message processing when API receives a message
   // web: JIDs (e.g. web:main) are registered natively in registered_groups,
   // so the pipeline handles them like any other channel JID.
-  setProcessApiMessageFn((jid: string) => {
+  setProcessApiMessageFn((jid: string, model?: string, agent?: string) => {
+    // Store model/agent preferences for this JID temporarily
+    if (model || agent) {
+      queue.setMessagePreferences(jid, { model, agent });
+    }
     if (!queue.sendMessage(jid, '')) {
       queue.enqueueMessageCheck(jid);
     }

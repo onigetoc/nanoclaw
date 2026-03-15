@@ -13,19 +13,36 @@ export async function getUiModels(): Promise<UiModel[]> {
 
 // Sync version for initial render (returns only checked models from localStorage)
 export function getUiModelsSync(): UiModel[] {
+  // Use user-selected models from Settings > Models (models.dev based selection)
   const saved = localStorage.getItem('eureclaw_models_selections');
   if (!saved) {
-    // Return empty array - models will be loaded after ModelsSection initializes
     return [];
   }
   
   try {
     const parsed = JSON.parse(saved);
-    const modelIds = parsed.models || [];
+    const modelIds: string[] = parsed.models || [];
     
-    // Return empty if no models selected
     if (modelIds.length === 0) {
       return [];
+    }
+
+    // Auto-migrate old format IDs (without "/") to "provider/modelId" format.
+    // This mirrors the migration in models-cache.ts loadSelections() but runs
+    // synchronously so the dropdown always has correct IDs.
+    const needsMigration = modelIds.some((id: string) => !id.includes('/'));
+    if (needsMigration) {
+      const migrated = migrateModelIdsSync(modelIds);
+      if (migrated) {
+        parsed.models = migrated;
+        localStorage.setItem('eureclaw_models_selections', JSON.stringify(parsed));
+        console.log('[models] Migrated old model IDs in getUiModelsSync');
+        return migrated.map((id: string) => ({
+          id,
+          name: extractModelName(id),
+          provider: extractProvider(id),
+        }));
+      }
     }
     
     return modelIds.map((id: string) => ({
@@ -36,6 +53,46 @@ export function getUiModelsSync(): UiModel[] {
   } catch {
     return [];
   }
+}
+
+/** Sync migration: look up old IDs in the models.dev localStorage cache */
+function migrateModelIdsSync(modelIds: string[]): string[] | null {
+  let modelsDevData: Record<string, { models: Record<string, { id: string }> }> | null = null;
+  try {
+    const raw = localStorage.getItem('eureclaw_models_dev_cache');
+    if (raw) {
+      const entry = JSON.parse(raw);
+      modelsDevData = entry.data;
+    }
+  } catch { /* ignore */ }
+
+  const migrated: string[] = [];
+  let changed = false;
+
+  for (const id of modelIds) {
+    if (id.includes('/')) {
+      migrated.push(id);
+      continue;
+    }
+    let found = false;
+    if (modelsDevData) {
+      for (const [providerId, providerData] of Object.entries(modelsDevData)) {
+        const match = Object.values(providerData.models).find(m => m.id === id);
+        if (match) {
+          migrated.push(`${providerId}/${match.id}`);
+          found = true;
+          changed = true;
+          break;
+        }
+      }
+    }
+    if (!found) {
+      migrated.push(`opencode/${id}`);
+      changed = true;
+    }
+  }
+
+  return changed ? migrated : null;
 }
 
 function extractModelName(id: string): string {

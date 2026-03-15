@@ -254,6 +254,12 @@ registerCommand('redo', async (ctx: CommandContext): Promise<CommandResponse> =>
 registerCommand('help', async (ctx: CommandContext): Promise<CommandResponse> => {
   const helpText =
     `🤖 ${ASSISTANT_NAME} Commands\n\n` +
+    '**Agent Modes:**\n' +
+    '/plan [message] - Use Plan agent (read-only, analysis)\n' +
+    '/build [message] - Use Build agent (full access)\n' +
+    '/orchestrator [message] - Use Orchestrator (delegates to subagents)\n' +
+    '/model <model-id> [message] - Override model\n' +
+    '/agent <name> [message] - Switch to any agent\n\n' +
     '**System Control:**\n' +
     '/restart - Restart the bot\n' +
     '/status - Check bot status\n\n' +

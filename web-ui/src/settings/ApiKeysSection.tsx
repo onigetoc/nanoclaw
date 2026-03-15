@@ -1,14 +1,33 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Check, Eye, EyeOff, Loader2, Trash2, X } from 'lucide-react';
-import { apiService, type ProviderInfo } from '../api';
+import { Check, Eye, EyeOff, Loader2, Plus, Search, Trash2, X } from 'lucide-react';
+import { apiService, type ProviderInfo, type ScannedKey } from '../api';
+import EnvVarsSection from './EnvVarsSection';
 
 interface ApiKeysSectionProps {
   isDark: boolean;
 }
 
+/** Static provider list for the manual Add/Update dropdown (no fetch needed) */
+const MANUAL_PROVIDERS = [
+  { provider: 'anthropic', label: 'Anthropic (Claude)', placeholder: 'sk-ant-...' },
+  { provider: 'google', label: 'Google (Gemini)', placeholder: 'AIza...' },
+  { provider: 'openai', label: 'OpenAI (GPT)', placeholder: 'sk-...' },
+  { provider: 'groq', label: 'Groq', placeholder: 'gsk_...' },
+  { provider: 'mistral', label: 'Mistral', placeholder: '' },
+  { provider: 'cohere', label: 'Cohere', placeholder: '' },
+  { provider: 'deepseek', label: 'DeepSeek', placeholder: 'sk-...' },
+  { provider: 'xai', label: 'xAI (Grok)', placeholder: 'xai-...' },
+  { provider: 'openrouter', label: 'OpenRouter', placeholder: 'sk-or-...' },
+  { provider: 'together', label: 'Together AI', placeholder: '' },
+  { provider: 'fireworks', label: 'Fireworks AI', placeholder: '' },
+  { provider: 'perplexity', label: 'Perplexity', placeholder: 'pplx-...' },
+  { provider: 'cerebras', label: 'Cerebras', placeholder: '' },
+  { provider: 'sambanova', label: 'SambaNova', placeholder: '' },
+];
+
 export default function ApiKeysSection({ isDark }: ApiKeysSectionProps) {
-  const [providers, setProviders] = useState<ProviderInfo[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [configured, setConfigured] = useState<ProviderInfo[]>([]);
+  const [loadingConfigured, setLoadingConfigured] = useState(true);
   const [selectedProvider, setSelectedProvider] = useState('');
   const [keyInput, setKeyInput] = useState('');
   const [showKey, setShowKey] = useState(false);
@@ -18,18 +37,20 @@ export default function ApiKeysSection({ isDark }: ApiKeysSectionProps) {
   const [restarting, setRestarting] = useState(false);
   const [showRestart, setShowRestart] = useState(false);
 
-  const fetchProviders = useCallback(async () => {
+  // Scan state
+  const [scannedKeys, setScannedKeys] = useState<ScannedKey[] | null>(null);
+  const [scanning, setScanning] = useState(false);
+  const [addingKey, setAddingKey] = useState<string | null>(null);
+
+  const fetchConfigured = useCallback(async () => {
     try {
       const data = await apiService.getAuthProviders();
-      setProviders(data);
-    } catch {
-      // offline
-    } finally {
-      setLoading(false);
-    }
+      setConfigured(data.filter((p) => p.configured));
+    } catch { /* offline */ }
+    finally { setLoadingConfigured(false); }
   }, []);
 
-  useEffect(() => { void fetchProviders(); }, [fetchProviders]);
+  useEffect(() => { void fetchConfigured(); }, [fetchConfigured]);
 
   useEffect(() => {
     if (feedback) {
@@ -37,6 +58,42 @@ export default function ApiKeysSection({ isDark }: ApiKeysSectionProps) {
       return () => clearTimeout(t);
     }
   }, [feedback]);
+
+  const handleScan = async () => {
+    setScanning(true);
+    setFeedback(null);
+    try {
+      const keys = await apiService.scanApiKeys();
+      setScannedKeys(keys);
+      if (keys.length === 0) {
+        setFeedback({ type: 'error', msg: 'No API keys found in system environment variables.' });
+      }
+    } catch (err: any) {
+      setFeedback({ type: 'error', msg: err.message || 'Scan failed' });
+    } finally {
+      setScanning(false);
+    }
+  };
+
+  const handleAddScanned = async (envVar: string) => {
+    setAddingKey(envVar);
+    setFeedback(null);
+    try {
+      const result = await apiService.addScannedKey(envVar);
+      setFeedback({ type: 'success', msg: result.message });
+      setShowRestart(true);
+      // Refresh both lists
+      await fetchConfigured();
+      // Update scan results to reflect the change
+      setScannedKeys((prev) =>
+        prev?.map((k) => k.envVar === envVar ? { ...k, alreadyConfigured: true } : k) ?? null
+      );
+    } catch (err: any) {
+      setFeedback({ type: 'error', msg: err.message || 'Failed to add key' });
+    } finally {
+      setAddingKey(null);
+    }
+  };
 
   const handleSave = async () => {
     if (!selectedProvider || !keyInput.trim()) return;
@@ -49,7 +106,7 @@ export default function ApiKeysSection({ isDark }: ApiKeysSectionProps) {
       setSelectedProvider('');
       setShowKey(false);
       setShowRestart(true);
-      await fetchProviders();
+      await fetchConfigured();
     } catch (err: any) {
       setFeedback({ type: 'error', msg: err.message || 'Failed to save key' });
     } finally {
@@ -77,21 +134,15 @@ export default function ApiKeysSection({ isDark }: ApiKeysSectionProps) {
     try {
       const result = await apiService.removeAuthProvider(provider);
       setFeedback({ type: 'success', msg: result.message });
-      // No need to reload OpenCode when removing a key - it will just stop using it
-      await fetchProviders();
+      await fetchConfigured();
     } catch (err: any) {
-      const errorMsg = err.message || err.toString() || 'Failed to remove key';
-      console.error('Remove provider error:', err);
-      setFeedback({ type: 'error', msg: errorMsg });
+      setFeedback({ type: 'error', msg: err.message || 'Failed to remove key' });
     } finally {
       setRemoving(null);
     }
   };
 
-  const configured = providers.filter((p) => p.configured);
-  const unconfigured = providers.filter((p) => !p.configured);
-
-  if (loading) {
+  if (loadingConfigured) {
     return (
       <div className="flex items-center justify-center py-12">
         <Loader2 className="h-5 w-5 animate-spin text-zinc-500" />
@@ -99,13 +150,15 @@ export default function ApiKeysSection({ isDark }: ApiKeysSectionProps) {
     );
   }
 
+  const selectedPlaceholder = MANUAL_PROVIDERS.find((p) => p.provider === selectedProvider)?.placeholder || 'Paste your API key...';
+
   return (
     <div>
       <h1 className={`text-xl font-semibold mb-1 ${isDark ? 'text-zinc-100' : 'text-zinc-900'}`}>
         API Keys
       </h1>
       <p className={`text-sm mb-6 ${isDark ? 'text-zinc-500' : 'text-zinc-500'}`}>
-        Manage OpenCode provider API keys. Keys are stored securely on the host machine.
+        Manage your LLM provider API keys. Scan your system or add them manually.
       </p>
 
       {/* Feedback */}
@@ -120,7 +173,7 @@ export default function ApiKeysSection({ isDark }: ApiKeysSectionProps) {
         </div>
       )}
 
-      {/* Restart button */}
+      {/* Restart banner */}
       {showRestart && (
         <div className={`mb-4 rounded-lg border p-4 ${isDark ? 'border-amber-700/30 bg-amber-500/10' : 'border-amber-200 bg-amber-50'}`}>
           <div className="flex items-center justify-between">
@@ -148,10 +201,10 @@ export default function ApiKeysSection({ isDark }: ApiKeysSectionProps) {
         </div>
       )}
 
-      {/* Add key form */}
+      {/* Add / Update API Key */}
       <div className={`rounded-xl border p-4 mb-6 ${isDark ? 'border-zinc-800 bg-zinc-900/80' : 'border-zinc-200 bg-white'}`}>
         <h3 className={`text-sm font-medium mb-3 ${isDark ? 'text-zinc-200' : 'text-zinc-800'}`}>
-          Add / Update Key
+          Add / Update API Key
         </h3>
 
         <div className="flex items-center gap-2">
@@ -165,9 +218,9 @@ export default function ApiKeysSection({ isDark }: ApiKeysSectionProps) {
             }`}
           >
             <option value="">Select a provider...</option>
-            {providers.map((p) => (
+            {MANUAL_PROVIDERS.map((p) => (
               <option key={p.provider} value={p.provider}>
-                {p.label} {p.configured ? '(configured)' : ''}
+                {p.label}
               </option>
             ))}
           </select>
@@ -177,11 +230,7 @@ export default function ApiKeysSection({ isDark }: ApiKeysSectionProps) {
               type={showKey ? 'text' : 'password'}
               value={keyInput}
               onChange={(e) => setKeyInput(e.target.value)}
-              placeholder={
-                selectedProvider
-                  ? providers.find((p) => p.provider === selectedProvider)?.placeholder || 'Paste your API key...'
-                  : 'Select a provider first'
-              }
+              placeholder={selectedProvider ? selectedPlaceholder : 'Select a provider first'}
               disabled={!selectedProvider}
               className={`w-full rounded-lg border px-3 py-2 pr-10 text-sm font-mono ${
                 isDark
@@ -213,11 +262,87 @@ export default function ApiKeysSection({ isDark }: ApiKeysSectionProps) {
         </div>
       </div>
 
+      {/* Scan API Keys */}
+      <div className={`rounded-xl border p-4 mb-6 ${isDark ? 'border-zinc-800 bg-zinc-900/80' : 'border-zinc-200 bg-white'}`}>
+        <div className="flex items-center justify-between mb-1">
+          <h3 className={`text-sm font-medium ${isDark ? 'text-zinc-200' : 'text-zinc-800'}`}>
+            Detect System API Keys
+          </h3>
+          <button
+            type="button"
+            onClick={handleScan}
+            disabled={scanning}
+            className={`cursor-pointer flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition ${
+              scanning
+                ? 'cursor-not-allowed ' + (isDark ? 'bg-zinc-800 text-zinc-600' : 'bg-zinc-100 text-zinc-400')
+                : isDark ? 'bg-blue-600 text-white hover:bg-blue-500' : 'bg-blue-600 text-white hover:bg-blue-500'
+            }`}
+          >
+            {scanning ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+            {scanning ? 'Scanning...' : 'Scan API Keys'}
+          </button>
+        </div>
+        <p className={`text-xs mb-3 ${isDark ? 'text-zinc-500' : 'text-zinc-400'}`}>
+          Scan the host machine's environment variables for known LLM provider API keys.
+        </p>
+
+        {/* Scan results */}
+        {scannedKeys !== null && (
+          <div className={`mt-3 rounded-lg border ${isDark ? 'border-zinc-700 bg-zinc-800/50' : 'border-zinc-200 bg-zinc-50'}`}>
+            {scannedKeys.length === 0 ? (
+              <p className={`px-4 py-3 text-sm ${isDark ? 'text-zinc-500' : 'text-zinc-400'}`}>
+                No API keys found in system environment.
+              </p>
+            ) : (
+              scannedKeys.map((key) => (
+                <div
+                  key={key.envVar}
+                  className={`flex items-center justify-between px-4 py-2.5 ${isDark ? 'border-b border-zinc-700 last:border-0' : 'border-b border-zinc-200 last:border-0'}`}
+                >
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className={`text-sm font-medium ${isDark ? 'text-zinc-200' : 'text-zinc-800'}`}>
+                        {key.label}
+                      </span>
+                      {key.alreadyConfigured && (
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${
+                          isDark ? 'bg-emerald-500/15 text-emerald-400' : 'bg-emerald-100 text-emerald-700'
+                        }`}>
+                          configured
+                        </span>
+                      )}
+                    </div>
+                    <p className={`text-xs font-mono mt-0.5 ${isDark ? 'text-zinc-500' : 'text-zinc-400'}`}>
+                      {key.envVar} = {key.masked}
+                    </p>
+                  </div>
+                  {!key.alreadyConfigured && (
+                    <button
+                      type="button"
+                      onClick={() => handleAddScanned(key.envVar)}
+                      disabled={addingKey === key.envVar}
+                      className={`cursor-pointer flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition ${
+                        addingKey === key.envVar
+                          ? 'cursor-not-allowed ' + (isDark ? 'bg-zinc-800 text-zinc-600' : 'bg-zinc-100 text-zinc-400')
+                          : isDark ? 'bg-emerald-600 text-white hover:bg-emerald-500' : 'bg-emerald-600 text-white hover:bg-emerald-500'
+                      }`}
+                    >
+                      {addingKey === key.envVar ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plus className="h-3 w-3" />}
+                      Add to EureClaw
+                    </button>
+                  )}
+                </div>
+              ))
+            )}
+          </div>
+        )}
+      </div>
+
       {/* Configured providers */}
       {configured.length > 0 && (
-        <div className={`rounded-xl border ${isDark ? 'border-zinc-800 bg-zinc-900/80' : 'border-zinc-200 bg-white'}`}>
+        <div className={`rounded-xl border mb-6 ${isDark ? 'border-zinc-800 bg-zinc-900/80' : 'border-zinc-200 bg-white'}`}>
           <h3 className={`px-4 pt-3 pb-1 text-[10px] font-semibold uppercase tracking-wider ${isDark ? 'text-zinc-500' : 'text-zinc-400'}`}>
-            Configured
+            Configured in EureClaw
           </h3>
           {configured.map((p) => (
             <div
@@ -244,23 +369,11 @@ export default function ApiKeysSection({ isDark }: ApiKeysSectionProps) {
         </div>
       )}
 
-      {/* Unconfigured providers */}
-      {unconfigured.length > 0 && (
-        <div className={`mt-4 rounded-xl border ${isDark ? 'border-zinc-800 bg-zinc-900/80' : 'border-zinc-200 bg-white'}`}>
-          <h3 className={`px-4 pt-3 pb-1 text-[10px] font-semibold uppercase tracking-wider ${isDark ? 'text-zinc-500' : 'text-zinc-400'}`}>
-            Available
-          </h3>
-          {unconfigured.map((p) => (
-            <div
-              key={p.provider}
-              className={`flex items-center gap-3 px-4 py-2.5 ${isDark ? 'hover:bg-zinc-800/60' : 'hover:bg-zinc-50'}`}
-            >
-              <span className={`h-2 w-2 rounded-full ${isDark ? 'bg-zinc-700' : 'bg-zinc-300'}`} />
-              <span className={`text-sm ${isDark ? 'text-zinc-500' : 'text-zinc-500'}`}>{p.label}</span>
-            </div>
-          ))}
-        </div>
-      )}
+      {/* Separator */}
+      <div className={`my-8 border-t ${isDark ? 'border-zinc-800' : 'border-zinc-200'}`} />
+
+      {/* Environment Variables section — at the bottom */}
+      <EnvVarsSection isDark={isDark} />
     </div>
   );
 }

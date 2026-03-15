@@ -22,6 +22,10 @@ interface GroupState {
   containerName: string | null;
   groupFolder: string | null;
   retryCount: number;
+  messagePreferences?: {
+    model?: string;
+    agent?: string;
+  };
 }
 
 export class GroupQueue {
@@ -31,6 +35,28 @@ export class GroupQueue {
   private processMessagesFn: ((groupJid: string) => Promise<boolean>) | null =
     null;
   private shuttingDown = false;
+  private statusCallback: ((chatJid: string, status: 'queued' | 'processing' | 'done', detail?: string) => void) | null = null;
+
+  setStatusCallback(fn: (chatJid: string, status: 'queued' | 'processing' | 'done', detail?: string) => void): void {
+    this.statusCallback = fn;
+  }
+
+  /**
+   * Get the status of all groups for monitoring/UI display.
+   */
+  getGroupStatuses(): Array<{ jid: string; status: 'active' | 'queued' | 'idle'; groupFolder: string | null }> {
+    const result: Array<{ jid: string; status: 'active' | 'queued' | 'idle'; groupFolder: string | null }> = [];
+    for (const [jid, state] of this.groups) {
+      let status: 'active' | 'queued' | 'idle' = 'idle';
+      if (state.active) {
+        status = 'active';
+      } else if (state.pendingMessages || state.pendingTasks.length > 0 || this.waitingGroups.includes(jid)) {
+        status = 'queued';
+      }
+      result.push({ jid, status, groupFolder: state.groupFolder });
+    }
+    return result;
+  }
 
   private getGroup(groupJid: string): GroupState {
     let state = this.groups.get(groupJid);
@@ -53,6 +79,23 @@ export class GroupQueue {
     this.processMessagesFn = fn;
   }
 
+  setMessagePreferences(groupJid: string, preferences: { model?: string; agent?: string }): void {
+    const state = this.getGroup(groupJid);
+    state.messagePreferences = preferences;
+  }
+
+  getMessagePreferences(groupJid: string): { model?: string; agent?: string } | undefined {
+    const state = this.groups.get(groupJid);
+    return state?.messagePreferences;
+  }
+
+  clearMessagePreferences(groupJid: string): void {
+    const state = this.groups.get(groupJid);
+    if (state) {
+      state.messagePreferences = undefined;
+    }
+  }
+
   enqueueMessageCheck(groupJid: string): void {
     if (this.shuttingDown) return;
 
@@ -61,6 +104,7 @@ export class GroupQueue {
     if (state.active) {
       state.pendingMessages = true;
       logger.debug({ groupJid }, 'Container active, message queued');
+      this.statusCallback?.(groupJid, 'queued', 'Agent is busy, message queued');
       return;
     }
 
@@ -73,6 +117,7 @@ export class GroupQueue {
         { groupJid, activeCount: this.activeCount },
         'At concurrency limit, message queued',
       );
+      this.statusCallback?.(groupJid, 'queued', `Waiting for available slot (${this.activeCount}/${MAX_CONCURRENT_CONTAINERS} active)`);
       return;
     }
 
@@ -93,6 +138,7 @@ export class GroupQueue {
     if (state.active) {
       state.pendingTasks.push({ id: taskId, groupJid, fn });
       logger.debug({ groupJid, taskId }, 'Container active, task queued');
+      this.statusCallback?.(groupJid, 'queued', 'Agent is busy, task queued');
       return;
     }
 
@@ -105,6 +151,7 @@ export class GroupQueue {
         { groupJid, taskId, activeCount: this.activeCount },
         'At concurrency limit, task queued',
       );
+      this.statusCallback?.(groupJid, 'queued', `Task queued, waiting for slot (${this.activeCount}/${MAX_CONCURRENT_CONTAINERS} active)`);
       return;
     }
 
@@ -133,7 +180,12 @@ export class GroupQueue {
       const filename = `${Date.now()}-${Math.random().toString(36).slice(2, 6)}.json`;
       const filepath = path.join(inputDir, filename);
       const tempPath = `${filepath}.tmp`;
-      fs.writeFileSync(tempPath, JSON.stringify({ type: 'message', text }));
+      // Include model/agent preferences so the agent-runner can switch models mid-session
+      const prefs = state.messagePreferences;
+      const payload: Record<string, unknown> = { type: 'message', text };
+      if (prefs?.model) payload.model = prefs.model;
+      if (prefs?.agent) payload.agent = prefs.agent;
+      fs.writeFileSync(tempPath, JSON.stringify(payload));
       fs.renameSync(tempPath, filepath);
       return true;
     } catch {

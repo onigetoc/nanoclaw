@@ -12,6 +12,7 @@ import MessageBubble from './components/MessageBubble';
 import ComposerBar from './components/ComposerBar';
 import AdminPage from './settings/AdminPage';
 import DebugPanel from './DebugPanel';
+import { useModelStore } from './stores/modelStore';
 
 const SELECTED_CHAT_STORAGE_KEY = 'eureclaw_selected_chat_jid';
 const THEME_STORAGE_KEY = 'eureclaw_theme';
@@ -41,7 +42,9 @@ function App() {
   const [showSettingsPage, setShowSettingsPage] = useState(false);
   const [unreadChats, setUnreadChats] = useState<Set<string>>(new Set());
   const [agentStatus, setAgentStatus] = useState<StatusEvent | null>(null);
+  const [chatStatuses, setChatStatuses] = useState<Map<string, StatusEvent>>(new Map());
   const { settings, updateSetting, resetSettings } = useSettings();
+  const { selectedModel, setSelectedModel } = useModelStore();
 
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -56,7 +59,14 @@ function App() {
     const models = getUiModelsSync();
     setAvailableModels(models);
     if (models.length > 0) {
-      setSelectedModelId(models[0].id);
+      // Use model from store if available, otherwise use first model
+      const initialModel = selectedModel && models.find(m => m.id === selectedModel) 
+        ? selectedModel 
+        : models[0].id;
+      setSelectedModelId(initialModel);
+      if (!selectedModel) {
+        setSelectedModel(initialModel);
+      }
     }
   }, []);
 
@@ -195,6 +205,18 @@ function App() {
     });
 
     const unsubscribeStatus = apiService.onStatus((event) => {
+      // Track per-chat status for sidebar indicators
+      setChatStatuses((prev) => {
+        const next = new Map(prev);
+        if (event.status === 'done') {
+          next.delete(event.chatJid);
+        } else {
+          next.set(event.chatJid, event);
+        }
+        return next;
+      });
+
+      // Track selected chat status for the composer area
       if (event.status === 'done') {
         setTimeout(() => setAgentStatus(null), 2000);
         setAgentStatus({ ...event, detail: 'Done' });
@@ -283,7 +305,7 @@ function App() {
     inputRef.current?.focus();
   };
 
-  const sendMessage = useCallback(async (content: string, fileAttachments?: File[], mode?: 'analyze' | 'transfer') => {
+  const sendMessage = useCallback(async (content: string, fileAttachments?: File[], mode?: 'analyze' | 'transfer', agent?: string, model?: string) => {
     if (!state.selectedChat) return;
     const trimmed = content.trim();
     if (!trimmed && (!fileAttachments || fileAttachments.length === 0)) return;
@@ -348,7 +370,19 @@ function App() {
       attachments: fileAttachments?.map(f => ({ name: f.name, type: f.type, size: f.size })),
     };
     setState((s) => ({ ...s, messages: [...s.messages, optimisticMsg] }));
-    try { await apiService.sendMessage(state.selectedChat.jid, finalContent); } catch (err) { console.error('Failed to send message:', err); }
+    try { 
+      // Use provided agent/model from slash commands or dropdown, otherwise use defaults
+      const finalAgent = agent || undefined; // undefined means use opencode.json default
+      const finalModel = model || undefined; // undefined means use opencode.json default
+      
+      console.log('📤 Sending message with:', { 
+        agent: finalAgent || '(default from opencode.json)', 
+        model: finalModel || '(default from opencode.json)',
+        hasSlashCommand: !!(agent || model)
+      });
+      
+      await apiService.sendMessage(state.selectedChat.jid, finalContent, finalModel, finalAgent); 
+    } catch (err) { console.error('Failed to send message:', err); }
   }, [state.selectedChat]);
 
   const handleOptimisticMessage = useCallback((msg: Message) => {
@@ -413,6 +447,8 @@ function App() {
           isDark={isDark} chats={state.chats} selectedChat={state.selectedChat}
           connected={state.connected} error={state.error} serverOnline={serverStatus.serverOnline}
           unreadChats={unreadChats}
+          chatStatuses={chatStatuses}
+          availableModels={[]}
           onSelectChat={selectChat} onOpenSettings={() => setShowSettingsPage(true)}
           onDisconnect={() => setToken(null)}
         />
@@ -492,22 +528,31 @@ function App() {
                 <div className={`flex items-center gap-2 px-4 py-2 text-xs ${
                   agentStatus.status === 'error'
                     ? isDark ? 'bg-red-950/40 text-red-400' : 'bg-red-50 text-red-600'
+                    : agentStatus.status === 'queued'
+                    ? isDark ? 'bg-amber-950/40 text-amber-400' : 'bg-amber-50 text-amber-700'
                     : isDark ? 'bg-zinc-800/80 text-emerald-400' : 'bg-zinc-100 text-emerald-600'
                 }`}>
-                  {agentStatus.status !== 'error' && (
+                  {agentStatus.status === 'queued' ? (
+                    <span className={`rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase ${isDark ? 'bg-amber-500/20' : 'bg-amber-200/60'}`}>
+                      Queue
+                    </span>
+                  ) : agentStatus.status !== 'error' ? (
                     <span className="flex gap-1">
                       <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-current [animation-delay:-0.3s]" />
                       <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-current [animation-delay:-0.15s]" />
                       <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-current" />
                     </span>
-                  )}
+                  ) : null}
                   <span>{agentStatus.detail || agentStatus.status}</span>
                 </div>
               )}
 
               <ComposerBar
                 isDark={isDark} connected={state.connected} selectedChatJid={state.selectedChat.jid}
-                selectedModelId={selectedModelId} onSelectModel={setSelectedModelId}
+                selectedModelId={selectedModelId} onSelectModel={(modelId) => {
+                  setSelectedModelId(modelId);
+                  setSelectedModel(modelId);
+                }}
                 availableModels={availableModels}
                 onSendMessage={sendMessage} onOptimisticMessage={handleOptimisticMessage}
                 onRemoveOptimisticMessage={handleRemoveOptimisticMessage}

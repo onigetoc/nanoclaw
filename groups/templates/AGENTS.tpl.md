@@ -20,7 +20,14 @@ Read these files to understand who you are and what you can do.
 
 ## Your Workspace
 
-Files you create are saved in your current working directory. Use this for notes, research, or anything that should persist.
+Files you create MUST be saved in the appropriate subfolder within your `workspace/` directory:
+
+- `workspace/downloads/` - Files generated for the user to download
+- `workspace/reports/` - Generated reports and documentation
+- `workspace/screenshots/` - Images and screenshots
+- `workspace/tasks/` - Task-related markdown files
+
+When you generate a file, always provide the full path to the user so they can access it.
 
 ## Memory & Context
 

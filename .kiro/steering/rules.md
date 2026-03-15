@@ -1,5 +1,37 @@
 A file must never exceed 600 lines of code. If this is the case, make a refactor and split the file.
 
+## Operating System
+
+**IMPORTANT: This project runs on Windows 11**
+
+- Platform: Windows (win32)
+- Shell: bash (Git Bash or similar)
+- User: Gino (LENOVO)
+- Container: Apple Container (not Docker)
+
+### Windows-Specific Commands
+
+When suggesting commands or scripts:
+- Use PowerShell or bash (Git Bash) syntax
+- DO NOT use macOS-specific commands like `launchctl`
+- DO NOT use Linux-specific commands that don't work on Windows
+- Use Windows paths: `C:\Users\LENOVO\...` or relative paths
+- For process management, use Task Manager or PowerShell commands
+
+### Service Management on Windows
+
+EureClaw runs as a manual process on Windows (not a system service):
+- Start: `bun start` in the project directory
+- Stop: Ctrl+C in the terminal or close the terminal window
+- Restart: Stop the process and run `bun start` again
+
+### Container Commands
+
+Apple Container is used (not Docker):
+- Build: `./container/build.sh`
+- Run: `container run ...` (not `docker run`)
+- List: `container ps` (not `docker ps`)
+
 ## Package Manager
 
 Always use `bun` instead of `npm` for all commands:

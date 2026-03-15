@@ -28,6 +28,8 @@ interface ContainerInput {
   isScheduledTask?: boolean;
   forceNewSession?: boolean; // Skip loading conversation history from SQLite
   secrets?: Record<string, string>;
+  model?: string; // Override model from web UI
+  agent?: string; // Override agent (mode) from web UI
   // Direct mode (Windows/Linux): real paths instead of container mount points
   directMode?: {
     ipcDir: string;       // replaces /workspace/ipc
@@ -464,25 +466,37 @@ function shouldClose(): boolean {
   return false;
 }
 
+interface IpcMessage {
+  text: string;
+  model?: string;
+  agent?: string;
+}
+
 /**
  * Drain all pending IPC input messages.
- * Returns messages found, or empty array.
+ * Returns messages found (with optional model/agent overrides), or empty array.
  */
-function drainIpcInput(): string[] {
+function drainIpcInput(): IpcMessage[] {
   try {
     fs.mkdirSync(IPC_INPUT_DIR, { recursive: true });
     const files = fs.readdirSync(IPC_INPUT_DIR)
       .filter(f => f.endsWith('.json'))
       .sort();
 
-    const messages: string[] = [];
+    const messages: IpcMessage[] = [];
     for (const file of files) {
       const filePath = path.join(IPC_INPUT_DIR, file);
       try {
         const data = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
         fs.unlinkSync(filePath);
-        if (data.type === 'message' && data.text) {
-          messages.push(data.text);
+        if (data.type === 'message') {
+          if (data.text) {
+            messages.push({ text: data.text, model: data.model, agent: data.agent });
+          } else if (data.model || data.agent) {
+            // Empty text but has model/agent preferences — store as metadata-only message
+            // The real text will arrive in a subsequent IPC file from the message-loop
+            messages.push({ text: '', model: data.model, agent: data.agent });
+          }
         }
       } catch (err) {
         log(`Failed to process input file ${file}: ${err instanceof Error ? err.message : String(err)}`);
@@ -498,10 +512,14 @@ function drainIpcInput(): string[] {
 
 /**
  * Wait for a new IPC message or _close sentinel.
- * Returns the messages as a single string, or null if _close.
+ * Returns the combined message with model/agent from the latest IPC file, or null if _close.
  */
-function waitForIpcMessage(): Promise<string | null> {
+function waitForIpcMessage(): Promise<IpcMessage | null> {
   return new Promise((resolve) => {
+    // Accumulate model/agent from metadata-only messages across polls
+    let pendingModel: string | undefined;
+    let pendingAgent: string | undefined;
+    
     const poll = () => {
       if (shouldClose()) {
         resolve(null);
@@ -509,13 +527,38 @@ function waitForIpcMessage(): Promise<string | null> {
       }
       const messages = drainIpcInput();
       if (messages.length > 0) {
-        resolve(messages.join('\n'));
-        return;
+        // Track model/agent from any message that has them
+        for (const m of messages) {
+          if (m.model) pendingModel = m.model;
+          if (m.agent) pendingAgent = m.agent;
+        }
+        
+        const texts = messages.filter(m => m.text).map(m => m.text);
+        if (texts.length > 0) {
+          resolve({
+            text: texts.join('\n'),
+            model: pendingModel,
+            agent: pendingAgent,
+          });
+          return;
+        }
+        // Only metadata messages (empty text) — wait for real text
       }
       setTimeout(poll, IPC_POLL_MS);
     };
     poll();
   });
+}
+
+// Parse "provider/model" string into { providerID, modelID } for the SDK.
+// Module-level so both runQuery() and main() can use it.
+function parseModelOverride(modelStr?: string): { providerID: string; modelID: string } | undefined {
+  if (!modelStr) return undefined;
+  const slashIdx = modelStr.indexOf('/');
+  if (slashIdx > 0) {
+    return { providerID: modelStr.slice(0, slashIdx), modelID: modelStr.slice(slashIdx + 1) };
+  }
+  return undefined;
 }
 
 /**
@@ -747,6 +790,9 @@ async function runQuery(
     `\n## Runtime Environment`,
     `- Platform: ${platform} (${isDirectMode ? 'direct mode' : 'container mode'})`,
     `- Shell: ${shell}`,
+    `- Current group folder: ${containerInput.groupFolder}`,
+    `- Current group path: groups/${containerInput.groupFolder}/`,
+    `- Is main group: ${containerInput.isMain ? 'yes' : 'no'}`,
     `- Working directory: ${groupDir}`,
     `- SQLite database: ${dbPath}`,
     `- Groups base directory: ${groupsBasePath}`,
@@ -754,6 +800,10 @@ async function runQuery(
     `- IPC directory: ${ipcBaseDir}`,
     ``,
     `Use these paths for file operations and database queries.`,
+    `IMPORTANT: When delegating to subagents (Task tool), ALWAYS include the current group folder in the prompt.`,
+    `Example: Task(agent="task-planner", prompt="[GROUP: ${containerInput.groupFolder}] Create a plan to ...")`,
+    `This ensures subagents write files to the correct group workspace (groups/${containerInput.groupFolder}/).`,
+    ``,
     `For group management, prefer MCP tools (mcp__eureclaw__register_group, etc.).`,
     `IMPORTANT: mcp__eureclaw__list_tasks shows SCHEDULED tasks (alarms/cron), not markdown task files under group/tasks.`,
     `If the user mentions /tasks/... path or a .md task file, treat it as filesystem task file lookup in group/tasks.`,
@@ -793,20 +843,27 @@ async function runQuery(
     a => a !== 'build' && a !== 'orchestrator' && knownAgentNames.has(a)
   );
 
-  let agentName: 'orchestrator' | 'build';
+  let agentName: string = 'build'; // Default to build
   let routingReason = '';
 
-  if (promptLower.includes('@orchestrator')) {
+  // Priority 1: Web UI override (from containerInput)
+  if (containerInput.agent) {
+    agentName = containerInput.agent;
+    routingReason = `web UI override (${containerInput.agent})`;
+  } else if (promptLower.includes('@orchestrator')) {
     agentName = 'orchestrator';
     routingReason = 'explicit @orchestrator override in prompt';
   } else if (promptLower.includes('@build')) {
     agentName = 'build';
     routingReason = 'explicit @build override in prompt';
+  } else if (promptLower.includes('@plan')) {
+    agentName = 'plan';
+    routingReason = 'explicit @plan override in prompt';
   } else if (mentionedKnownSubagent) {
     agentName = 'orchestrator';
     routingReason = `explicit @${mentionedKnownSubagent} mention (known subagent)`;
-  } else if (envDefaultAgent === 'orchestrator' || envDefaultAgent === 'build') {
-    agentName = envDefaultAgent as 'orchestrator' | 'build';
+  } else if (envDefaultAgent === 'orchestrator' || envDefaultAgent === 'build' || envDefaultAgent === 'plan') {
+    agentName = envDefaultAgent;
     routingReason = `EURECLAW_DEFAULT_AGENT=${envDefaultAgent}`;
   } else {
     const useOrchestrator = detectComplexTask(effectivePrompt);
@@ -816,8 +873,12 @@ async function runQuery(
 
   if (agentName === 'orchestrator') {
     log(`🧠 Using orchestrator agent (${routingReason})`);
-  } else {
+  } else if (agentName === 'plan') {
+    log(`📋 Using plan agent (${routingReason})`);
+  } else if (agentName === 'build') {
     log(`⚡ Using build agent (${routingReason})`);
+  } else {
+    log(`🎯 Using ${agentName} agent (${routingReason})`);
   }
 
   // Load session context (agents and skills available)
@@ -1063,6 +1124,15 @@ Use the Task tool to invoke agents when appropriate.
   // Helper: call session.prompt with a timeout (default 10 minutes)
   // Keep this aligned with provider timeout expectations (often 600000 ms).
   const PROMPT_TIMEOUT_MS = Number(process.env.PROMPT_TIMEOUT_MS || 10 * 60 * 1000);
+
+  const modelOverride = parseModelOverride(containerInput.model);
+  if (modelOverride) {
+    log(`🔧 Model override: ${modelOverride.providerID}/${modelOverride.modelID}`);
+  }
+
+  // Current model override — set from containerInput, may be updated by main() via containerInput.model
+  let currentModelOverride = modelOverride;
+
   const promptWithTimeout = async (sid: string, text: string, agent?: string) => {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), PROMPT_TIMEOUT_MS);
@@ -1071,6 +1141,7 @@ Use the Task tool to invoke agents when appropriate.
         path: { id: sid },
         body: { 
           agent, // Use specified agent (orchestrator, build, etc.)
+          model: currentModelOverride, // Override model from web UI (if set)
           parts: [{ type: 'text', text }] 
         },
         signal: controller.signal as any,
@@ -1541,9 +1612,19 @@ async function main(): Promise<void> {
         break;
       }
 
-      log(`Received new message (${nextMessage.length} chars), starting query #${queryCount + 1}`);
-      debugLog(`New message preview: ${nextMessage.slice(0, 100)}${nextMessage.length > 100 ? '...' : ''}`);
-      prompt = nextMessage;
+      // Update model override if the IPC message carries a new preference
+      if (nextMessage.model) {
+        const newModel = parseModelOverride(nextMessage.model);
+        if (newModel) {
+          log(`🔧 Model override updated: ${newModel.providerID}/${newModel.modelID}`);
+          // Update containerInput so the next runQuery() picks up the new model
+          containerInput.model = nextMessage.model;
+        }
+      }
+
+      log(`Received new message (${nextMessage.text.length} chars), starting query #${queryCount + 1}`);
+      debugLog(`New message preview: ${nextMessage.text.slice(0, 100)}${nextMessage.text.length > 100 ? '...' : ''}`);
+      prompt = nextMessage.text;
     }
   } catch (err) {
     const errorMessage = err instanceof Error ? err.message : String(err);

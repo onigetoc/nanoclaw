@@ -22,21 +22,22 @@ export async function getSelectedModels(): Promise<SelectedModel[]> {
     
     for (const modelId of saved.models) {
       const provider = extractProvider(modelId);
+      const modelIdPart = modelId.includes('/') ? modelId.slice(modelId.indexOf('/') + 1) : modelId;
       const providerData = modelsDevData[provider];
       
       if (provider === 'opencode') {
-        // OpenCode models (hardcoded since not in models.dev)
+        // OpenCode models
         result.push({
           id: modelId,
           name: extractModelName(modelId),
           provider: 'opencode',
         });
       } else if (providerData) {
-        // Find model in provider data
-        const modelData = Object.values(providerData.models).find(m => m.id === modelId);
+        // Find model in provider data (match by raw model ID or full provider/model ID)
+        const modelData = Object.values(providerData.models).find(m => m.id === modelIdPart || m.id === modelId);
         if (modelData) {
           result.push({
-            id: modelData.id,
+            id: modelId,  // Keep the full "provider/modelId" format
             name: modelData.name,
             provider,
           });

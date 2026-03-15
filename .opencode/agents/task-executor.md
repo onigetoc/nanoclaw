@@ -28,6 +28,20 @@ You must mark each task as completed when done.
 
 ---
 
+## Group Context (CRITICAL)
+
+The orchestrator passes the current group as `[GROUP: {name}]` at the start of the prompt.
+
+**You MUST use this group name to locate the correct task file.**
+
+Example: If prompt is `[GROUP: personal] Execute groups/personal/tasks/add-auth.md`
+- Read the task file from: `groups/personal/tasks/add-auth.md`
+- All file operations should stay within the correct group context
+
+If NO `[GROUP: ...]` prefix is found, check the Runtime Environment for "Current group folder" and use that.
+
+---
+
 ## Objective
 
 Read the task plan file provided in the context and execute each task in order, marking checkboxes as completed.

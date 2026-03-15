@@ -27,6 +27,24 @@ Another agent (TaskExecutor) will perform execution using the generated plan.
 
 ---
 
+## Group Context (CRITICAL)
+
+The orchestrator passes the current group as `[GROUP: {name}]` at the start of the prompt.
+
+**You MUST extract this group name and use it for ALL file paths.**
+
+Example: If prompt starts with `[GROUP: personal]`, then:
+- Task file goes to: `groups/personal/tasks/{filename}.md`
+- PLAN_CREATED output: `PLAN_CREATED: groups/personal/tasks/{filename}.md`
+
+If NO `[GROUP: ...]` prefix is found, check the Runtime Environment for "Current group folder" and use that.
+
+**NEVER default to "main" or any other group. ALWAYS use the group from context.**
+
+**EXCEPTION — Custom path:** If the prompt contains `[CUSTOM_PATH: ...]` or the user explicitly asks to save files to a specific location, use that path instead of the default `groups/{group}/tasks/`. The user's explicit choice always overrides the default.
+
+---
+
 ## Objective
 
 Transform the user's request into a strictly ordered, fully actionable task list and persist it as a new Markdown file inside the current workspace group.

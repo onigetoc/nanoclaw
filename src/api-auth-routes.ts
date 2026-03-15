@@ -55,6 +55,52 @@ function isAllowedProvider(name: string): name is Provider {
   return ALLOWED_PROVIDERS.includes(name as Provider);
 }
 
+/** Mapping: environment variable name → OpenCode provider name */
+const ENV_TO_PROVIDER: Record<string, Provider> = {
+  ANTHROPIC_API_KEY: 'anthropic',
+  OPENAI_API_KEY: 'openai',
+  GOOGLE_API_KEY: 'google',
+  GEMINI_API_KEY: 'google',
+  GROQ_API_KEY: 'groq',
+  MISTRAL_API_KEY: 'mistral',
+  COHERE_API_KEY: 'cohere',
+  DEEPSEEK_API_KEY: 'deepseek',
+  OPENROUTER_API_KEY: 'openrouter',
+  TOGETHER_API_KEY: 'together',
+  PERPLEXITY_API_KEY: 'perplexity',
+  XAI_API_KEY: 'xai',
+};
+
+/** Scan system environment variables (NOT .env file) for known API keys */
+function scanSystemApiKeys(): { envVar: string; provider: string; label: string; masked: string; alreadyConfigured: boolean }[] {
+  const authPath = path.join(os.homedir(), '.local', 'share', 'opencode', 'auth.json');
+  let authData: Record<string, unknown> = {};
+  try {
+    if (fs.existsSync(authPath)) {
+      authData = JSON.parse(fs.readFileSync(authPath, 'utf-8'));
+    }
+  } catch { /* ignore */ }
+
+  const results: { envVar: string; provider: string; label: string; masked: string; alreadyConfigured: boolean }[] = [];
+
+  for (const [envVar, provider] of Object.entries(ENV_TO_PROVIDER)) {
+    const value = process.env[envVar];
+    if (value && value.trim()) {
+      // Mask the key for display
+      const masked = value.length <= 10 ? '***' : `${value.substring(0, 6)}...${value.slice(-4)}`;
+      results.push({
+        envVar,
+        provider,
+        label: PROVIDER_INFO[provider].label,
+        masked,
+        alreadyConfigured: !!authData[provider],
+      });
+    }
+  }
+
+  return results;
+}
+
 /** Read auth.json to see which providers have credentials (without exposing keys) */
 function getConfiguredProviders(): { provider: string; label: string; configured: boolean }[] {
   const authPath = path.join(os.homedir(), '.local', 'share', 'opencode', 'auth.json');
@@ -77,9 +123,54 @@ function getConfiguredProviders(): { provider: string; label: string; configured
 }
 
 export function registerAuthRoutes(fastify: FastifyInstance, authenticate: any): void {
-  /** List providers and their configuration status */
+  /** List only configured providers (keys already in auth.json) */
   fastify.get('/auth/providers', { preHandler: authenticate }, async () => {
     return { providers: getConfiguredProviders() };
+  });
+
+  /** Scan system environment variables for known API keys */
+  fastify.get('/auth/scan', { preHandler: authenticate }, async () => {
+    return { keys: scanSystemApiKeys() };
+  });
+
+  /** Add a system-detected API key to OpenCode auth.json */
+  fastify.post('/auth/scan/add', { preHandler: authenticate }, async (request, reply) => {
+    const body = request.body as Record<string, unknown> | undefined;
+    const envVar = (body?.envVar as string || '').trim();
+
+    if (!envVar || !ENV_TO_PROVIDER[envVar]) {
+      reply.code(400).send({ error: 'Unknown or unsupported environment variable' });
+      return;
+    }
+
+    const value = process.env[envVar];
+    if (!value) {
+      reply.code(404).send({ error: `${envVar} not found in system environment` });
+      return;
+    }
+
+    const provider = ENV_TO_PROVIDER[envVar];
+    try {
+      const authPath = path.join(os.homedir(), '.local', 'share', 'opencode', 'auth.json');
+      const authDir = path.dirname(authPath);
+      if (!fs.existsSync(authDir)) {
+        fs.mkdirSync(authDir, { recursive: true });
+      }
+
+      let authData: Record<string, string> = {};
+      if (fs.existsSync(authPath)) {
+        try { authData = JSON.parse(fs.readFileSync(authPath, 'utf-8')); } catch { authData = {}; }
+      }
+
+      authData[provider] = value;
+      fs.writeFileSync(authPath, JSON.stringify(authData, null, 2), 'utf-8');
+
+      logger.info({ provider, envVar }, 'API key added from system env via scan');
+      return { success: true, provider, message: `${PROVIDER_INFO[provider].label} key added from ${envVar}` };
+    } catch (err: any) {
+      logger.error({ provider, envVar, err: err.message }, 'Failed to add scanned key');
+      reply.code(500).send({ error: `Failed to add key: ${err.message}` });
+    }
   });
 
   /** Add or update a provider API key */

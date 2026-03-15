@@ -62,7 +62,7 @@ export function getOpenCodeFreeModels(modelsDevData: ModelsDevData): Array<{ id:
     // Check if model is free (cost is 0 or very low)
     if (model.cost && model.cost.input !== undefined && (model.cost.input === 0 || model.cost.input < 0.01)) {
       freeModels.push({
-        id: model.id,
+        id: model.id.includes('/') ? model.id : `opencode/${model.id}`,
         name: model.name,
       });
     }
@@ -123,10 +123,75 @@ export function loadSelections(): UserSelections {
   try {
     const raw = localStorage.getItem(SELECTIONS_KEY);
     if (!raw) return { providers: [], models: [] };
-    return JSON.parse(raw);
+    const parsed: UserSelections = JSON.parse(raw);
+    
+    // Auto-migrate old format: IDs without "/" (e.g. "big-pickle") need to be
+    // looked up in the models.dev cache to find their real provider and stored
+    // as "provider/modelId".  This runs once — after migration the IDs already
+    // contain "/" so the check is a no-op.
+    const needsMigration = parsed.models.some(id => !id.includes('/'));
+    if (needsMigration) {
+      const migrated = migrateOldModelIds(parsed.models);
+      if (migrated) {
+        parsed.models = migrated;
+        saveSelections(parsed);
+        console.log('[models-cache] Migrated old model IDs to provider/modelId format');
+      }
+    }
+    
+    return parsed;
   } catch {
     return { providers: [], models: [] };
   }
+}
+
+/**
+ * Migrate old model IDs (without provider prefix) to "provider/modelId" format.
+ * Uses the cached models.dev data to find which provider owns each model.
+ */
+function migrateOldModelIds(modelIds: string[]): string[] | null {
+  // Load models.dev cache synchronously (already in localStorage)
+  let modelsDevData: ModelsDevData | null = null;
+  try {
+    const raw = localStorage.getItem(CACHE_KEY);
+    if (raw) {
+      const entry: CacheEntry = JSON.parse(raw);
+      modelsDevData = entry.data;
+    }
+  } catch { /* ignore */ }
+
+  const migrated: string[] = [];
+  let changed = false;
+
+  for (const id of modelIds) {
+    if (id.includes('/')) {
+      // Already in correct format
+      migrated.push(id);
+      continue;
+    }
+
+    // Old format — find the provider that owns this model ID
+    let found = false;
+    if (modelsDevData) {
+      for (const [providerId, providerData] of Object.entries(modelsDevData)) {
+        const match = Object.values(providerData.models).find(m => m.id === id);
+        if (match) {
+          migrated.push(`${providerId}/${match.id}`);
+          found = true;
+          changed = true;
+          break;
+        }
+      }
+    }
+
+    if (!found) {
+      // Can't find provider — assume opencode as fallback
+      migrated.push(`opencode/${id}`);
+      changed = true;
+    }
+  }
+
+  return changed ? migrated : null;
 }
 
 /** Save user selections to localStorage */

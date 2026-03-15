@@ -5,12 +5,13 @@ import {
   type DragEvent as ReactDragEvent,
   type KeyboardEvent,
 } from 'react';
-import { AudioLines, Globe, Image as ImageIcon, Paperclip, CornerDownLeft, X } from 'lucide-react';
+import { AudioLines, Globe, Image as ImageIcon, Paperclip, CornerDownLeft, X, Zap } from 'lucide-react';
 import { apiService, type Message } from '../api';
 import { ALLOWED_FILE_TYPES, getFileIcon, formatFileSize } from '../utils/file-utils';
 import { SUGGESTIONS } from '../utils/models';
 import type { UiModel } from '../utils/models';
 import ModelSelector from './ModelSelector';
+import { parseCommands } from '../utils/command-parser';
 
 interface ComposerBarProps {
   isDark: boolean;
@@ -19,7 +20,7 @@ interface ComposerBarProps {
   selectedModelId: string;
   onSelectModel: (id: string) => void;
   availableModels: UiModel[];
-  onSendMessage: (content: string, attachments?: File[], mode?: 'analyze' | 'transfer') => Promise<void>;
+  onSendMessage: (content: string, attachments?: File[], mode?: 'analyze' | 'transfer', agent?: string, model?: string) => Promise<void>;
   onOptimisticMessage: (msg: Message) => void;
   onRemoveOptimisticMessage: (id: string) => void;
   onComposerResize: (height: number) => void;
@@ -33,17 +34,40 @@ export default function ComposerBar({
   const [inputValue, setInputValue] = useState('');
   const [attachments, setAttachments] = useState<File[]>([]);
   const [attachMenuOpen, setAttachMenuOpen] = useState(false);
+  const [modeMenuOpen, setModeMenuOpen] = useState(false);
   const [isComposerDragActive, setIsComposerDragActive] = useState(false);
   const [textareaRows, setTextareaRows] = useState(2);
   const [useWebSearch, setUseWebSearch] = useState(false);
   const [useMicrophone, setUseMicrophone] = useState(false);
   const [rejectedFiles, setRejectedFiles] = useState<string[]>([]);
   const [attachMode, setAttachMode] = useState<'analyze' | 'transfer'>('analyze');
+  const [availableAgents, setAvailableAgents] = useState<Array<{ id: string; name: string; description: string }>>([]);
+  const [selectedMode, setSelectedMode] = useState('build'); // Always default to build
 
   const composerRef = useRef<HTMLFormElement>(null);
   const attachmentInputRef = useRef<HTMLInputElement>(null);
   const attachmentMenuContainerRef = useRef<HTMLDivElement>(null);
+  const modeMenuContainerRef = useRef<HTMLDivElement>(null);
   const composerDragCounterRef = useRef(0);
+
+  // Load available agents from backend
+  useEffect(() => {
+    const loadAgents = async () => {
+      try {
+        const result = await apiService.getAvailableAgents();
+        console.log('🎯 Loaded agents from backend:', result.agents);
+        setAvailableAgents(result.agents);
+      } catch (err) {
+        console.error('Failed to load agents:', err);
+        // Fallback to defaults
+        setAvailableAgents([
+          { id: 'build', name: 'Build', description: 'Main development agent with full tool access' },
+          { id: 'orchestrator', name: 'Orchestrator', description: 'Intelligent task orchestrator' },
+        ]);
+      }
+    };
+    void loadAgents();
+  }, []);
 
   useEffect(() => {
     const lines = inputValue.split('\n').length;
@@ -67,10 +91,13 @@ export default function ComposerBar({
       if (attachMenuOpen && !attachmentMenuContainerRef.current?.contains(event.target as Node)) {
         setAttachMenuOpen(false);
       }
+      if (modeMenuOpen && !modeMenuContainerRef.current?.contains(event.target as Node)) {
+        setModeMenuOpen(false);
+      }
     };
     document.addEventListener('mousedown', onPointerDown);
     return () => document.removeEventListener('mousedown', onPointerDown);
-  }, [attachMenuOpen]);
+  }, [attachMenuOpen, modeMenuOpen]);
 
   const addAttachments = useCallback((files: File[], skipValidation = false) => {
     if (!files.length) return;
@@ -215,16 +242,36 @@ export default function ComposerBar({
       return;
     }
 
-    const outgoingText = hasText
-      ? inputValue
-      : `Sent with attachments (${attachments.length} file${attachments.length > 1 ? 's' : ''})`;
+    // Parse slash commands from input
+    const parsed = parseCommands(inputValue);
+    
+    // Determine final agent and model
+    // Priority: slash command > dropdown selection > default
+    const finalAgent = parsed.agent || (selectedMode !== 'build' ? selectedMode : undefined);
+    
+    // Always send the selected model so the backend uses it instead of opencode.json default.
+    // Model IDs are already stored as "provider/modelId" (e.g. "opencode/big-pickle", "google/gemini-2.0-flash-exp")
+    // which is exactly the format parseModelOverride expects in agent-runner.
+    const finalModel = parsed.model || selectedModelId || undefined;
+
+    // Safety: model IDs must be in "provider/modelId" format for the backend.
+    // If somehow an old-format ID slipped through, don't send it.
+    const validModel = finalModel && finalModel.includes('/') ? finalModel : undefined;
+
+    console.log('🎯 Model selection:', { selectedModelId, parsedModel: parsed.model, finalModel, validModel, finalAgent });
+
+    const outgoingText = parsed.message || (hasAttachments
+      ? `Sent with attachments (${attachments.length} file${attachments.length > 1 ? 's' : ''})`
+      : inputValue);
+    
     const currentAttachments = [...attachments];
     const currentMode = attachMode;
     setInputValue('');
     setTextareaRows(2);
     setAttachments([]);
     setAttachMode('analyze');
-    await onSendMessage(outgoingText, currentAttachments, currentMode);
+    
+    await onSendMessage(outgoingText, currentAttachments, currentMode, finalAgent, validModel);
   };
 
   const handleSubmit = async (e: FormEvent) => {
@@ -392,6 +439,44 @@ export default function ComposerBar({
                   <Globe className="h-4 w-4" />
                   Search
                 </button>
+
+                <div className="relative" ref={modeMenuContainerRef}>
+                  <button
+                    type="button"
+                    onClick={() => setModeMenuOpen((v) => !v)}
+                    className={`inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-lg px-2.5 text-sm transition ${isDark ? 'text-zinc-300 hover:text-emerald-400' : 'text-zinc-600 hover:text-emerald-600'}`}
+                    title="Agent mode"
+                  >
+                    <Zap className="h-4 w-4" />
+                    <span className="text-xs font-medium">{availableAgents.find(a => a.id === selectedMode)?.name || 'Build'}</span>
+                  </button>
+                  {modeMenuOpen && (
+                    <div className={`absolute bottom-11 left-0 z-30 min-w-64 rounded-xl border p-1.5 shadow-xl ${isDark ? 'border-zinc-700 bg-zinc-900' : 'border-zinc-300 bg-white'}`}>
+                      {availableAgents.map((agent) => (
+                        <button
+                          key={agent.id}
+                          type="button"
+                          onClick={() => {
+                            console.log('⚡ Mode changed to:', agent.id, agent.name);
+                            setSelectedMode(agent.id);
+                            setModeMenuOpen(false);
+                          }}
+                          className={`flex w-full items-start gap-2.5 rounded-lg px-3 py-2.5 text-left text-sm transition ${
+                            selectedMode === agent.id
+                              ? isDark ? 'bg-emerald-500/10 text-emerald-400' : 'bg-emerald-50 text-emerald-700'
+                              : isDark ? 'text-zinc-200 hover:bg-zinc-800' : 'text-zinc-700 hover:bg-zinc-100'
+                          }`}
+                        >
+                          <Zap className={`h-4 w-4 shrink-0 ${selectedMode === agent.id ? 'text-emerald-500' : 'text-zinc-400'}`} />
+                          <div className="min-w-0 flex-1">
+                            <div className="font-medium">{agent.name}</div>
+                            <div className={`text-xs ${isDark ? 'text-zinc-400' : 'text-zinc-500'}`}>{agent.description}</div>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
 
                 <ModelSelector isDark={isDark} selectedModelId={selectedModelId} onSelectModel={onSelectModel} availableModels={availableModels} />
               </div>

@@ -15,7 +15,7 @@ import fs from 'fs';
 import path from 'path';
 import { logger } from './logger.js';
 import { getAllChats, getMessagesSince, getAllMessagesSinceLinked, getMessagesPage, getLinkedChatJids, storeMessageDirect, storeChatMetadata, setRegisteredGroup, insertApiToken, getAllApiTokens, updateApiTokenLastUsed, deactivateApiToken, getApiTokenChatMappings, addApiTokenChat, deleteApiTokenChats } from './db.js';
-import { getRegisteredGroups, reloadRegisteredGroups, getSessions } from './state.js';
+import { getRegisteredGroups, reloadRegisteredGroups, getSessions, setLastAgentTimestampForJid, saveState } from './state.js';
 import { ASSISTANT_NAME, GROUPS_DIR, TRIGGER_PATTERN } from './config.js';
 import { NewMessage, RegisteredGroup } from './types.js';
 import { registerGroup } from './group-manager.js';
@@ -24,9 +24,10 @@ import { handleCommandSideEffects } from './commands/command-effects.js';
 import { getTranscriptionManager, isAudioTranscriptionAvailable } from './media/audio-manager.js';
 import { analyzeImage, isVisionEnabled } from './vision.js';
 import { getMonitoring } from './monitoring.js';
-import { getOpenCodePort } from './opencode-server.js';
+import { getOpenCodePort, getOpenCodeHost } from './opencode-server.js';
 import { isSleeping } from './commands/sleep-manager.js';
 import { registerAuthRoutes } from './api-auth-routes.js';
+import { registerEnvVarRoutes } from './api-envvar-routes.js';
 import { getProviders, getPopularProviders, clearCache as clearModelsCache } from './models-cache.js';
 import { restartServer as restartOpenCodeServer } from './opencode-server.js';
 
@@ -332,6 +333,12 @@ fastify.post(
     const useWebChannel =
       (body?.channel as string) === 'web' || rawJid.startsWith('web:');
     const jid = useWebChannel ? rawJid : `web:${rawJid}`;
+    
+    // Extract model and agent (mode) from request
+    const requestedModel = body?.model as string | undefined;
+    const requestedAgent = body?.agent as string | undefined;
+
+    logger.info({ jid, model: requestedModel, agent: requestedAgent }, 'API message received with model/agent');
 
     if (!content) {
       reply.code(400).send({ error: 'content is required' });
@@ -349,6 +356,110 @@ fastify.post(
     });
 
     if (commandResult) {
+      // Check if this is an agent-switching command (has data.agent or data.model with data.prompt)
+      const isAgentCommand = commandResult.data?.agent || commandResult.data?.model;
+      const hasPrompt = commandResult.data?.prompt;
+      
+      if (isAgentCommand && hasPrompt) {
+        // Agent command with inline prompt: rewrite and process as normal message
+        // e.g. "/plan aide moi avec mon budget" → agent=plan, message="aide moi avec mon budget"
+        const agentOverride = (commandResult.data.agent as string) || requestedAgent;
+        const modelOverride = (commandResult.data.model as string) || requestedModel;
+        
+        logger.info(
+          { jid, agent: agentOverride, model: modelOverride, promptLength: hasPrompt.length },
+          'Agent command with inline prompt — rewriting message',
+        );
+        
+        // Store the original command message in history
+        const cmdMsgId = `web_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+        const cmdTimestamp = new Date().toISOString();
+        storeMessageDirect({
+          id: cmdMsgId,
+          chat_jid: jid,
+          sender: request.tokenId || 'web',
+          sender_name: 'Web User',
+          content: hasPrompt, // Store the cleaned prompt, not the /command
+          timestamp: cmdTimestamp,
+          is_from_me: false,
+          is_bot_message: false,
+          metadata: { agent: agentOverride, modelID: modelOverride },
+        });
+        
+        // Trigger processing with agent/model preferences
+        if (processApiMessage) {
+          processApiMessage(jid, modelOverride, agentOverride);
+        }
+        
+        reply.code(201).send({
+          success: true,
+          messageId: cmdMsgId,
+          timestamp: cmdTimestamp,
+        });
+        return;
+      }
+      
+      if (isAgentCommand && !hasPrompt) {
+        // Agent command without prompt: acknowledge and set preference for next message
+        const agentOverride = commandResult.data.agent as string | undefined;
+        const modelOverride = commandResult.data.model as string | undefined;
+        
+        // Store the command message
+        const cmdMsgId = `web_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+        const cmdTimestamp = new Date().toISOString();
+        storeMessageDirect({
+          id: cmdMsgId,
+          chat_jid: jid,
+          sender: request.tokenId || 'web',
+          sender_name: 'Web User',
+          content,
+          timestamp: cmdTimestamp,
+          is_from_me: false,
+          is_bot_message: false,
+        });
+        
+        // Advance the per-JID agent cursor past this command message so the
+        // message-loop doesn't pick it up and forward it to the agent.
+        setLastAgentTimestampForJid(jid, cmdTimestamp);
+        saveState();
+        
+        // Send the acknowledgment reply
+        if (commandResult.reply) {
+          const replyMsgId = `bot_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+          const replyTimestamp = new Date().toISOString();
+          storeMessageDirect({
+            id: replyMsgId,
+            chat_jid: jid,
+            sender: 'bot',
+            sender_name: ASSISTANT_NAME,
+            content: commandResult.reply,
+            timestamp: replyTimestamp,
+            is_from_me: true,
+            is_bot_message: true,
+          });
+          broadcastToToken(jid, {
+            id: replyMsgId,
+            content: commandResult.reply,
+            sender_name: ASSISTANT_NAME,
+            timestamp: replyTimestamp,
+            is_from_me: true,
+            is_bot_message: true,
+          });
+        }
+        
+        reply.code(200).send({
+          success: true,
+          messageId: cmdMsgId,
+          timestamp: cmdTimestamp,
+          command: true,
+          reply: commandResult.reply,
+          agentSet: agentOverride,
+          modelSet: modelOverride,
+        });
+        return;
+      }
+      
+      // Regular command (not agent-switching): handle normally
       // Handle side effects (e.g. /new session creation) — shared across all channels
       await handleCommandSideEffects(commandResult, jid, group);
 
@@ -365,6 +476,11 @@ fastify.post(
         is_from_me: false,
         is_bot_message: false,
       });
+
+      // Advance the per-JID agent cursor past this command message so the
+      // message-loop doesn't pick it up and forward it to the agent.
+      setLastAgentTimestampForJid(jid, cmdTimestamp);
+      saveState();
 
       // Send the command reply via SSE so the web UI sees it
       if (commandResult.reply) {
@@ -427,6 +543,10 @@ fastify.post(
       timestamp: new Date().toISOString(),
       is_from_me: false,
       is_bot_message: false,
+      metadata: {
+        modelID: requestedModel,
+        agent: requestedAgent,
+      },
     };
 
     storeMessageDirect({
@@ -438,10 +558,11 @@ fastify.post(
       timestamp: message.timestamp,
       is_from_me: message.is_from_me ?? false,
       is_bot_message: message.is_bot_message ?? false,
+      metadata: message.metadata,
     });
 
     if (processApiMessage) {
-      processApiMessage(jid);
+      processApiMessage(jid, requestedModel, requestedAgent);
     }
 
     reply
@@ -655,9 +776,9 @@ fastify.post(
   },
 );
 
-let processApiMessage: ((jid: string) => void) | null = null;
+let processApiMessage: ((jid: string, model?: string, agent?: string) => void) | null = null;
 
-export function setProcessApiMessageFn(fn: (jid: string) => void): void {
+export function setProcessApiMessageFn(fn: (jid: string, model?: string, agent?: string) => void): void {
   processApiMessage = fn;
 }
 
@@ -786,6 +907,88 @@ fastify.get('/config', { preHandler: authenticate }, async () => {
 });
 
 /**
+ * Get available primary agents from all sources:
+ * 1. Hardcoded defaults: build + plan (always present)
+ * 2. opencode.json agents with mode: "primary"
+ * 3. .opencode/agents/*.md files with mode: primary in frontmatter
+ * Deduplicates by agent ID (first wins).
+ */
+fastify.get('/agents', { preHandler: authenticate }, async () => {
+  try {
+    const { loadOpenCodeConfig } = await import('./opencode-config.js');
+    const config = loadOpenCodeConfig();
+    const seen = new Set<string>();
+    const agents: Array<{ id: string; name: string; description: string }> = [];
+
+    const addAgent = (id: string, name: string, description: string) => {
+      if (seen.has(id)) return;
+      seen.add(id);
+      agents.push({ id, name, description });
+    };
+
+    // 1. Hardcoded OpenCode defaults (always first)
+    addAgent('build', 'Build', 'Main development agent with full tool access');
+    addAgent('plan', 'Plan', 'Planning and task breakdown agent');
+
+    // 2. Primary agents from opencode.json
+    if (config.agent) {
+      for (const [agentId, agentConfig] of Object.entries(config.agent)) {
+        if (typeof agentConfig === 'object' && agentConfig !== null) {
+          const conf = agentConfig as { description?: string; mode?: string };
+          if (conf.mode === 'primary') {
+            addAgent(
+              agentId,
+              agentId.charAt(0).toUpperCase() + agentId.slice(1),
+              conf.description || `${agentId} agent`,
+            );
+          }
+        }
+      }
+    }
+
+    // 3. Scan .opencode/agents/*.md for primary agents (frontmatter mode: primary)
+    try {
+      const fs = await import('fs');
+      const path = await import('path');
+      const agentsDir = path.join(process.cwd(), '.opencode', 'agents');
+      if (fs.existsSync(agentsDir)) {
+        const files = fs.readdirSync(agentsDir).filter((f: string) => f.endsWith('.md'));
+        for (const file of files) {
+          const content = fs.readFileSync(path.join(agentsDir, file), 'utf-8');
+          // Parse YAML frontmatter between --- markers
+          const fmMatch = content.match(/^---\n([\s\S]*?)\n---/);
+          if (!fmMatch) continue;
+          const fm = fmMatch[1];
+          // Check mode: primary (not subagent, not absent)
+          const modeMatch = fm.match(/^mode:\s*(.+)$/m);
+          if (!modeMatch || modeMatch[1].trim() !== 'primary') continue;
+          const agentId = file.replace(/\.md$/, '');
+          const descMatch = fm.match(/^description:\s*(.+)$/m);
+          addAgent(
+            agentId,
+            agentId.charAt(0).toUpperCase() + agentId.slice(1),
+            descMatch ? descMatch[1].trim() : `${agentId} agent`,
+          );
+        }
+      }
+    } catch (mdErr) {
+      logger.warn({ err: mdErr }, 'Failed to scan .opencode/agents/ directory');
+    }
+
+    logger.debug({ agentCount: agents.length, agents }, 'Loaded primary agents');
+    return { agents };
+  } catch (err) {
+    logger.error({ err }, 'Failed to load agents');
+    return {
+      agents: [
+        { id: 'build', name: 'Build', description: 'Main development agent with full tool access' },
+        { id: 'plan', name: 'Plan', description: 'Planning and task breakdown agent' },
+      ],
+    };
+  }
+});
+
+/**
  * Monitoring endpoint: recent executions, errors, and system stats.
  * Used by the web UI Settings/Logs page.
  */
@@ -844,6 +1047,28 @@ fastify.post('/models/cache/clear', { preHandler: authenticate }, async (request
   } catch (err) {
     logger.error({ err }, 'Failed to clear cache');
     reply.code(500).send({ error: 'Failed to clear cache' });
+  }
+});
+
+/**
+ * Proxy to OpenCode server's /config/providers — returns the real configured
+ * providers and models that the running OpenCode instance can actually use.
+ * This is what the web UI needs for the model selector dropdown.
+ */
+fastify.get('/opencode/providers', { preHandler: authenticate }, async (request: FastifyRequest, reply: FastifyReply) => {
+  try {
+    const host = getOpenCodeHost();
+    const port = getOpenCodePort();
+    const resp = await fetch(`http://${host}:${port}/config/providers`);
+    if (!resp.ok) {
+      reply.code(resp.status).send({ error: `OpenCode server returned ${resp.status}` });
+      return;
+    }
+    const data = await resp.json();
+    reply.code(200).send(data);
+  } catch (err) {
+    logger.error({ err }, 'Failed to proxy /config/providers from OpenCode server');
+    reply.code(502).send({ error: 'OpenCode server unreachable' });
   }
 });
 
@@ -1047,6 +1272,9 @@ fastify.post(
 // Register auth routes (API key management)
 registerAuthRoutes(fastify, authenticate);
 
+// Register environment variable routes
+registerEnvVarRoutes(fastify, authenticate);
+
 let sendMessageFn: ((jid: string, text: string) => Promise<void>) | null = null;
 
 export function setSendMessageFunction(
@@ -1061,7 +1289,7 @@ export function setSendMessageFunction(
  */
 export function broadcastStatus(
   chatJid: string,
-  status: 'processing' | 'connecting' | 'waiting' | 'responding' | 'error' | 'done',
+  status: 'processing' | 'connecting' | 'waiting' | 'responding' | 'error' | 'done' | 'queued',
   detail?: string,
 ): void {
   const linkedJids = getLinkedChatJids(chatJid);

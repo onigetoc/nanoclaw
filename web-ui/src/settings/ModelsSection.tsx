@@ -63,7 +63,7 @@ export default function ModelsSection({ isDark }: ModelsSectionProps) {
       setLoading(true);
       setError(null);
       
-      // Fetch directly from models.dev (browser-side)
+      // Fetch directly from models.dev (browser-side) — show ALL providers
       const modelsDevData = await getModelsDevData();
       
       // Transform to ProviderInfo array
@@ -72,15 +72,20 @@ export default function ModelsSection({ isDark }: ModelsSectionProps) {
       // Get OpenCode free models dynamically
       const openCodeFree = getOpenCodeFreeModels(modelsDevData);
       
-      // Add OpenCode first with dynamic free models
+      // Hardcoded OpenCode models
+      const hardcodedIds = new Set(['opencode/big-pickle', 'opencode/gpt-5-nano']);
+      
+      // Add OpenCode first with dynamic free models (deduplicated)
       const openCodeModels = [
         { id: 'opencode/big-pickle', name: 'Big Pickle', provider: 'opencode' },
         { id: 'opencode/gpt-5-nano', name: 'GPT-5 Nano', provider: 'opencode' },
-        ...openCodeFree.map(m => ({ 
-          id: m.id, 
-          name: `${m.name} (Free)`, 
-          provider: 'opencode' 
-        })),
+        ...openCodeFree
+          .filter(m => !hardcodedIds.has(m.id))
+          .map(m => ({ 
+            id: m.id, 
+            name: `${m.name} (Free)`, 
+            provider: 'opencode' 
+          })),
       ];
       
       providersArray.push({
@@ -89,12 +94,12 @@ export default function ModelsSection({ isDark }: ModelsSectionProps) {
         models: openCodeModels,
       });
       
-      // Transform models.dev data
+      // Transform ALL models.dev data — show every provider
       for (const [providerId, providerData] of Object.entries(modelsDevData)) {
         if (providerId === 'opencode') continue; // Already added above
         
         const models: ModelInfo[] = Object.values(providerData.models).map((m) => ({
-          id: m.id,
+          id: `${providerId}/${m.id}`,  // Always store as "provider/modelId" for OpenCode SDK
           name: m.name,
           provider: providerId,
           context_length: m.limit?.context,
@@ -114,16 +119,17 @@ export default function ModelsSection({ isDark }: ModelsSectionProps) {
       setProviders(providersArray);
       
       // Popular providers
-      const popular = ['openai', 'anthropic', 'google', 'x-ai', 'meta', 'mistral', 'cohere'];
-      setPopularProviders(popular);
+      setPopularProviders(['openai', 'anthropic', 'google', 'x-ai', 'meta', 'mistral', 'cohere']);
 
       // Load saved selections or pre-select free models
       const saved = loadSelections();
       if (saved.models.length > 0) {
         setSelectedModels(new Set(saved.models));
       } else {
-        // Pre-select only OpenCode free models
-        const freeModelIds = new Set(openCodeFree.map(m => m.id));
+        // Pre-select only OpenCode free models (with proper opencode/ prefix)
+        const freeModelIds = new Set(
+          openCodeModels.map(m => m.id)
+        );
         setSelectedModels(freeModelIds);
         // Save immediately and notify
         if (freeModelIds.size > 0) {

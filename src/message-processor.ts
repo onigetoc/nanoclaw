@@ -78,6 +78,9 @@ export async function processGroupMessages(
 
   const prompt = formatMessages(missedMessages);
 
+  // Get model/agent preferences from queue (set by web UI)
+  const preferences = queue.getMessagePreferences(chatJid);
+  
   // Advance cursor
   setLastAgentTimestampForJid(
     chatJid,
@@ -86,7 +89,7 @@ export async function processGroupMessages(
   saveState();
 
   logger.info(
-    { group: group.name, messageCount: missedMessages.length },
+    { group: group.name, messageCount: missedMessages.length, model: preferences?.model, agent: preferences?.agent },
     'Processing messages',
   );
 
@@ -114,6 +117,21 @@ export async function processGroupMessages(
     }, IDLE_TIMEOUT);
   };
 
+  // Separate UI status timer: emit 'done' shortly after last output
+  // so the green dots disappear quickly, even though the container
+  // stays alive for follow-up messages (IDLE_TIMEOUT).
+  let uiDoneTimer: ReturnType<typeof setTimeout> | null = null;
+  let uiDoneEmitted = false;
+  const UI_DONE_DELAY = 3000; // 3 seconds after last output
+  const scheduleUiDone = () => {
+    if (uiDoneTimer) clearTimeout(uiDoneTimer);
+    uiDoneEmitted = false;
+    uiDoneTimer = setTimeout(() => {
+      broadcastStatus(chatJid, 'done');
+      uiDoneEmitted = true;
+    }, UI_DONE_DELAY);
+  };
+
   const channel = findChannel(channels, chatJid);
   if (!channel) return true;
 
@@ -121,14 +139,16 @@ export async function processGroupMessages(
   let hadError = false;
   let lastErrorMessage = '';
 
-  const output = await runAgent(
+  let output = await runAgent(
     group,
     prompt,
     chatJid,
     queue,
+    preferences,
     async (result) => {
       if (result.result) {
         broadcastStatus(chatJid, 'responding');
+        uiDoneEmitted = false;
         const raw =
           typeof result.result === 'string'
             ? result.result
@@ -192,6 +212,7 @@ export async function processGroupMessages(
           });
         }
         resetIdleTimer();
+        scheduleUiDone();
       }
 
       if (result.status === 'error') {
@@ -207,6 +228,8 @@ export async function processGroupMessages(
 
   await channel.setTyping?.(chatJid, false);
   if (idleTimer) clearTimeout(idleTimer);
+  if (uiDoneTimer) clearTimeout(uiDoneTimer);
+  // Always emit final 'done' to guarantee cleanup (no-op if already emitted)
   broadcastStatus(chatJid, 'done');
 
   if (output === 'error' || hadError) {
@@ -375,6 +398,7 @@ async function runAgent(
   prompt: string,
   chatJid: string,
   queue: GroupQueue,
+  preferences?: { model?: string; agent?: string },
   onOutput?: (output: ContainerOutput) => Promise<void>,
 ): Promise<'success' | 'error'> {
   const isMain = group.folder === MAIN_GROUP_FOLDER;
@@ -458,6 +482,8 @@ async function runAgent(
         chatJid,
         isMain,
         forceNewSession: !sessionId || sessionId === '',
+        model: preferences?.model,
+        agent: preferences?.agent,
       },
       (proc, containerName) => {
         queue.registerProcess(chatJid, proc, containerName, group.folder);
@@ -465,6 +491,9 @@ async function runAgent(
       },
       wrappedOnOutput,
     );
+    
+    // Clear preferences after use
+    queue.clearMessagePreferences(chatJid);
 
     if (output.newSessionId) {
       const currentInState = getSessions()[group.folder];

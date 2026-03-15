@@ -76,7 +76,7 @@ export default function ModelSelector({ isDark, selectedModelId, onSelectModel, 
       </button>
 
       {open && (
-        <div className={`absolute bottom-11 left-0 z-30 w-80 overflow-hidden rounded-xl border shadow-2xl ${isDark ? 'border-zinc-700 bg-zinc-900' : 'border-zinc-300 bg-white'}`}>
+        <div className={`absolute bottom-11 left-0 z-30 w-96 overflow-hidden rounded-xl border shadow-2xl ${isDark ? 'border-zinc-700 bg-zinc-900' : 'border-zinc-300 bg-white'}`}>
           <div className={`border-b p-2 ${isDark ? 'border-zinc-700' : 'border-zinc-200'}`}>
             <input
               value={query}

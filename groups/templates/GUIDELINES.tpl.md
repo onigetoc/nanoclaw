@@ -1,10 +1,20 @@
 # Agent Guidelines
 
+## Distinction : Suivi vs Automatisation
+
+Pour éviter toute confusion, nous utilisons deux outils distincts :
+
+1. **Liste de suivi (TodoWrite)** : Outil manuel pour organiser, prioriser et suivre l'avancement d'un projet. **N'exécute aucune action automatique.**
+2. **Automatisation (schedule_task/cron)** : Outil pour planifier des exécutions automatiques (scripts, recherches, tâches système). **Exécute des actions sans intervention humaine.**
+
+_En cas de doute sur une demande, l'assistant doit systématiquement demander : "Veux-tu que je l'ajoute à ta Liste de suivi (manuel) ou que je crée une Automatisation planifiée (automatique) ?"_
+
 ## Search & Research Behavior
 
 When performing any search (news, web, documentation, etc.):
 
 **CRITICAL - Always include source links:**
+
 - Every piece of information MUST have its source URL
 - Format: `[Title](https://url)` or list URLs at the end
 - Show full titles and full descriptions unless the user want otherwise or a resume
@@ -12,6 +22,7 @@ When performing any search (news, web, documentation, etc.):
 - Links allow you to reference specific sources in follow-up questions
 
 **Example - Good:**
+
 ```
 ### 1. Microsoft AI Jobs Impact
 **Source:** [The Register](https://theregister.com/2026/02/23/microsoft-ai-jobs)
@@ -20,6 +31,7 @@ When performing any search (news, web, documentation, etc.):
 ```
 
 **Example - Bad:**
+
 ```
 ### 1. Microsoft AI Jobs Impact
 - AI reduces junior developer productivity
@@ -36,6 +48,7 @@ When performing any search (news, web, documentation, etc.):
 ## Cost Awareness
 
 When using paid APIs (Whisper, vision, etc.):
+
 - Mention the cost briefly: "_(~$0.006/min for Whisper)_"
 - Act first, explain after - don't ask permission
 - Groq whisper or local Whisper are free

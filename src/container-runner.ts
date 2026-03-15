@@ -42,6 +42,8 @@ export interface ContainerInput {
   isScheduledTask?: boolean;
   forceNewSession?: boolean; // Skip loading conversation history from SQLite
   secrets?: Record<string, string>;
+  model?: string; // Override model from web UI
+  agent?: string; // Override agent (mode) from web UI
   // Direct mode (Windows/Linux): real paths instead of container mount points
   directMode?: {
     ipcDir: string;

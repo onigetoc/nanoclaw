@@ -114,9 +114,23 @@ export interface ProviderInfo {
   configured: boolean;
 }
 
+export interface ScannedKey {
+  envVar: string;
+  provider: string;
+  label: string;
+  masked: string;
+  alreadyConfigured: boolean;
+}
+
+export interface EnvVarEntry {
+  name: string;
+  label: string;
+  createdAt: string;
+}
+
 export interface StatusEvent {
   chatJid: string;
-  status: 'processing' | 'connecting' | 'waiting' | 'responding' | 'error' | 'done';
+  status: 'processing' | 'connecting' | 'waiting' | 'responding' | 'error' | 'done' | 'queued';
   detail?: string;
   timestamp: string;
 }
@@ -254,14 +268,24 @@ class ApiService {
   async sendMessage(
     chatJid: string,
     content: string,
+    model?: string,
+    agent?: string,
   ): Promise<{ success: boolean; messageId: string; timestamp: string }> {
+    const body: Record<string, unknown> = { 
+      content, 
+      channel: 'web' 
+    };
+    
+    if (model) body.model = model;
+    if (agent) body.agent = agent;
+    
     const result = await this.request<{
       success: boolean;
       messageId: string;
       timestamp: string;
     }>(`/chats/${encodeURIComponent(chatJid)}/messages`, {
       method: 'POST',
-      body: JSON.stringify({ content, channel: 'web' }),
+      body: JSON.stringify(body),
     });
     return result;
   }
@@ -379,6 +403,11 @@ class ApiService {
     return result;
   }
 
+  async getAvailableAgents(): Promise<{ agents: Array<{ id: string; name: string; description: string }> }> {
+    const result = await this.request<{ agents: Array<{ id: string; name: string; description: string }> }>('/agents');
+    return result;
+  }
+
   async getMonitoring(): Promise<MonitoringData> {
     const result = await this.request<MonitoringData>('/monitoring');
     return result;
@@ -392,6 +421,18 @@ class ApiService {
   async getAuthProviders(): Promise<ProviderInfo[]> {
     const result = await this.request<{ providers: ProviderInfo[] }>('/auth/providers');
     return result.providers;
+  }
+
+  async scanApiKeys(): Promise<ScannedKey[]> {
+    const result = await this.request<{ keys: ScannedKey[] }>('/auth/scan');
+    return result.keys;
+  }
+
+  async addScannedKey(envVar: string): Promise<{ success: boolean; message: string }> {
+    return this.request('/auth/scan/add', {
+      method: 'POST',
+      body: JSON.stringify({ envVar }),
+    });
   }
 
   async setAuthProvider(provider: string, key: string): Promise<{ success: boolean; message: string }> {
@@ -408,8 +449,34 @@ class ApiService {
     });
   }
 
+  // --- Environment Variables ---
+
+  async getEnvVars(): Promise<EnvVarEntry[]> {
+    const result = await this.request<{ variables: EnvVarEntry[] }>('/envvar/list');
+    return result.variables;
+  }
+
+  async setEnvVar(name: string, value: string, label?: string): Promise<{ success: boolean; name: string; message: string }> {
+    return this.request('/envvar/set', {
+      method: 'POST',
+      body: JSON.stringify({ name, value, label }),
+    });
+  }
+
+  async removeEnvVar(name: string): Promise<{ success: boolean; message: string }> {
+    return this.request('/envvar/remove', {
+      method: 'POST',
+      body: JSON.stringify({ name }),
+    });
+  }
+
   async getProviders(): Promise<{ providers: Array<{ id: string; name: string; models: Array<{ id: string; name: string; provider: string; context_length?: number; pricing?: { prompt?: number; completion?: number } }> }>; popular: string[] }> {
     return this.request('/models/providers');
+  }
+
+  /** Fetch real providers/models from the running OpenCode server (proxied via EureClaw API). */
+  async getOpenCodeProviders(): Promise<{ providers: Array<{ id: string; name: string; models: Record<string, { id: string; name: string; cost: { input: number; output: number }; limit: { context: number; output: number } }> }> }> {
+    return this.request('/opencode/providers');
   }
 
   async clearModelsCache(): Promise<{ success: boolean; message: string }> {

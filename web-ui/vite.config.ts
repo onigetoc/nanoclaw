@@ -56,19 +56,11 @@ export default defineConfig({
       manifestFilename: 'manifest.webmanifest',
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff,woff2}'],
-        runtimeCaching: [
-          {
-            urlPattern: /^https:\/\/api\./i,
-            handler: 'NetworkFirst',
-            options: {
-              cacheName: 'api-cache',
-              expiration: {
-                maxEntries: 50,
-                maxAgeSeconds: 60 * 60 * 24 // 24 hours
-              }
-            }
-          }
-        ]
+        // Never cache API calls — always go to network
+        navigateFallbackDenylist: [/^\/api/, /^\/chats/, /^\/agents/, /^\/config/, /^\/monitoring/, /^\/sessions/, /^\/sse/],
+        runtimeCaching: [],
+        skipWaiting: true,
+        clientsClaim: true,
       }
     })
   ]
