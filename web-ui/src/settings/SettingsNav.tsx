@@ -2,6 +2,7 @@ import {
   Activity,
   ArrowLeft,
   Bug,
+  FileText,
   FileWarning,
   Key,
   Radio,
@@ -14,6 +15,7 @@ export type SettingsSection =
   | 'sessions'
   | 'debug'
   | 'logs'
+  | 'files'
   | 'apikeys'
   | 'models'
   | 'config';
@@ -30,6 +32,7 @@ const NAV_ITEMS: NavItem[] = [
   { id: 'sessions', label: 'Sessions', icon: <Radio className="h-4 w-4" />, group: 'Control' },
   { id: 'debug', label: 'Debug', icon: <Bug className="h-4 w-4" />, group: 'Agent' },
   { id: 'logs', label: 'Logs', icon: <FileWarning className="h-4 w-4" />, group: 'Agent' },
+  { id: 'files', label: 'Files', icon: <FileText className="h-4 w-4" />, group: 'Agent' },
   { id: 'apikeys', label: 'API Keys / Env Vars', icon: <Key className="h-4 w-4" />, group: 'Settings' },
   { id: 'models', label: 'Models', icon: <Sparkles className="h-4 w-4" />, group: 'Settings' },
   { id: 'config', label: 'Config', icon: <Settings className="h-4 w-4" />, group: 'Settings' },

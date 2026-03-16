@@ -9,6 +9,7 @@ import LogsSection from './LogsSection';
 import ApiKeysSection from './ApiKeysSection';
 import ModelsSection from './ModelsSection';
 import ConfigSection from './ConfigSection';
+import FilesSection from './FilesSection';
 
 interface AdminPageProps {
   onBack: () => void;
@@ -86,7 +87,7 @@ export default function AdminPage({
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto px-6 py-6">
-          <div className="mx-auto w-full max-w-6xl">
+          <div className={`mx-auto w-full ${section === 'files' ? 'max-w-7xl' : 'max-w-6xl'}`}>
             {section === 'overview' && (
               <OverviewSection data={monitoringData} serverOnline={serverOnline} isDark={isDark} />
             )}
@@ -105,6 +106,9 @@ export default function AdminPage({
                 onRefresh={fetchMonitoring}
                 isDark={isDark}
               />
+            )}
+            {section === 'files' && (
+              <FilesSection isDark={isDark} />
             )}
             {section === 'apikeys' && (
               <ApiKeysSection isDark={isDark} />

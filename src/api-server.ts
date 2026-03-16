@@ -28,6 +28,7 @@ import { getOpenCodePort, getOpenCodeHost } from './opencode-server.js';
 import { isSleeping } from './commands/sleep-manager.js';
 import { registerAuthRoutes } from './api-auth-routes.js';
 import { registerEnvVarRoutes } from './api-envvar-routes.js';
+import { registerMarkdownRoutes } from './api-markdown-routes.js';
 import { getProviders, getPopularProviders, clearCache as clearModelsCache } from './models-cache.js';
 import { restartServer as restartOpenCodeServer } from './opencode-server.js';
 
@@ -1274,6 +1275,9 @@ registerAuthRoutes(fastify, authenticate);
 
 // Register environment variable routes
 registerEnvVarRoutes(fastify, authenticate);
+
+// Register markdown file browser routes
+registerMarkdownRoutes(fastify, authenticate);
 
 let sendMessageFn: ((jid: string, text: string) => Promise<void>) | null = null;
 

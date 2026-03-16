@@ -135,6 +135,15 @@ export interface StatusEvent {
   timestamp: string;
 }
 
+export interface MdFileEntry {
+  name: string;
+  path: string;
+  type: 'file' | 'folder';
+  children?: MdFileEntry[];
+  size?: number;
+  modified?: string;
+}
+
 class ApiService {
   private token: string | null = null;
 
@@ -490,6 +499,27 @@ class ApiService {
 
   async restartOpenCodeServer(): Promise<{ success: boolean; message: string }> {
     return this.request('/system/restart-opencode', { method: 'GET' });
+  }
+
+  // === Markdown File Browser ===
+
+  async getMdGroups(): Promise<{ groups: Array<{ name: string; folders: string[] }> }> {
+    return this.request('/md/groups');
+  }
+
+  async getMdTree(group: string): Promise<{ group: string; tree: MdFileEntry[] }> {
+    return this.request(`/md/groups/${encodeURIComponent(group)}/tree`);
+  }
+
+  async getMdFile(group: string, filePath: string): Promise<{ path: string; content: string; size: number; modified: string }> {
+    return this.request(`/md/groups/${encodeURIComponent(group)}/file?path=${encodeURIComponent(filePath)}`);
+  }
+
+  async saveMdFile(group: string, filePath: string, content: string): Promise<{ success: boolean; size: number; modified: string }> {
+    return this.request(`/md/groups/${encodeURIComponent(group)}/file?path=${encodeURIComponent(filePath)}`, {
+      method: 'PUT',
+      body: JSON.stringify({ content }),
+    });
   }
 
   private abortController: AbortController | null = null;
