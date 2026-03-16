@@ -50,6 +50,39 @@ export function extractReasoning(content: string): { visibleContent: string; rea
   return { visibleContent: content, reasoning: null };
 }
 
+/**
+ * Preserve double newlines as paragraph breaks while converting single
+ * newlines into markdown hard breaks (two trailing spaces).
+ * This replaces remark-breaks which collapses everything into <br>.
+ */
+export function preserveParagraphBreaks(text: string): string {
+  // Protect code blocks from transformation
+  const codeBlocks: [string, string][] = [];
+  let idx = 0;
+  let result = text.replace(/(```[\s\S]*?```)/g, (match) => {
+    const placeholder = `\x00CB${idx++}\x00`;
+    codeBlocks.push([placeholder, match]);
+    return placeholder;
+  });
+
+  // Split on double+ newlines (paragraph boundaries), preserve them
+  result = result
+    .split(/(\n{2,})/)
+    .map((segment) => {
+      // Keep paragraph separators as-is
+      if (/^\n{2,}$/.test(segment)) return segment;
+      // Convert single newlines to markdown hard breaks (two trailing spaces)
+      return segment.replace(/(?<! {2})\n(?!\n)/g, '  \n');
+    })
+    .join('');
+
+  // Restore code blocks
+  for (const [placeholder, original] of codeBlocks) {
+    result = result.replace(placeholder, original);
+  }
+  return result;
+}
+
 export function extractSources(content: string): Array<{ href: string; title: string }> {
   const matches = content.match(/https?:\/\/[^\s)]+/gi) ?? [];
   const unique = Array.from(new Set(matches)).slice(0, 5);

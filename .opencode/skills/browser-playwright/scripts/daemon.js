@@ -14,7 +14,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT =
   process.env.PROJECT_DIR || path.resolve(__dirname, '..', '..', '..', '..');
 const IPC_DIR = path.join(PROJECT_ROOT, 'data', 'browser-ipc');
-const PROFILE_DIR = path.join(PROJECT_ROOT, 'data', 'browser-profile');
+const PROFILE_DIR = path.join(PROJECT_ROOT, 'data', 'browser-profile-test');
 const CMD_FILE = path.join(IPC_DIR, 'command.json');
 const RESULT_FILE = path.join(IPC_DIR, 'result.json');
 const PID_FILE = path.join(IPC_DIR, 'daemon.pid');

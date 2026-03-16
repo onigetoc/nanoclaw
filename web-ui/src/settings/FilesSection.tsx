@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { ChevronRight, ChevronDown, FileText, Folder, FolderOpen, Download, Copy, Save, Pencil, RefreshCw, Check } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import remarkBreaks from 'remark-breaks';
+import { preserveParagraphBreaks } from '../utils/message-utils';
 import { apiService, type MdFileEntry } from '../api';
 
 interface GroupInfo { name: string; folders: string[] }
@@ -112,6 +112,7 @@ export default function FilesSection({ isDark }: FilesSectionProps) {
     initDone.current = true;
     setSelectedFile(null);
     setFileContent('');
+    setOriginalContent('');
     setIsEditing(false);
     void loadTree(selectedGroup);
   }, [selectedGroup, loadTree]);
@@ -309,8 +310,8 @@ export default function FilesSection({ isDark }: FilesSectionProps) {
                   spellCheck={false}
                 />
               ) : (
-                <div className={`prose prose-sm max-w-none p-4 ${isDark ? 'prose-invert' : ''}`}>
-                  <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]}>{fileContent}</ReactMarkdown>
+                <div className={`prose prose-base max-w-none p-4 ${isDark ? 'prose-invert' : ''}`}>
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{preserveParagraphBreaks(fileContent)}</ReactMarkdown>
                 </div>
               )}
             </div>

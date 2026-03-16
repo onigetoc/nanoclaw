@@ -1,11 +1,10 @@
 import { memo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import remarkBreaks from 'remark-breaks';
 import { Bot } from 'lucide-react';
 import type { Message } from '../api';
 import { getFileIcon, formatFileSize } from '../utils/file-utils';
-import { linkifyMentionsAndCommands, extractReasoning, extractSources } from '../utils/message-utils';
+import { linkifyMentionsAndCommands, extractReasoning, extractSources, preserveParagraphBreaks } from '../utils/message-utils';
 import { sanitizeMessageContent, formatTime, openExternalLink } from '../types';
 
 interface MessageBubbleProps {
@@ -102,9 +101,9 @@ function MessageBubble({ msg, isDark, onSendCommand }: MessageBubbleProps) {
           </div>
         )}
 
-        <div className={`break-words text-base leading-relaxed [&_a]:cursor-pointer [&_a]:text-emerald-300 [&_a]:underline [&_a]:underline-offset-2 [&_a:hover]:text-emerald-200 [&_code]:rounded [&_code]:px-1.5 [&_code]:py-0.5 [&_ol]:my-2 [&_ol]:list-inside [&_ol]:list-decimal [&_ol]:pl-1 [&_p]:mb-2 [&_p:last-child]:mb-0 [&_pre]:my-2 [&_pre]:overflow-x-auto [&_pre]:rounded-lg [&_pre]:p-3 [&_ul]:my-2 [&_ul]:list-inside [&_ul]:list-disc [&_ul]:pl-1 [&_li]:my-0.5 ${isDark ? 'text-zinc-300 [&_code]:bg-zinc-800 [&_code]:text-emerald-300 [&_pre]:bg-zinc-900 [&_pre]:text-zinc-200' : 'text-zinc-800 [&_code]:bg-zinc-200 [&_code]:text-zinc-700 [&_pre]:bg-zinc-100 [&_pre]:text-zinc-800'}`}>
+        <div className={`prose max-w-none break-words text-base leading-relaxed [&_a]:cursor-pointer [&_a]:text-emerald-300 [&_a]:underline [&_a]:underline-offset-2 [&_a:hover]:text-emerald-200 [&_code]:rounded [&_code]:px-1.5 [&_code]:py-0.5 [&_pre]:overflow-x-auto [&_pre]:rounded-lg [&_pre]:p-3 ${isDark ? 'prose-invert text-zinc-300 [&_code]:bg-zinc-800 [&_code]:text-emerald-300 [&_pre]:bg-zinc-900 [&_pre]:text-zinc-200' : 'text-zinc-800 [&_code]:bg-zinc-200 [&_code]:text-zinc-700 [&_pre]:bg-zinc-100 [&_pre]:text-zinc-800'}`}>
           <ReactMarkdown
-            remarkPlugins={[remarkGfm, remarkBreaks]}
+            remarkPlugins={[remarkGfm]}
             urlTransform={(url) => url}
             components={{
               a: ({ node: _node, href, children, ...props }) => {
@@ -150,7 +149,7 @@ function MessageBubble({ msg, isDark, onSendCommand }: MessageBubbleProps) {
               },
             }}
           >
-            {linkifyMentionsAndCommands(visibleContent)}
+            {preserveParagraphBreaks(linkifyMentionsAndCommands(visibleContent))}
           </ReactMarkdown>
         </div>
 
