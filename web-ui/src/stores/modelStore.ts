@@ -7,6 +7,21 @@ interface ModelState {
   setSelectedModel: (modelId: string) => void;
 }
 
+// Read persisted value synchronously for immediate access (no hydration race)
+function getPersistedModel(): string {
+  try {
+    const raw = localStorage.getItem('eureclaw-model-selection');
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      const model = parsed?.state?.selectedModel || '';
+      // Reject old format (no provider prefix)
+      if (model && !model.includes('/')) return '';
+      return model;
+    }
+  } catch { /* ignore */ }
+  return '';
+}
+
 export const useModelStore = create<ModelState>()(
   persist(
     (set) => ({
@@ -21,16 +36,9 @@ export const useModelStore = create<ModelState>()(
       partialize: (state) => ({
         selectedModel: state.selectedModel,
       }),
-      onRehydrateStorage: () => {
-        // After zustand loads the persisted value, migrate old format if needed.
-        // Old format: "big-pickle" (no provider). New format: "opencode/big-pickle".
-        return (state: ModelState | undefined) => {
-          if (state?.selectedModel && !state.selectedModel.includes('/')) {
-            console.log(`[modelStore] Migrating old selectedModel "${state.selectedModel}" → reset to auto-select`);
-            state.selectedModel = '';
-          }
-        };
-      },
     }
   )
 );
+
+// Export the sync reader for use in App.tsx init
+export { getPersistedModel };

@@ -1,5 +1,7 @@
 import { Channel, NewMessage } from './types.js';
 import { logger } from './logger.js';
+import { SECURITY_FLAG_TAG } from './security/patterns.js';
+import { logSecurityEvent } from './security/security-logger.js';
 
 /**
  * Outbound message deduplication.
@@ -164,6 +166,25 @@ export function formatOutbound(rawText: string, jid?: string): string {
   // First strip internal tags and message XML that agent might echo
   let text = stripInternalTags(rawText);
   text = stripMessageXml(text);
+
+  // Strip security flag tags from agent output and log events
+  SECURITY_FLAG_TAG.lastIndex = 0;
+  if (SECURITY_FLAG_TAG.test(text)) {
+    SECURITY_FLAG_TAG.lastIndex = 0;
+    const flagMatches = text.match(SECURITY_FLAG_TAG);
+    text = text.replace(SECURITY_FLAG_TAG, '');
+    if (flagMatches) {
+      logSecurityEvent({
+        timestamp: new Date().toISOString(),
+        eventType: 'security_flag',
+        sourceJid: jid || 'unknown',
+        sourceGroup: 'output',
+        severity: 'warning',
+        description: `Agent flagged manipulation: ${flagMatches.length} flag(s) stripped from outbound`,
+        originalContent: flagMatches.join(' ').slice(0, 500),
+      });
+    }
+  }
   
   if (!text) return '';
   

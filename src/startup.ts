@@ -6,7 +6,7 @@ import os from 'os';
 import path from 'path';
 import fs from 'fs';
 
-import { ASSISTANT_NAME, DATA_DIR, TELEGRAM_ONLY } from './config.js';
+import { ASSISTANT_NAME, DATA_DIR, TELEGRAM_ONLY, MAIN_GROUP_FOLDER } from './config.js';
 import { readEnvFile } from './env.js';
 import { WhatsAppChannel } from './channels/whatsapp.js';
 import { TelegramChannel } from './channels/telegram.js';
@@ -25,6 +25,7 @@ import { startSchedulerLoop } from './task-scheduler.js';
 import { NewMessage, Channel } from './types.js';
 import { logger } from './logger.js';
 import { attemptAutoRegistration } from './auto-registration.js';
+import { scanInput, checkRateLimit, isSecurityEnabled } from './security/index.js';
 import {
   ensureServerHealthy,
   getOpenCodePort,
@@ -476,6 +477,32 @@ export async function main(): Promise<void> {
             { jid: chatJid, name: chatName, reason: result.reason },
             'Auto-registration failed',
           );
+        }
+      }
+
+      // --- Security Layer: Rate Limiting ---
+      if (isSecurityEnabled() && group) {
+        const isMain = group.folder === MAIN_GROUP_FOLDER;
+        const customThreshold = group.containerConfig?.timeout ? undefined : undefined; // future: per-group threshold
+        const rateResult = checkRateLimit(chatJid, isMain, customThreshold);
+        if (!rateResult.allowed) {
+          const waitSec = Math.ceil(rateResult.retryAfterMs / 1000);
+          const ch = findChannel(channels, chatJid);
+          if (ch) await ch.sendMessage(chatJid, `⚠️ Rate limit reached. Please wait ${waitSec}s before sending another message.`);
+          return;
+        }
+      }
+
+      // --- Security Layer: Input Scanning ---
+      if (isSecurityEnabled()) {
+        const scanResult = scanInput(msg.content, chatJid, group?.folder ?? 'unknown');
+        if (scanResult.action === 'blocked') {
+          const ch = findChannel(channels, chatJid);
+          if (ch) await ch.sendMessage(chatJid, '⚠️ Your message was blocked by the security filter.');
+          return;
+        }
+        if (scanResult.action === 'sanitized') {
+          msg.content = scanResult.sanitizedContent;
         }
       }
 

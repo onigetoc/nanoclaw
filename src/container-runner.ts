@@ -17,6 +17,7 @@ import {
 } from './config.js';
 import { logger } from './logger.js';
 import { validateAdditionalMounts } from './mount-security.js';
+import { filterEnv } from './security/env-filter.js';
 import { RegisteredGroup } from './types.js';
 
 // Sentinel markers for robust output parsing (must match agent-runner)
@@ -218,10 +219,13 @@ function buildVolumeMounts(
 /**
  * Read secrets from .env for passing to the container via stdin.
  * OpenCode SDK reads API keys from system config (~/.opencode/config.yaml),
- * so no AI provider secrets need to be passed. Keep for future use.
+ * so no AI provider secrets need to be passed.
+ * Uses filterEnv() to ensure no secret-pattern variables leak through.
  */
 function readSecrets(): Record<string, string> {
-  return {};
+  // Currently no secrets are passed to containers.
+  // If secrets are added in the future, they go through filterEnv() first.
+  return filterEnv({});
 }
 
 function buildContainerArgs(mounts: VolumeMount[], containerName: string): string[] {

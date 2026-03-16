@@ -39,6 +39,7 @@ import {
 import { getAvailableGroups } from './group-manager.js';
 import { RegisteredGroup, Channel } from './types.js';
 import { logger } from './logger.js';
+import { redactOutput } from './security/index.js';
 import { ensureServerHealthy } from './opencode-server.js';
 import { getMonitoring } from './monitoring.js';
 import { broadcastToToken, broadcastStatus } from './api-server.js';
@@ -153,7 +154,11 @@ export async function processGroupMessages(
           typeof result.result === 'string'
             ? result.result
             : JSON.stringify(result.result);
-        const text = raw.replace(/<internal>[\s\S]*?<\/internal>/g, '').trim();
+
+        // Security: redact credentials/PII from agent output
+        const { redacted: redactedRaw } = redactOutput(raw, chatJid, isMainGroup);
+
+        const text = redactedRaw.replace(/<internal>[\s\S]*?<\/internal>/g, '').trim();
         logger.info(
           { group: group.name },
           `Agent output: ${raw.slice(0, 200)}`,

@@ -18,6 +18,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { createOpencodeClient as _createOpencodeClient } from '@opencode-ai/sdk';
+import { sanitizeContextFile } from './context-security.js';
 
 interface ContainerInput {
   prompt: string;
@@ -669,15 +670,25 @@ async function runQuery(
     : globalDir ? path.join(globalDir, 'AGENTS.md') : '/workspace/global/AGENTS.md';
   let globalAgentsMd: string | undefined;
   if (!containerInput.isMain && fs.existsSync(globalAgentsMdPath)) {
-    globalAgentsMd = fs.readFileSync(globalAgentsMdPath, 'utf-8');
+    globalAgentsMd = sanitizeContextFile(fs.readFileSync(globalAgentsMdPath, 'utf-8'), 'global/AGENTS.md');
     log(`Loaded global AGENTS.md (${globalAgentsMd.length} chars)`);
+  }
+
+  // Load global SECURITY.md for all groups (security instructions for the agent)
+  const globalSecurityPath = fs.existsSync(path.join(globalDnaDir, 'SECURITY.md'))
+    ? path.join(globalDnaDir, 'SECURITY.md')
+    : globalDir ? path.join(globalDir, 'SECURITY.md') : '/workspace/global/SECURITY.md';
+  let globalSecurityMd: string | undefined;
+  if (fs.existsSync(globalSecurityPath)) {
+    globalSecurityMd = fs.readFileSync(globalSecurityPath, 'utf-8');
+    log(`Loaded global SECURITY.md (${globalSecurityMd.length} chars)`);
   }
 
   // Load group-specific context files (AGENTS.md, GUIDELINES.md, IDENTITY.md, SOUL.md, TOOLS.md)
   // These files contain group-specific instructions, personality, and capabilities
   // Check both new structure (dna/) and legacy (root) for backward compatibility
   const dnaDir = path.join(groupDir, 'dna');
-  const groupContextFiles = ['AGENTS.md', 'GUIDELINES.md', 'IDENTITY.md', 'SOUL.md', 'TOOLS.md', 'USER.md'];
+  const groupContextFiles = ['AGENTS.md', 'GUIDELINES.md', 'IDENTITY.md', 'SOUL.md', 'TOOLS.md', 'USER.md', 'SECURITY.md'];
   const groupContexts: string[] = [];
   
   for (const filename of groupContextFiles) {
@@ -687,7 +698,8 @@ async function runQuery(
     const filePath = fs.existsSync(dnaPath) ? dnaPath : legacyPath;
     
     if (fs.existsSync(filePath)) {
-      const content = fs.readFileSync(filePath, 'utf-8');
+      const rawContent = fs.readFileSync(filePath, 'utf-8');
+      const content = sanitizeContextFile(rawContent, filename);
       groupContexts.push(`\n## ${filename}\n\n${content}`);
       log(`Loaded ${filename} from ${filePath.includes('/dna/') ? 'dna/' : 'root'} (${content.length} chars)`);
     } else {
@@ -706,7 +718,7 @@ async function runQuery(
     const memoryPath = fs.existsSync(dnaMemoryPath) ? dnaMemoryPath : legacyMemoryPath;
     
     if (fs.existsSync(memoryPath)) {
-      memoryContext = fs.readFileSync(memoryPath, 'utf-8');
+      memoryContext = sanitizeContextFile(fs.readFileSync(memoryPath, 'utf-8'), 'MEMORY.md');
       log(`Loaded MEMORY.md from ${memoryPath.includes('/dna/') ? 'dna/' : 'root'} (${memoryContext.length} chars)`);
     } else {
       log('MEMORY.md not found - will be created when needed');
@@ -1023,6 +1035,7 @@ Use the Task tool to invoke agents when appropriate.
   // Requirement 9.4: Build final system prompt with all context
   const systemAppend = [
     globalAgentsMd,
+    globalSecurityMd,
     groupContext,
     memoryContext,
     conversationContext,

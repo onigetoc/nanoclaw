@@ -26,7 +26,7 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['icon-512.png'],
       devOptions: {
-        enabled: true  // Re-enabled now that we have unique port 8174
+        enabled: false  // Disabled in dev to prevent double-reload from SW activation
       },
       manifest: {
         name: 'EureClaw',

@@ -14,6 +14,7 @@ import { logger } from './logger.js';
 import { getOpenCodePort, getOpenCodeHost } from './opencode-server.js';
 import { RegisteredGroup } from './types.js';
 import { ContainerInput, ContainerOutput } from './container-runner.js';
+import { filterEnv } from './security/env-filter.js';
 
 const OUTPUT_START_MARKER = '---EURECLAW_OUTPUT_START---';
 const OUTPUT_END_MARKER = '---EURECLAW_OUTPUT_END---';
@@ -71,30 +72,12 @@ export async function runDirectAgent(
   fs.mkdirSync(logsDir, { recursive: true });
 
   return new Promise((resolve) => {
-    // Filter secrets from environment to prevent leakage
-    // CRITICAL: Create a clean environment without any secrets
-    const filteredEnv: Record<string, string> = {};
+    // Filter secrets from environment using security middleware
+    const filteredEnv: Record<string, string> = filterEnv(process.env);
     
     // Load HEADED from .env if not in process.env
     const envFile = readEnvFile(['HEADED']);
     const headedValue = process.env.HEADED || envFile.HEADED || 'false';
-    
-    // Only copy safe environment variables
-    for (const [key, value] of Object.entries(process.env)) {
-      // Skip all known secrets
-      if (key === 'TELEGRAM_BOT_TOKEN' || 
-          key === 'GROQ_API_KEY' || 
-          key === 'OPENAI_API_KEY' ||
-          key.includes('TOKEN') ||
-          key.includes('SECRET') ||
-          key.includes('PASSWORD') ||
-          key.includes('API_KEY')) {
-        continue;
-      }
-      if (value !== undefined) {
-        filteredEnv[key] = value;
-      }
-    }
     
     // Add HEADED explicitly (for browser automation)
     filteredEnv['HEADED'] = headedValue;

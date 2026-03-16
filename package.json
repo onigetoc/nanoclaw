@@ -10,6 +10,7 @@
     "start:simple": "bun scripts/start-with-opencode.js",
     "dev": "bun scripts/start-with-opencode.js",
     "dev:simple": "bun scripts/auto-setup.js && bun --watch src/index.ts",
+    "dev:all": "bun scripts/dev-all.ts",
     "auth": "bun --watch src/whatsapp-auth.ts",
     "typecheck": "tsc --noEmit",
     "format": "prettier --write \"src/**/*.ts\"",
@@ -21,7 +22,9 @@
     "monitor": "bun src/monitoring-cli.ts",
     "monitor:stats": "bun src/monitoring-cli.ts --stats",
     "monitor:logs": "bun src/monitoring-cli.ts --logs",
-    "kill": "npx kill-port 5173 5174 5175"
+    "kill": "npx kill-port 5173 5174 5175 8174",
+    "start:ui": "bun run --cwd web-ui dev",
+    "build:ui": "bun run --cwd web-ui build"
   },
   "dependencies": {
     "@fastify/cors": "^11.2.0",

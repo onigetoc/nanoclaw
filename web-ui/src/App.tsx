@@ -12,7 +12,7 @@ import MessageBubble from './components/MessageBubble';
 import ComposerBar from './components/ComposerBar';
 import AdminPage from './settings/AdminPage';
 import DebugPanel from './DebugPanel';
-import { useModelStore } from './stores/modelStore';
+import { useModelStore, getPersistedModel } from './stores/modelStore';
 
 const SELECTED_CHAT_STORAGE_KEY = 'eureclaw_selected_chat_jid';
 const THEME_STORAGE_KEY = 'eureclaw_theme';
@@ -44,7 +44,7 @@ function App() {
   const [agentStatus, setAgentStatus] = useState<StatusEvent | null>(null);
   const [chatStatuses, setChatStatuses] = useState<Map<string, StatusEvent>>(new Map());
   const { settings, updateSetting, resetSettings } = useSettings();
-  const { selectedModel, setSelectedModel } = useModelStore();
+  const { setSelectedModel } = useModelStore();
 
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -54,35 +54,38 @@ function App() {
 
   const isDark = theme === 'dark';
 
-  // Load models on mount
+  // Load models on mount — read persisted model synchronously (no hydration race)
   useEffect(() => {
     const models = getUiModelsSync();
     setAvailableModels(models);
     if (models.length > 0) {
-      // Use model from store if available, otherwise use first model
-      const initialModel = selectedModel && models.find(m => m.id === selectedModel) 
-        ? selectedModel 
+      const persisted = getPersistedModel();
+      const initialModel = persisted && models.find(m => m.id === persisted)
+        ? persisted
         : models[0].id;
       setSelectedModelId(initialModel);
-      if (!selectedModel) {
-        setSelectedModel(initialModel);
-      }
+      setSelectedModel(initialModel);
     }
   }, []);
 
-  // Reload models when returning from settings
+  // Reload models when returning from settings (skip initial mount)
+  const settingsReturnRef = useRef(false);
   useEffect(() => {
-    if (!showSettingsPage) {
-      const models = getUiModelsSync();
-      setAvailableModels(models);
-      // Keep current selection if still available, otherwise pick first
-      if (models.length > 0 && !models.find(m => m.id === selectedModelId)) {
-        setSelectedModelId(models[0].id);
-      } else if (models.length === 0) {
-        setSelectedModelId('');
-      }
+    if (showSettingsPage) {
+      settingsReturnRef.current = true;
+      return;
     }
-  }, [showSettingsPage, selectedModelId]);
+    if (!settingsReturnRef.current) return;
+    settingsReturnRef.current = false;
+    
+    const models = getUiModelsSync();
+    setAvailableModels(models);
+    if (models.length > 0 && !models.find(m => m.id === selectedModelId)) {
+      setSelectedModelId(models[0].id);
+    } else if (models.length === 0) {
+      setSelectedModelId('');
+    }
+  }, [showSettingsPage]);
 
   // Listen for localStorage changes (when models are checked/unchecked in settings)
   useEffect(() => {
