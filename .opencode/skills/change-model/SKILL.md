@@ -11,7 +11,7 @@ Allows changing the AI model via chat commands using MCP tools.
 
 User can say:
 
-- "change model to gemini-2.5-flash-lite"
+- "change model to claude-sonnet"
 - "switch to claude-sonnet-4-5"
 - "use gpt-4o"
 - "what model am I using?"
@@ -22,13 +22,7 @@ User can say:
 
 ### Free Models
 
-- `opencode/minimax-m2.5-free` - Minimax M2.5 Free (fast, efficient, recommended - default)
-- `opencode/glm-5-free` - GLM-5 Free (good for Chinese language)
-- `opencode/kimi-k2.5-free` - Kimi K2.5 Free (alternative free option)
-- `opencode/big-pickle` - Big Pickle (another free option)
-- `opencode/gpt-5-nano` - GPT-5 Nano (lightweight free model)
-- `google/gemini-2.5-flash-lite` - Gemini Flash Lite (free with limits)
-- `google/gemini-2.5-flash` - Gemini Flash (free tier available)
+OpenCode free models rotate regularly. Always use `list_models` to get the current list rather than hardcoding model names.
 
 ### Premium Models (require API key)
 
@@ -77,7 +71,7 @@ Set the lightweight model (for simple tasks like searches).
 
 ```typescript
 await mcp__eureclaw__set_small_model({
-  model: "google/gemini-2.0-flash-lite"
+  model: "your-chosen-small-model"
 });
 ```
 
@@ -105,10 +99,7 @@ When user requests model change:
 User: "what model am I using?"
 
 Andy: [calls get_current_model, checks models_in_sync]
-You're currently using:
-• Primary: opencode/minimax-m2.5-free
-• Small: opencode/minimax-m2.5-free
-• Fallback: none
+Shows current primary, small, and fallback models.
 
 User: "change to claude sonnet"
 
@@ -142,14 +133,14 @@ Andy: [calls get_current_model, checks models_in_sync field]
 
 If models_in_sync = true:
 "You're currently using:
-• Primary: opencode/minimax-m2.5-free (for complex reasoning)
-• Small: opencode/minimax-m2.5-free (for lightweight tasks)
-• Fallback: none"
+• Primary: [current primary model] (for complex reasoning)
+• Small: [current small model] (for lightweight tasks)
+• Fallback: [current fallback or none]"
 
 If models_in_sync = false:
 "Configuration shows:
-• Primary: google/gemini-2.5-flash-lite
-But you're still running: opencode/minimax-m2.5-free
+• Primary: [configured model]
+But you're still running: [running model]
 
 ⚠️  Restart required to apply the new model. Use /restart"
 ```
@@ -157,10 +148,10 @@ But you're still running: opencode/minimax-m2.5-free
 **Change model:**
 
 ```
-User: "change model to gemini-2.5-flash-lite"
+User: "change model to claude sonnet"
 
 Andy: [calls change_model]
-✓ Model changed to google/gemini-2.5-flash-lite
+✓ Model changed to anthropic/claude-3-5-sonnet
 Restart EureClaw for changes to take effect.
 ```
 
@@ -170,23 +161,16 @@ Restart EureClaw for changes to take effect.
 User: "what models are available?"
 
 Andy: [calls list_models with category="all"]
-## Free Models
-• opencode/minimax-m2.5-free - MiniMax M2.5 Free (current default)
-• google/gemini-2.0-flash-lite - Gemini 2.0 Flash Lite (fast, lightweight)
-
-## Premium Models (require API key)
-• anthropic/claude-3-5-sonnet - Claude 3.5 Sonnet (excellent for code)
-• openai/gpt-4o - GPT-4 Omni (multimodal)
-...
+Shows all available free and premium models from the server.
 ```
 
 **Set small model:**
 
 ```
-User: "use gemini flash lite for simple tasks"
+User: "use a lightweight model for simple tasks"
 
 Andy: [calls set_small_model]
-✓ Small model changed to: google/gemini-2.0-flash-lite
+✓ Small model changed to: [chosen model]
 This model will be used for lightweight tasks like searches and summaries.
 Restart required.
 ```
@@ -198,9 +182,9 @@ Model configuration is stored in `models-config.json` at the project root:
 ```json
 {
   "$schema": "https://opencode.ai/config.json",
-  "model": "anthropic/claude-3-5-sonnet",
-  "small_model": "google/gemini-2.0-flash-lite",
-  "fallback_model": "openai/gpt-4o",
+  "model": "your-primary-model",
+  "small_model": "your-small-model",
+  "fallback_model": "your-fallback-model",
   "provider": {
     "anthropic": {
       "options": { "timeout": 600000 }

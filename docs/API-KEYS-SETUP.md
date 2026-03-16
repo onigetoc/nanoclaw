@@ -205,9 +205,9 @@ We recommend **Option 1 (OpenCode Auth)** for most users:
 3. Update `models-config.json` to use your preferred models:
    ```json
    {
-     "model": "opencode/minimax-m2.5-free",
-     "small_model": "google/gemini-2.5-flash-lite",
-     "fallback_model": "opencode/glm-5-free"
+     "model": "your-primary-model",
+     "small_model": "your-small-model",
+     "fallback_model": "your-fallback-model"
    }
    ```
 

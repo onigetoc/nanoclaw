@@ -5,6 +5,15 @@
 For complex tasks, break operations into clear, sequential steps. It is often helpful to give Claude an overview of the process towards the beginning of SKILL.md:
 
 ```markdown
+Processing images involves these steps:
+
+1. Validate input format (run validate-input.ts)
+2. Apply transformations (run transform.ts --resize --quality)
+3. Generate thumbnails (run generate-thumbnails.ts)
+4. Upload to storage (run upload.ts)
+```
+
+```markdown
 Filling a PDF form involves these steps:
 
 1. Analyze the form (run analyze_form.py)

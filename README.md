@@ -36,7 +36,7 @@ Think of EureClaw as the secure shell that lets OpenCode safely interact with yo
 EureClaw is built on top of:
 - **[OpenCode](https://opencode.ai)** - AI coding agent with unified model gateway
 - **[OpenCode SDK](https://github.com/anomalyco/opencode-sdk-js)** - TypeScript SDK for programmatic agent control
-- **OpenCode Model Gateway** - Unified access to GPT, Claude, Gemini, and more through a single API
+- **OpenCode Model Gateway** - Unified access to multiple AI providers through a single API
 
 OpenCode provides the AI infrastructure (LLM routing, web search, file operations) while EureClaw adds security, multi-channel support, and state management.
 
@@ -44,18 +44,11 @@ OpenCode provides the AI infrastructure (LLM routing, web search, file operation
 
 EureClaw can run completely free with the default configuration if you choose to do so. 
 
-OpenCode offers 4 free models:
-
-1. **GLM-5** - General purpose model
-2. **Kimi k2.5** - Advanced reasoning
-3. **Minimax** - Fast responses (default)
-4. **Big Pickle** - OpenCode's own model
+OpenCode offers several free models that rotate regularly. Run `opencode auth login` to see the current free options.
 
 **Free features:**
 - **Web search and fetch** - Built-in, no API key needed
 - **Audio-to-text** - Free with a Groq Whisper API key (also free)
-
-Just run `opencode auth login` and select the free tier to get started.
 
 ### Real-World Usage Example
 
@@ -89,49 +82,19 @@ That's cheap — only 2 cents for 5 days! 🎉"
 
 To check your own usage, just ask your assistant: "what's my OpenCode usage?"
 
-## Recommended: Upgrade to Gemini (Optional)
+## Adding a Multimodal Model (Optional)
 
-While EureClaw works great with free models, we **recommend** adding Google Gemini 2.5 Flash Lite as your "small model" for multimodal capabilities:
-
-**Why Gemini 3.1 Flash Lite?**
-- ✅ **FREE tier** with generous limits (1000 requests/day)
-- ✅ **Multimodal** - Handles text, images, videos, audio, documents
-- ✅ **Fast** - Optimized for speed
-- ✅ **Cheap** - Only $0.10-0.40 per 1M tokens when you exceed free tier
-- ✅ **Versatile** - Perfect for searches, OCR, summaries, quick questions
-
-**Important:** OpenCode free models (Minimax, GLM-5, etc.) are text-only. If you want to send images, videos, or documents to your bot, you'll need Gemini or another multimodal model.
+OpenCode free models are typically text-only. If you want to send images, videos, or documents to your bot, you'll need to add a multimodal model (like Google Gemini or similar).
 
 **Setup:**
-1. Get a free API key: https://aistudio.google.com/apikey
-2. Configure the API key using OpenCode's authentication system:
-   ```bash
-   opencode auth login
-   # Select "Google" from the list
-   # Paste your API key when prompted
-   ```
-   Alternatively, set it as a system environment variable:
-   - **Windows (PowerShell):** `$env:GOOGLE_API_KEY="your_key_here"`
-   - **Mac/Linux:** `export GOOGLE_API_KEY="your_key_here"`
-   
-   To make it permanent, add to your shell profile (`~/.zshrc`, `~/.bashrc`, or Windows Environment Variables).
-
-3. Update `models-config.json`:
-```json
-{
-  "model": "opencode/minimax-m2.5-free",
-  "small_model": "google/gemini-2.5-flash-lite",
-  "fallback_model": "opencode/glm-5-free"
-}
-```
+1. Configure an API key via `opencode auth login` or as a system environment variable
+2. Update `models-config.json` with your chosen multimodal model as `small_model`
+3. Restart EureClaw
 
 **Note:** API keys are managed by OpenCode (via `opencode auth login` or system environment variables), not in EureClaw's `.env` file. The `.env` file is only for EureClaw-specific settings like `TELEGRAM_BOT_TOKEN` and `ASSISTANT_NAME`.
 
-**Cost estimate:** Most users stay within the free tier. If you exceed it, expect ~$1-5/month for typical personal use.
-
 **Setup guides:**
 - [API Keys Configuration](docs/API-KEYS-SETUP.md) - How to configure API keys (all providers)
-- [Gemini Setup Guide](docs/GEMINI-SETUP.md) - Detailed Gemini configuration
 - [Model Configuration](docs/MODEL-CONFIGURATION.md) - All available models
 
 ## Why I Built This

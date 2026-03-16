@@ -4,16 +4,18 @@ EureClaw supports flexible model configuration via `models-config.json` at the p
 
 ## Quick Start
 
-### Default: 100% Free (Text-Only)
+### Default: Free Models
 
-EureClaw works out-of-the-box with OpenCode free models:
+EureClaw works out-of-the-box with OpenCode free models. Free models rotate regularly — check `opencode auth login` or [opencode.ai/models](https://opencode.ai/models) for current options.
+
+Configure your models in `models-config.json`:
 
 ```json
 {
   "$schema": "https://opencode.ai/config.json",
-  "model": "opencode/minimax-m2.5-free",
-  "small_model": "opencode/minimax-m2.5-free",
-  "fallback_model": "opencode/glm-5-free",
+  "model": "your-chosen-model",
+  "small_model": "your-chosen-small-model",
+  "fallback_model": "your-chosen-fallback",
   "provider": {
     "opencode": {
       "options": { "timeout": 600000 }
@@ -22,68 +24,15 @@ EureClaw works out-of-the-box with OpenCode free models:
 }
 ```
 
-**Limitation:** OpenCode free models are text-only. They cannot read images, videos, or documents.
+**Limitation:** Most free models are text-only. They cannot read images, videos, or documents.
 
-### Recommended: Free + Gemini (Multimodal) ⭐
+### Adding Multimodal Support
 
-Add Gemini for multimodal support (images, videos, documents):
+To handle images, videos, and documents, add a multimodal model as your `small_model`. Several providers offer free tiers with multimodal capabilities.
 
-**models-config.json:**
-```json
-{
-  "$schema": "https://opencode.ai/config.json",
-  "model": "opencode/minimax-m2.5-free",
-  "small_model": "google/gemini-2.5-flash-lite",
-  "fallback_model": "opencode/glm-5-free",
-  "provider": {
-    "opencode": {
-      "options": { "timeout": 600000 }
-    }
-  }
-}
-```
-
-**.env:**
-```bash
-# Google Gemini API Key (get free at https://aistudio.google.com/apikey)
-GOOGLE_API_KEY=AIzaSy...your_key_here
-```
-
-**Why this configuration?**
-- ✅ **Primary model is FREE** (OpenCode Minimax - text only)
-- ✅ **Small model is multimodal** (Gemini handles images, audio, documents)
-- ✅ **Gemini has generous free tier** (500 requests/day)
-- ✅ **Very cheap if you exceed free tier** (~$1-5/month typical use)
-- ✅ **API keys in `.env`** (secure, not committed to git)
-
-**Get your free Google API key:** https://aistudio.google.com/apikey  
-**Full setup guide:** [GEMINI-SETUP.md](GEMINI-SETUP.md)
-
-### Alternative: 100% Free (No API Keys)
-
-If you prefer to stay completely free:
-
-1. Edit `models-config.json` in the project root
-2. Set your desired models
-3. Restart EureClaw
-
-### Alternative: 100% Free (No API Keys)
-
-```json
-{
-  "$schema": "https://opencode.ai/config.json",
-  "model": "opencode/minimax-m2.5-free",
-  "small_model": "opencode/minimax-m2.5-free",
-  "fallback_model": "opencode/glm-5-free",
-  "provider": {
-    "opencode": {
-      "options": { "timeout": 600000 }
-    }
-  }
-}
-```
-
-This works great, but you'll miss out on Gemini's multimodal capabilities (images, audio, documents).
+1. Get an API key from your chosen provider
+2. Configure it via `opencode auth login`
+3. Update `models-config.json` with the multimodal model as `small_model`
 
 ## How It Works
 
@@ -103,12 +52,14 @@ EureClaw uses a client-server architecture:
 
 ## Configuration File
 
+Example with premium models:
+
 ```json
 {
   "$schema": "https://opencode.ai/config.json",
   "model": "anthropic/claude-3-5-sonnet",
-  "small_model": "google/gemini-2.0-flash-lite",
-  "vision_model": "opencode/minimax-m2.5-free",
+  "small_model": "your-small-model",
+  "vision_model": "your-vision-model",
   "fallback_model": "openai/gpt-4o",
   "provider": {
     "anthropic": {
@@ -136,7 +87,7 @@ Used for complex reasoning, code generation, and deep analysis.
 - `anthropic/claude-3-5-sonnet` - Excellent for code, balanced
 - `anthropic/claude-3-opus` - Best reasoning, most expensive
 - `openai/gpt-4o` - Multimodal, good all-rounder
-- `opencode/minimax-m2.5-free` - Free tier (default)
+- Any OpenCode free model (check current options via `opencode auth login`)
 
 **When used:**
 - Complex code generation
@@ -149,9 +100,7 @@ Used for complex reasoning, code generation, and deep analysis.
 Used for lightweight tasks to save costs.
 
 **Examples:**
-- `google/gemini-2.0-flash-lite` - Fast, free tier
-- `google/gemini-2.5-flash-lite` - Latest lite version
-- `opencode/glm-5-free` - Free, good for Chinese
+- Any multimodal model with a free tier
 - `anthropic/claude-3-haiku` - Fast, cheap
 
 **When used:**
@@ -166,9 +115,7 @@ Used for lightweight tasks to save costs.
 Used specifically for image analysis and multimodal tasks. This allows you to use a text-only model as your primary (like Kimi) while still being able to read images.
 
 **Examples:**
-- `opencode/minimax-m2.5-free` - Free, supports vision (default)
-- `google/gemini-2.0-flash-lite` - Free, excellent vision
-- `google/gemini-2.5-flash-lite` - Latest, best vision
+- Any multimodal model (check capabilities via models.dev API)
 - `anthropic/claude-3-5-sonnet` - Premium, excellent vision
 - `openai/gpt-4o` - Premium, multimodal
 
@@ -182,7 +129,6 @@ Used specifically for image analysis and multimodal tasks. This allows you to us
 **Why separate vision model?**
 - Use cheaper text-only models for most tasks
 - Switch to vision-capable model only when needed
-- Example: Kimi (text) + Minimax (vision) = Best of both worlds
 
 ### 4. Fallback Model (`fallback_model`)
 
@@ -191,7 +137,7 @@ Used if the primary model fails or is unavailable.
 **Examples:**
 - `openai/gpt-4o` - Reliable fallback
 - `deepseek/deepseek-chat` - Very cheap
-- `opencode/minimax-m2.5-free` - Free tier
+- Any OpenCode free model
 
 **When used:**
 - Rate limits hit
@@ -203,12 +149,7 @@ Used if the primary model fails or is unavailable.
 
 ### Free Models
 
-| Model | Provider | Best For |
-|-------|----------|----------|
-| `opencode/minimax-m2.5-free` | OpenCode | General use (default) |
-| `opencode/glm-5-free` | OpenCode | Chinese language |
-| `google/gemini-2.0-flash-lite` | Google | Fast, lightweight |
-| `google/gemini-2.5-flash-lite` | Google | Latest lite version |
+OpenCode free models change regularly. Check [opencode.ai/models](https://opencode.ai/models) or run `opencode auth login` for current free options.
 
 ### Premium Models (require API key)
 
@@ -218,7 +159,6 @@ Used if the primary model fails or is unavailable.
 | `anthropic/claude-3-opus` | Anthropic | Best reasoning | $$$ |
 | `openai/gpt-4o` | OpenAI | Multimodal | $$ |
 | `openai/gpt-4-turbo` | OpenAI | Fast GPT-4 | $$ |
-| `google/gemini-2.0-pro` | Google | Google's best | $$ |
 | `deepseek/deepseek-chat` | DeepSeek | Very cheap | $ |
 
 ## Changing Models via Chat
@@ -228,9 +168,7 @@ Andy can change models dynamically using MCP tools:
 ```
 User: "what model are you using?"
 Andy: [calls get_current_model]
-      Primary: opencode/minimax-m2.5-free
-      Small: opencode/minimax-m2.5-free
-      Fallback: none
+      Shows current primary, small, and fallback models
 
 User: "change to claude sonnet"
 Andy: [calls change_model]
@@ -239,10 +177,7 @@ Andy: [calls change_model]
 
 User: "list available models"
 Andy: [calls list_models]
-      ## Free Models
-      • opencode/minimax-m2.5-free
-      • google/gemini-2.0-flash-lite
-      ...
+      Shows all available free and premium models
 ```
 
 ## API Keys
@@ -265,85 +200,40 @@ GROQ_API_KEY=gsk_...
 
 ## Cost Optimization Strategies
 
-### Strategy 1: Recommended - Free + Gemini (Best Value) ⭐
+### Strategy 1: 100% Free
 
-```json
-{
-  "model": "opencode/minimax-m2.5-free",
-  "small_model": "google/gemini-2.5-flash-lite",
-  "fallback_model": "opencode/glm-5-free"
-}
-```
+Use only OpenCode free models. Check current free options via `opencode auth login`.
 
-**Cost:** $0-5/month (most users stay in free tier)  
-**Best for:** Everyone - best balance of features and cost  
-**Why:** Gemini's free tier is generous (500 RPD), and it's multimodal (images, audio, documents)
+**Cost:** $0/month
+**Best for:** Testing, minimal use
+**Limitation:** Usually no multimodal support (images, audio, documents)
 
-### Strategy 2: 100% Free
+### Strategy 2: Free + Multimodal (Best Value) ⭐
 
-```json
-{
-  "model": "opencode/minimax-m2.5-free",
-  "small_model": "opencode/minimax-m2.5-free",
-  "fallback_model": "opencode/glm-5-free"
-}
-```
+Use a free primary model + a multimodal model (with free tier) as small model.
 
-**Cost:** $0/month  
-**Best for:** Testing, minimal use  
-**Limitation:** No multimodal support (images, audio, documents)
+**Cost:** $0-5/month (most users stay in free tier)
+**Best for:** Everyone — best balance of features and cost
 
 ### Strategy 3: Balanced Professional
 
-```json
-{
-  "model": "anthropic/claude-3-5-sonnet",
-  "small_model": "google/gemini-2.0-flash-lite",
-  "fallback_model": "opencode/minimax-m2.5-free"
-}
-```
+Use a premium model for complex tasks + a lightweight model for everything else.
 
-**Cost:** ~$10-50/month (depends on usage)  
+**Cost:** ~$10-50/month (depends on usage)
 **Best for:** Professional use, quality matters
-
-### Strategy 3: Balanced Professional
-
-```json
-{
-  "model": "anthropic/claude-3-5-sonnet",
-  "small_model": "google/gemini-2.5-flash-lite",
-  "fallback_model": "opencode/minimax-m2.5-free"
-}
-```
-
-**Cost:** ~$10-50/month (depends on usage)  
-**Best for:** Professional use, quality matters  
-**Why:** Claude for complex reasoning, Gemini for everything else
 
 ### Strategy 4: Premium
 
-```json
-{
-  "model": "anthropic/claude-3-opus",
-  "small_model": "anthropic/claude-3-haiku",
-  "fallback_model": "anthropic/claude-3-5-sonnet"
-}
-```
+All premium models for maximum quality.
 
-**Cost:** ~$50-200/month (depends on usage)  
+**Cost:** ~$50-200/month (depends on usage)
 **Best for:** Heavy use, best quality
 
-### Strategy 4: Budget
+### Strategy 5: Budget
 
-```json
-{
-  "model": "deepseek/deepseek-chat",
-  "small_model": "google/gemini-2.0-flash-lite",
-  "fallback_model": "opencode/minimax-m2.5-free"
-}
-```
+Use a cheap premium model + free fallback.
 
-**Cost:** ~$5-20/month  
+**Cost:** ~$5-20/month
 **Best for:** Cost-conscious, good quality
 
 ## Troubleshooting

@@ -1,3 +1,8 @@
+---
+name: add-parallel
+description: Add Parallel AI MCP integration to EureClaw for advanced web research. Adds Quick Search (fast free lookups) and Deep Research (comprehensive analysis with polling via scheduler). Configures HTTP MCP servers, environment variables, and agent instructions.
+---
+
 # Add Parallel AI Integration
 
 Adds Parallel AI MCP integration to EureClaw for advanced web research capabilities.

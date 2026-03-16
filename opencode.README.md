@@ -26,7 +26,7 @@
 - Utilisé pour: Tâches normales de développement
 
 ### chat (agent conversationnel)
-- Modèle léger: `google/gemini-2.5-flash-lite`
+- Utilise le modèle léger configuré dans `models-config.json`
 - Pas d'accès aux outils (rapide et économique)
 - Utilisé pour: Messages simples ("salut", "merci", etc.)
 
@@ -54,10 +54,7 @@ EureClaw: [Utilise mcp__eureclaw__change_model]
 
 ## Modèles actuels (voir models-config.json)
 
-- **model**: `opencode/minimax-m2.5-free` (principal)
-- **small_model**: `google/gemini-2.5-flash-lite` (léger)
-- **vision_model**: `google/gemini-2.5-flash-lite` (images)
-- **fallback_model**: `opencode/glm-5-free` (secours)
+Les modèles sont configurés dans `models-config.json`. Les modèles gratuits OpenCode changent régulièrement — consultez `opencode auth login` ou le site OpenCode pour les options actuelles.
 
 ## En cas de problème
 

@@ -192,8 +192,11 @@ function App() {
             message.content.includes('New session created');
           
           if (isNewSessionMessage) {
-            console.log('🆕 New session detected - clearing message history');
-            return { ...s, messages: [message] };
+            console.log('🆕 New session detected - reloading messages from backend');
+            // Reload messages from backend instead of clearing abruptly
+            // This avoids the scroll-jump caused by emptying the DOM
+            void loadMessages(message.chat_jid);
+            return s; // Don't update state here, loadMessages will do it
           }
           
           return { ...s, messages: [...s.messages, message] };

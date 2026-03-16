@@ -1,56 +1,56 @@
 ---
 name: web-search
-description: Effectue des recherches sur le web et fournit les résultats. Utilise ce skill quand l'utilisateur demande de chercher des informations en ligne, faire des recherches web, trouver des articles, ou obtenir des informations actuelles sur un sujet.
+description: Performs web searches and provides the results. Use this skill when the user asks to look up information online, conduct web research, find articles, or obtain up-to-date information about a topic.
 ---
 
-# Recherche Web
+# Web Search
 
-Ce skill permet à l'agent de faire des recherches sur le web et de fournir les résultats à l'utilisateur.
+This skill allows the agent to perform web searches and provide results to the user.
 
-## Fonctionnalités
+## Features
 
-- Recherche d'informations actuelles sur le web
-- Extraction de contenu depuis des URLs spécifiques
-- Synthèse des résultats de recherche
-- Vérification de sources multiples
+- Search for up-to-date information on the web
+- Extract content from specific URLs
+- Summarize search results
+- Verify information across multiple sources
 
-## Utilisation
+## Usage
 
-Quand l'utilisateur demande une recherche web, utilise les outils disponibles:
+When the user requests a web search, use the available tools:
 
-1. **remote_web_search** - Pour chercher des informations
-   - Reformule la requête de l'utilisateur pour optimiser les résultats
-   - Fais plusieurs recherches si nécessaire pour couvrir le sujet
-   - Priorise les sources récentes et officielles
+1. **remote_web_search** – To search for information  
+   - Rephrase the user's query to optimize search results  
+   - Perform multiple searches if necessary to cover the topic  
+   - Prioritize recent and official sources  
 
-2. **webFetch** - Pour lire le contenu complet d'une page
-   - Utilise après avoir trouvé des URLs pertinentes
-   - Mode "truncated" pour un aperçu rapide
-   - Mode "full" pour le contenu complet
-   - Mode "selective" pour chercher des informations spécifiques
+2. **webFetch** – To read the full content of a page  
+   - Use after identifying relevant URLs  
+   - **"truncated" mode** for a quick preview  
+   - **"full" mode** for complete content  
+   - **"selective" mode** to retrieve specific information  
 
 ## Workflow
 
-1. Comprendre la demande de l'utilisateur
-2. Faire une ou plusieurs recherches web
-3. Analyser les résultats (titres, snippets, dates)
-4. Si nécessaire, lire le contenu complet des pages les plus pertinentes
-5. Synthétiser les informations trouvées
-6. Présenter les résultats avec les sources
+1. Understand the user's request  
+2. Perform one or more web searches  
+3. Analyze the results (titles, snippets, dates)  
+4. If necessary, read the full content of the most relevant pages  
+5. Synthesize the gathered information  
+6. Present the results with sources  
 
-## Bonnes Pratiques
+## Best Practices
 
-- Toujours citer les sources avec des liens
-- Vérifier la date de publication des informations
-- Privilégier les sources officielles et fiables
-- Faire plusieurs recherches pour des sujets complexes
-- Résumer les informations de manière claire et concise
-- Ne jamais reproduire plus de 30 mots consécutifs d'une source
+- Always cite sources with links  
+- Check the publication date of information  
+- Prefer official and reliable sources  
+- Perform multiple searches for complex topics  
+- Summarize information clearly and concisely  
+- Never reproduce more than 30 consecutive words from a source  
 
-## Exemples de Requêtes
+## Example Queries
 
-- "Cherche les dernières nouvelles sur [sujet]"
-- "Trouve des informations sur [technologie/librairie]"
-- "Recherche la documentation de [outil]"
-- "Quelles sont les meilleures pratiques pour [tâche]?"
-- "Compare [option A] et [option B]"
+- "Search for the latest news about [topic]"  
+- "Find information about [technology/library]"  
+- "Look up the documentation for [tool]"  
+- "What are the best practices for [task]?"  
+- "Compare [option A] and [option B]"
