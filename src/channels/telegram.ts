@@ -12,6 +12,16 @@ import {
 } from '../types.js';
 import { getTranscriptionManager, isAudioTranscriptionAvailable } from '../media/audio-manager.js';
 import { analyzeImage, isVisionEnabled } from '../vision.js';
+import { registerChannel } from './registry.js';
+import { readEnvFile } from '../env.js';
+
+// Self-register: only activates when TELEGRAM_BOT_TOKEN is set
+registerChannel('telegram', (opts) => {
+  const secrets = readEnvFile(['TELEGRAM_BOT_TOKEN']);
+  const token = secrets.TELEGRAM_BOT_TOKEN;
+  if (!token) return null;
+  return new TelegramChannel(token, opts);
+});
 
 export interface TelegramChannelOpts {
   onMessage: OnInboundMessage;

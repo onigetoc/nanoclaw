@@ -6,6 +6,10 @@
 import { Channel } from '../types.js';
 import { broadcastToToken } from '../api-server.js';
 import { logger } from '../logger.js';
+import { registerChannel } from './registry.js';
+
+// Self-register: WebUI is always available (no credentials needed)
+registerChannel('webui', () => new WebUIChannel());
 
 export class WebUIChannel implements Channel {
   name = 'webui';

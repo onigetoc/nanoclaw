@@ -10,7 +10,7 @@ import makeWASocket, {
   useMultiFileAuthState,
 } from '@whiskeysockets/baileys';
 
-import { ASSISTANT_HAS_OWN_NUMBER, ASSISTANT_NAME, STORE_DIR } from '../config.js';
+import { ASSISTANT_HAS_OWN_NUMBER, ASSISTANT_NAME, STORE_DIR, TELEGRAM_ONLY } from '../config.js';
 import {
   getLastGroupSync,
   setLastGroupSync,
@@ -18,6 +18,13 @@ import {
 } from '../db.js';
 import { logger } from '../logger.js';
 import { Channel, OnInboundMessage, OnChatMetadata, RegisteredGroup } from '../types.js';
+import { registerChannel } from './registry.js';
+
+// Self-register: skipped when TELEGRAM_ONLY is set
+registerChannel('whatsapp', (opts) => {
+  if (TELEGRAM_ONLY) return null;
+  return new WhatsAppChannel(opts);
+});
 
 const GROUP_SYNC_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
@@ -278,6 +285,11 @@ export class WhatsAppChannel implements Channel {
     } catch (err) {
       logger.error({ err }, 'Failed to sync group metadata');
     }
+  }
+
+  /** Channel interface alias for syncGroupMetadata */
+  async syncGroups(force = false): Promise<void> {
+    return this.syncGroupMetadata(force);
   }
 
   private async translateJid(jid: string): Promise<string> {

@@ -8,9 +8,8 @@ import fs from 'fs';
 
 import { ASSISTANT_NAME, DATA_DIR, TELEGRAM_ONLY, MAIN_GROUP_FOLDER } from './config.js';
 import { readEnvFile } from './env.js';
-import { WhatsAppChannel } from './channels/whatsapp.js';
-import { TelegramChannel } from './channels/telegram.js';
-import { WebUIChannel } from './channels/webui.js';
+import './channels/index.js'; // Triggers self-registration of all channels
+import { getRegisteredChannelNames, getChannelFactory } from './channels/registry.js';
 import { writeGroupsSnapshot } from './container-runner.js';
 import {
   initDatabase,
@@ -411,8 +410,7 @@ export async function main(): Promise<void> {
   loadSleepState();
   logger.info({ isSleeping: isSleeping() }, 'Sleep state loaded');
 
-  let whatsapp: WhatsAppChannel;
-  const channels: Channel[] = [];
+  let channels: Channel[] = [];
   const queue = new GroupQueue();
 
   // Wire queue status broadcasts to web UI
@@ -696,15 +694,13 @@ export async function main(): Promise<void> {
     registeredGroups: () => getRegisteredGroups(),
   };
 
-  // Load secrets
+  // Load secrets and set API keys in env
   const secrets = readEnvFile([
-    'TELEGRAM_BOT_TOKEN',
     'GEMINI_API_KEY',
     'GOOGLE_API_KEY',
     'OPENAI_API_KEY',
     'GROQ_API_KEY',
   ]);
-  const telegramToken = secrets.TELEGRAM_BOT_TOKEN || '';
 
   if (secrets.GEMINI_API_KEY)
     process.env.GEMINI_API_KEY = secrets.GEMINI_API_KEY;
@@ -714,36 +710,39 @@ export async function main(): Promise<void> {
     process.env.OPENAI_API_KEY = secrets.OPENAI_API_KEY;
   if (secrets.GROQ_API_KEY) process.env.GROQ_API_KEY = secrets.GROQ_API_KEY;
 
-  // Create and connect channels
-  // WebUI channel first - handles messages from OpenCode Web UI
-  const webui = new WebUIChannel();
-  channels.push(webui);
-  await webui.connect();
-
-  if (!TELEGRAM_ONLY) {
-    whatsapp = new WhatsAppChannel(channelOpts);
-    channels.push(whatsapp);
+  // Create and connect channels via registry (self-registration pattern).
+  // Each channel decides internally whether it can start (credentials, flags).
+  // Factories return null when credentials are missing → channel skipped.
+  for (const channelName of getRegisteredChannelNames()) {
+    const factory = getChannelFactory(channelName)!;
+    const channel = factory(channelOpts);
+    if (!channel) {
+      logger.warn(
+        { channel: channelName },
+        'Channel registered but credentials missing — skipping',
+      );
+      continue;
+    }
     try {
       await Promise.race([
-        whatsapp.connect(),
+        channel.connect(),
         new Promise<void>((_, reject) =>
           setTimeout(() => reject(new Error('timeout')), 30_000),
         ),
       ]);
+      channels.push(channel);
     } catch {
       logger.warn(
-        'WhatsApp connection timed out or failed — continuing startup without WhatsApp',
+        { channel: channelName },
+        'Channel connection timed out or failed — continuing without it',
       );
-      console.log(
-        '⚠️  WhatsApp not connected (no credentials?) — will retry in background',
-      );
+      // Still add it so disconnect() is called on shutdown
+      channels.push(channel);
     }
   }
-
-  if (telegramToken) {
-    const telegram = new TelegramChannel(telegramToken, channelOpts);
-    channels.push(telegram);
-    await telegram.connect();
+  if (channels.length === 0) {
+    logger.fatal('No channels connected');
+    process.exit(1);
   }
 
   // Start API server for web UI
@@ -881,8 +880,10 @@ export async function main(): Promise<void> {
     },
     registeredGroups: () => getRegisteredGroups(),
     registerGroup,
-    syncGroupMetadata: (force) =>
-      whatsapp?.syncGroupMetadata(force) ?? Promise.resolve(),
+    syncGroupMetadata: (force) => {
+      const ch = channels.find((c) => typeof c.syncGroups === 'function');
+      return ch?.syncGroups?.(force) ?? Promise.resolve();
+    },
     getAvailableGroups,
     writeGroupsSnapshot: (gf, im, ag, rj) =>
       writeGroupsSnapshot(gf, im, ag, rj),

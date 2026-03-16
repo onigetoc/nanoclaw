@@ -11,6 +11,7 @@ EureClaw is a personal Opencode assistant that runs securely in containers. Sing
 | File | Purpose |
 |------|---------|
 | `src/index.ts` | Orchestrator: state, message loop, agent invocation |
+| `src/channels/registry.ts` | Channel registry (self-registration at startup) |
 | `src/channels/whatsapp.ts` | WhatsApp channel implementation |
 | `src/channels/telegram.ts` | Telegram channel implementation |
 | `src/ipc.ts` | IPC watcher and task processing |

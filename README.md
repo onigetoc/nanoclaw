@@ -260,6 +260,16 @@ If you want to add Telegram support, don't create a PR that adds Telegram alongs
 
 Users then run `/add-telegram` on their fork and get clean code that does exactly what they need, not a bloated system trying to support every use case.
 
+### Adding a New Channel
+
+EureClaw uses a self-registration pattern for channels. Each channel module registers itself at import time, and the startup loop connects all available channels automatically. To add a new channel (e.g. Discord, Slack):
+
+1. Create `src/channels/discord.ts` implementing the `Channel` interface
+2. Call `registerChannel('discord', factory)` at the top level — the factory returns `null` when credentials are missing
+3. Add `import './discord.js'` to `src/channels/index.ts`
+
+That's it. No changes to `startup.ts` or any other file. The registry handles the rest.
+
 ### RFS (Request for Skills)
 
 Skills we'd love to see:
@@ -310,6 +320,7 @@ Single Node.js process. Agents execute in isolated Linux containers with mounted
 
 Key files:
 - `src/index.ts` - Main orchestrator: state management, message loop, agent invocation
+- `src/channels/registry.ts` - Channel registry (self-registration at startup)
 - `src/channels/whatsapp.ts` - WhatsApp channel implementation
 - `src/channels/telegram.ts` - Telegram channel implementation (optional)
 - `src/ipc.ts` - IPC watcher and task processing
