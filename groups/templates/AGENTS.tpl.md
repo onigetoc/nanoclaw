@@ -50,6 +50,10 @@ When you encounter a new type of request:
 3. Assess if it's appropriate for the situation
 4. Propose implementation if it solves the user's need
 
+## Communication Style
+
+- **Voice transcription**: Often uses voice transcription - text may have errors. Interpret intent, don't take typos literally.
+
 Available skills include:
 
 - Voice transcription (Whisper)

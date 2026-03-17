@@ -5,6 +5,7 @@ import {
   FileText,
   FileWarning,
   Key,
+  MessageSquare,
   Radio,
   Settings,
   Sparkles,
@@ -74,7 +75,7 @@ export default function SettingsNav({ active, onSelect, onBack, isDark }: Settin
               : 'text-emerald-700 hover:bg-emerald-50'
           }`}
         >
-          <ArrowLeft className="h-4 w-4" />
+          <MessageSquare className="h-4 w-4" />
           Back to Chat
         </button>
       </div>

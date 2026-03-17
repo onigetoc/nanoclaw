@@ -1,7 +1,7 @@
 {
   "$schema": "https://opencode.ai/config.json",
   "model": "google/gemini-3.1-flash-lite-preview",
-  "small_model": "opencode/trinity-large-preview-free",
+  "small_model": "opencode/mimo-v2-flash-free",
   "provider": {
     "opencode": {
       "options": {

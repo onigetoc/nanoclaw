@@ -26,8 +26,14 @@ fs.mkdirSync(PROFILE_DIR, { recursive: true });
 if (fs.existsSync(CMD_FILE)) fs.unlinkSync(CMD_FILE);
 if (fs.existsSync(RESULT_FILE)) fs.unlinkSync(RESULT_FILE);
 
-function findChrome() {
+function findBrowser() {
+  // Allow override via env var (e.g. BROWSER_PATH=C:\...\comet.exe)
+  if (process.env.BROWSER_PATH && fs.existsSync(process.env.BROWSER_PATH)) {
+    return process.env.BROWSER_PATH;
+  }
+
   const paths = [
+    // Chrome first (most stable with Playwright)
     'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
     'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
     path.join(
@@ -55,7 +61,10 @@ async function handleCommand(page, cmd) {
 
   switch (action) {
     case 'navigate': {
-      await page.goto(cmd.url, { waitUntil: 'networkidle', timeout: 60000 });
+      await page.goto(cmd.url, {
+        waitUntil: 'domcontentloaded',
+        timeout: 60000,
+      });
       await page.waitForTimeout(1000);
       return { ok: true, url: page.url(), title: await page.title() };
     }
@@ -139,21 +148,64 @@ async function handleCommand(page, cmd) {
 // --- Main loop ---
 
 async function main() {
-  const chromePath = findChrome();
-  console.log(chromePath ? `Using Chrome: ${chromePath}` : 'Using Chromium');
+  const browserPath = findBrowser();
+  console.log(
+    browserPath ? `Using browser: ${browserPath}` : 'Using Chromium (fallback)',
+  );
 
   const context = await chromium.launchPersistentContext(PROFILE_DIR, {
     headless: false,
-    executablePath: chromePath || undefined,
+    executablePath: browserPath || undefined,
     args: [
       '--no-sandbox',
       '--disable-blink-features=AutomationControlled',
       '--disable-infobars',
+      '--disable-extensions',
+      '--no-first-run',
+      '--disable-default-apps',
+      '--disable-features=PerplexityOnboarding',
+      '--no-default-browser-check',
+      '--disable-popup-blocking',
+      '--disable-features=ChromeLabs',
+      '--disable-features=BraveRewards',
+      '--disable-features=BraveVPN',
+      '--disable-features=BraveNews',
+      '--disable-features=BraveTalk',
+      '--disable-features=BraveGPT',
     ],
     viewport: { width: 1366, height: 768 },
     locale: 'en-US',
     timezoneId: 'America/New_York',
+    ignoreDefaultArgs: ['--enable-automation'],
   });
+
+  // Give custom browsers (Comet, etc.) time to initialize
+  await new Promise((r) => setTimeout(r, 3000));
+
+  // Close any onboarding/welcome tabs that Comet may open
+  const pages = context.pages();
+  for (const p of pages) {
+    const url = p.url();
+    console.log(`Checking page URL: ${url}`);
+    if (
+      url.includes('perplexity-onboarding') ||
+      url.includes('chrome://') ||
+      url.includes('welcome')
+    ) {
+      console.log(`Closing page: ${url}`);
+      try {
+        await p.close();
+      } catch (e) {
+        console.log(`Error closing page: ${e.message}`);
+      }
+    }
+  }
+
+  // Ensure at least one page is open
+  if (context.pages().length === 0) {
+    console.log('No pages open, creating new page');
+    await context.newPage();
+  }
 
   // Stealth
   await context.addInitScript(() => {

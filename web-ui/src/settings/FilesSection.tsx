@@ -131,15 +131,17 @@ export default function FilesSection({ isDark }: FilesSectionProps) {
       setIsEditing(false);
       return;
     }
+    setSelectedFile(filePath);
+    setFileContent('');
+    setOriginalContent('');
+    setIsEditing(false);
     setLoading(true);
     try {
       const data = await apiService.getMdFile(selectedGroup, filePath);
       fileCache.set(cacheKey, { data: { content: data.content, modified: data.modified, size: data.size }, timestamp: Date.now() });
-      setSelectedFile(filePath);
       setFileContent(data.content);
       setOriginalContent(data.content);
       setFileModified(data.modified);
-      setIsEditing(false);
     } catch {
       setError('Failed to load file');
     } finally {

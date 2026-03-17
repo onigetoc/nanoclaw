@@ -84,6 +84,26 @@ node .opencode/skills/browser-playwright/scripts/browser.js close
 5. If CAPTCHA or login needed: send screenshot to user and ask them to handle it
 6. Continue after user confirms
 
+## ⚠️ Windows Limitations (No Docker/WSL)
+
+Without Docker or WSL, browser automation is severely limited on Windows:
+- Most major sites (Twitter/X, Google, Reddit) will block or CAPTCHA you immediately
+- Fresh Playwright profiles have no cookies/sessions = login walls everywhere
+- Browser fingerprinting detects automation even with stealth patches
+- The browser skill is only useful for simple, public websites that don't require login
+- Do NOT attempt to browse Twitter, Google Search, Reddit, or any site requiring authentication
+- If the user asks to browse a site that requires login, explain the limitation and suggest alternatives (web search skill, API access, etc.)
+
+## CRITICAL: Failure Handling
+
+- If the browser daemon fails to start after 1 attempt: STOP. Tell the user the browser is not available and suggest they check the setup.
+- If a navigation fails (timeout, ERR_ABORTED, etc.): retry up to 3 times. After 3 failures, STOP and report the error to the user.
+- If you get blocked by a login wall or CAPTCHA: take a screenshot, send it to the user, and WAIT for their response. Do NOT retry on your own.
+- NEVER retry the same failing command more than 3 times total. After 3 failures, close the browser and inform the user.
+- Do NOT "think out loud" about what to try. Just try it. If it fails 3 times, report and stop.
+- If the browser seems frozen (commands timeout repeatedly): close the browser with the `close` command and tell the user.
+- Budget awareness: each browser command costs agent tokens. Looping on failures wastes tokens rapidly.
+
 ## Sending Screenshots
 
 After taking a screenshot, send it to the user with the `send_image` MCP tool:
