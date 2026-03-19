@@ -16,7 +16,7 @@ Run setup scripts automatically. Only pause when user action is required (WhatsA
 Run `./.opencode/skills/setup/scripts/01-check-environment.sh` and parse the status block.
 
 - If HAS_AUTH=true → note that WhatsApp auth exists, offer to skip step 5
-- If HAS_REGISTERED_GROUPS=true → note existing config, offer to skip or reconfigure
+- If HAS_REGISTERED_WORKSPACES=true → note existing config, offer to skip or reconfigure
 - Record PLATFORM, APPLE_CONTAINER, and DOCKER values for step 3
 
 **If NODE_OK=false:**
@@ -179,11 +179,11 @@ AskUserQuestion: Want the agent to access directories outside the EureClaw proje
 
 **If no:** Run `./.opencode/skills/setup/scripts/07-configure-mounts.sh --empty`
 
-**If yes:** Collect directory paths and permissions (read-write vs read-only). Ask about non-main group read-only restriction (recommended: yes). Build the JSON and pipe it to the script:
+**If yes:** Collect directory paths and permissions (read-write vs read-only). Ask about non-main workspace read-only restriction (recommended: yes). Build the JSON and pipe it to the script:
 
 `echo '{"allowedRoots":[...],"blockedPatterns":[],"nonMainReadOnly":true}' | ./.opencode/skills/setup/scripts/07-configure-mounts.sh`
 
-Tell user how to grant a group access: add `containerConfig.additionalMounts` to their entry in `data/registered_groups.json`.
+Tell user how to grant a workspace access: add `containerConfig.additionalMounts` to their entry in `data/registered_workspaces.json`.
 
 ## 10. Start Service
 
@@ -207,7 +207,7 @@ Run `./.opencode/skills/setup/scripts/09-verify.sh` and parse the status block.
 - SERVICE=not_found → re-run step 10.
 - CREDENTIALS=missing → re-run step 4.
 - WHATSAPP_AUTH=not_found → re-run step 5.
-- REGISTERED_GROUPS=0 → re-run steps 7-8.
+- REGISTERED_WORKSPACES=0 → re-run steps 7-8.
 - MOUNT_ALLOWLIST=missing → run `./.opencode/skills/setup/scripts/07-configure-mounts.sh --empty` to create a default.
 
 After fixing, re-run `09-verify.sh` to confirm everything passes.
@@ -220,9 +220,9 @@ Show the log tail command: `tail -f logs/eureclaw.log`
 
 **Service not starting:** Check `logs/eureclaw.error.log`. Common causes: wrong Node path in plist (re-run step 10), missing `.env` (re-run step 4), missing WhatsApp auth (re-run step 5).
 
-**Container agent fails ("OpenCode process exited with code 1"):** Ensure the container runtime is running — start it: `container system start` (Apple Container) or `open -a Docker` (macOS Docker). Check container logs in `groups/main/logs/container-*.log`.
+**Container agent fails ("OpenCode process exited with code 1"):** Ensure the container runtime is running — start it: `container system start` (Apple Container) or `open -a Docker` (macOS Docker). Check container logs in `workspaces/main/logs/container-*.log`.
 
-**No response to messages:** Verify the trigger pattern matches. Main channel and personal/solo chats don't need a prefix. Check the registered JID in the database: `sqlite3 store/messages.db "SELECT * FROM registered_groups"`. Check `logs/eureclaw.log`.
+**No response to messages:** Verify the trigger pattern matches. Main channel and personal/solo chats don't need a prefix. Check the registered JID in the database: `sqlite3 store/messages.db "SELECT * FROM registered_workspaces"`. Check `logs/eureclaw.log`.
 
 **Messages sent but not received (DMs):** WhatsApp may use LID (Linked Identity) JIDs. Check logs for LID translation. Verify the registered JID has no device suffix (should be `number@s.whatsapp.net`, not `number:0@s.whatsapp.net`).
 

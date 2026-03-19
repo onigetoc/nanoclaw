@@ -4,9 +4,9 @@ import fs from 'fs';
 import path from 'path';
 
 import {
-  GROUPS_DIR,
+  WORKSPACES_DIR,
   IDLE_TIMEOUT,
-  MAIN_GROUP_FOLDER,
+  MAIN_WORKSPACE_FOLDER,
   SCHEDULER_POLL_INTERVAL,
   TIMEZONE,
 } from './config.js';
@@ -17,11 +17,12 @@ import {
   getDueTasks,
   getTaskById,
   logTaskRun,
+  updateTask,
   updateTaskAfterRun,
 } from './db.js';
-import { GroupQueue } from './group-queue.js';
+import { WorkspaceQueue } from './workspace-queue.js';
 import { logger } from './logger.js';
-import { RegisteredGroup, ScheduledTask } from './types.js';
+import { RegisteredWorkspace, ScheduledTask } from './types.js';
 import { isSleeping } from './commands/sleep-manager.js';
 
 /**
@@ -33,10 +34,10 @@ function formatTaskErrorForUser(taskPrompt: string, error: string): string {
 }
 
 export interface SchedulerDependencies {
-  registeredGroups: () => Record<string, RegisteredGroup>;
+  registeredWorkspaces: () => Record<string, RegisteredWorkspace>;
   getSessions: () => Record<string, string>;
-  queue: GroupQueue;
-  onProcess: (groupJid: string, proc: ChildProcess, containerName: string, groupFolder: string) => void;
+  queue: WorkspaceQueue;
+  onProcess: (workspaceJid: string, proc: ChildProcess, containerName: string, workspaceFolder: string) => void;
   sendMessage: (jid: string, text: string) => Promise<void>;
 }
 
@@ -45,23 +46,23 @@ async function runTask(
   deps: SchedulerDependencies,
 ): Promise<void> {
   const startTime = Date.now();
-  const groupDir = path.join(GROUPS_DIR, task.group_folder);
-  fs.mkdirSync(groupDir, { recursive: true });
+  const workspaceDir = path.join(WORKSPACES_DIR, task.workspace_folder);
+  fs.mkdirSync(workspaceDir, { recursive: true });
 
   logger.info(
-    { taskId: task.id, group: task.group_folder },
+    { taskId: task.id, workspace: task.workspace_folder },
     'Running scheduled task',
   );
 
-  const groups = deps.registeredGroups();
-  const group = Object.values(groups).find(
-    (g) => g.folder === task.group_folder,
+  const workspaces = deps.registeredWorkspaces();
+  const workspace = Object.values(workspaces).find(
+    (w) => w.folder === task.workspace_folder,
   );
 
-  if (!group) {
+  if (!workspace) {
     logger.error(
-      { taskId: task.id, groupFolder: task.group_folder },
-      'Group not found for task',
+      { taskId: task.id, workspaceFolder: task.workspace_folder },
+      'Workspace not found for task',
     );
     logTaskRun({
       task_id: task.id,
@@ -69,20 +70,20 @@ async function runTask(
       duration_ms: Date.now() - startTime,
       status: 'error',
       result: null,
-      error: `Group not found: ${task.group_folder}`,
+      error: `Workspace not found: ${task.workspace_folder}`,
     });
     return;
   }
 
-  // Update tasks snapshot for container to read (filtered by group)
-  const isMain = task.group_folder === MAIN_GROUP_FOLDER;
+  // Update tasks snapshot for container to read (filtered by workspace)
+  const isMain = task.workspace_folder === MAIN_WORKSPACE_FOLDER;
   const tasks = getAllTasks();
   writeTasksSnapshot(
-    task.group_folder,
+    task.workspace_folder,
     isMain,
     tasks.map((t) => ({
       id: t.id,
-      groupFolder: t.group_folder,
+      workspaceFolder: t.workspace_folder,
       prompt: t.prompt,
       schedule_type: t.schedule_type,
       schedule_value: t.schedule_value,
@@ -94,10 +95,10 @@ async function runTask(
   let result: string | null = null;
   let error: string | null = null;
 
-  // For group context mode, use the group's current session
+  // For workspace context mode, use the workspace's current session
   const sessions = deps.getSessions();
   const sessionId =
-    task.context_mode === 'group' ? sessions[task.group_folder] : undefined;
+    task.context_mode === 'workspace' ? sessions[task.workspace_folder] : undefined;
 
   // Idle timer: writes _close sentinel after IDLE_TIMEOUT of no output,
   // so the container exits instead of hanging at waitForIpcMessage forever.
@@ -116,16 +117,16 @@ async function runTask(
     const runAgentFn = shouldUseDirectMode() ? runDirectAgent : runContainerAgent;
     
     const output = await runAgentFn(
-      group,
+      workspace,
       {
         prompt: task.prompt,
         sessionId,
-        groupFolder: task.group_folder,
+        workspaceFolder: task.workspace_folder,
         chatJid: task.chat_jid,
         isMain,
         isScheduledTask: true,
       },
-      (proc, containerName) => deps.onProcess(task.chat_jid, proc, containerName, task.group_folder),
+      (proc, containerName) => deps.onProcess(task.chat_jid, proc, containerName, task.workspace_folder),
       async (streamedOutput: ContainerOutput) => {
         if (streamedOutput.result) {
           result = streamedOutput.result;
@@ -206,6 +207,7 @@ async function runTask(
 }
 
 let schedulerRunning = false;
+let schedulerDeps: SchedulerDependencies | null = null;
 
 export function startSchedulerLoop(deps: SchedulerDependencies): void {
   if (schedulerRunning) {
@@ -213,6 +215,7 @@ export function startSchedulerLoop(deps: SchedulerDependencies): void {
     return;
   }
   schedulerRunning = true;
+  schedulerDeps = deps;
   logger.info('Scheduler loop started');
 
   const loop = async () => {
@@ -249,4 +252,36 @@ export function startSchedulerLoop(deps: SchedulerDependencies): void {
   };
 
   loop();
+}
+
+/**
+ * Trigger a task for immediate execution, bypassing the poll interval.
+ * Called from the web UI "Run Now" button.
+ */
+export function triggerTaskNow(taskId: string): { success: boolean; error?: string } {
+  if (!schedulerDeps) {
+    return { success: false, error: 'Scheduler not initialized' };
+  }
+
+  const task = getTaskById(taskId);
+  if (!task) {
+    return { success: false, error: 'Task not found' };
+  }
+
+  logger.info({ taskId }, 'Task triggered immediately via web UI');
+
+  // Ensure task is active so it can run
+  if (task.status !== 'active') {
+    updateTask(taskId, { status: 'active' });
+    task.status = 'active';
+  }
+
+  const deps = schedulerDeps;
+  deps.queue.enqueueTask(
+    task.chat_jid,
+    task.id,
+    () => runTask(task, deps),
+  );
+
+  return { success: true };
 }

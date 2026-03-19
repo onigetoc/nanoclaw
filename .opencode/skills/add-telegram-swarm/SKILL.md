@@ -83,7 +83,7 @@ import { Api, Bot } from 'grammy';
 ```typescript
 // Bot pool for agent teams: send-only Api instances (no polling)
 const poolApis: Api[] = [];
-// Maps "{groupFolder}:{senderName}" → pool Api index for stable assignment
+// Maps "{workspaceFolder}:{senderName}" → pool Api index for stable assignment
 const senderBotMap = new Map<string, number>();
 let nextPoolIndex = 0;
 ```
@@ -124,7 +124,7 @@ export async function sendPoolMessage(
   chatId: string,
   text: string,
   sender: string,
-  groupFolder: string,
+  workspaceFolder: string,
 ): Promise<void> {
   if (poolApis.length === 0) {
     // No pool bots — fall back to main bot
@@ -132,7 +132,7 @@ export async function sendPoolMessage(
     return;
   }
 
-  const key = `${groupFolder}:${sender}`;
+  const key = `${workspaceFolder}:${sender}`;
   let idx = senderBotMap.get(key);
   if (idx === undefined) {
     idx = nextPoolIndex % poolApis.length;
@@ -142,7 +142,7 @@ export async function sendPoolMessage(
     try {
       await poolApis[idx].setMyName(sender);
       await new Promise((r) => setTimeout(r, 2000));
-      logger.info({ sender, groupFolder, poolIndex: idx }, 'Assigned and renamed pool bot');
+      logger.info({ sender, workspaceFolder, poolIndex: idx }, 'Assigned and renamed pool bot');
     } catch (err) {
       logger.warn({ sender, err }, 'Failed to rename pool bot (sending anyway)');
     }
@@ -192,7 +192,7 @@ async (args) => {
       chatJid,
       text: args.text,
       sender: args.sender || undefined,
-      groupFolder,
+      workspaceFolder,
       timestamp: new Date().toISOString(),
     };
 
@@ -216,7 +216,7 @@ if (data.sender && data.chatJid.startsWith('tg:')) {
     data.chatJid,
     data.text,
     data.sender,
-    sourceGroup,
+    sourceWorkspace,
   );
 } else {
   await deps.sendMessage(data.chatJid, data.text);
@@ -237,7 +237,7 @@ if (TELEGRAM_BOT_POOL.length > 0) {
 
 #### 5a. Add global message formatting rules
 
-Read `groups/global/AGENTS.md` and add a Message Formatting section:
+Read `workspaces/global/AGENTS.md` and add a Message Formatting section:
 
 ```markdown
 ## Message Formatting
@@ -251,9 +251,9 @@ NEVER use markdown. Only use WhatsApp/Telegram formatting:
 No ## headings. No [links](url). No **double stars**.
 ```
 
-#### 5b. Update existing group AGENTS.md headings
+#### 5b. Update existing workspace AGENTS.md headings
 
-In any group AGENTS.md that has a "WhatsApp Formatting" section (e.g. `groups/main/AGENTS.md`), rename the heading to reflect multi-channel support:
+In any workspace AGENTS.md that has a "WhatsApp Formatting" section (e.g. `workspaces/main/AGENTS.md`), rename the heading to reflect multi-channel support:
 
 ```
 ## WhatsApp Formatting (and other messaging apps)
@@ -261,7 +261,7 @@ In any group AGENTS.md that has a "WhatsApp Formatting" section (e.g. `groups/ma
 
 #### 5c. Add Agent Teams instructions to Telegram groups
 
-For each Telegram group that will use agent teams, create or update its `groups/{folder}/AGENTS.md` with these instructions. Read the existing AGENTS.md first (or `groups/global/AGENTS.md` as a base) and add the Agent Teams section:
+For each Telegram group that will use agent teams, create or update its `workspaces/{folder}/AGENTS.md` with these instructions. Read the existing AGENTS.md first (or `workspaces/global/AGENTS.md` as a base) and add the Agent Teams section:
 
 ```markdown
 ## Agent Teams
@@ -346,7 +346,7 @@ Tell the user:
 - Pool bots use Grammy's `Api` class — lightweight, no polling, just send
 - Bot names are set via `setMyName` — changes are global to the bot, not per-chat
 - A 2-second delay after `setMyName` allows Telegram to propagate the name change before the first message
-- Sender→bot mapping is stable within a group (keyed as `{groupFolder}:{senderName}`)
+- Sender→bot mapping is stable within a workspace (keyed as `{workspaceFolder}:{senderName}`)
 - Mapping resets on service restart — pool bots get reassigned fresh
 - If pool runs out, bots are reused (round-robin wraps)
 
@@ -365,7 +365,7 @@ Telegram caches bot names client-side. The 2-second delay after `setMyName` help
 
 ### Subagents not using send_message
 
-Check the group's `AGENTS.md` has the Agent Teams instructions. The lead agent reads this when creating teammates and must include the `send_message` + `sender` instructions in each teammate's prompt.
+Check the workspace's `AGENTS.md` has the Agent Teams instructions. The lead agent reads this when creating teammates and must include the `send_message` + `sender` instructions in each teammate's prompt.
 
 ## Removal
 
@@ -376,6 +376,6 @@ To remove Agent Swarm support while keeping basic Telegram:
 3. Remove pool routing from IPC handler in `src/index.ts` (revert to plain `sendMessage`)
 4. Remove `initBotPool` call from `main()`
 5. Remove `sender` param from MCP tool in `container/agent-runner/src/ipc-mcp-stdio.ts`
-6. Remove Agent Teams section from group AGENTS.md files
+6. Remove Agent Teams section from workspace AGENTS.md files
 7. Remove `TELEGRAM_BOT_POOL` from `.env`, `data/env/env`, and launchd plist
 8. Rebuild: `npm run build && ./container/build.sh && launchctl unload ~/Library/LaunchAgents/com.eureclaw.plist && launchctl load ~/Library/LaunchAgents/com.eureclaw.plist`

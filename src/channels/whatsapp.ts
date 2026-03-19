@@ -17,7 +17,7 @@ import {
   updateChatName,
 } from '../db.js';
 import { logger } from '../logger.js';
-import { Channel, OnInboundMessage, OnChatMetadata, RegisteredGroup } from '../types.js';
+import { Channel, OnInboundMessage, OnChatMetadata, RegisteredWorkspace } from '../types.js';
 import { registerChannel } from './registry.js';
 
 // Self-register: skipped when TELEGRAM_ONLY is set
@@ -26,12 +26,12 @@ registerChannel('whatsapp', (opts) => {
   return new WhatsAppChannel(opts);
 });
 
-const GROUP_SYNC_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
+const WORKSPACE_SYNC_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 export interface WhatsAppChannelOpts {
   onMessage: OnInboundMessage;
   onChatMetadata: OnChatMetadata;
-  registeredGroups: () => Record<string, RegisteredGroup>;
+  registeredWorkspaces: () => Record<string, RegisteredWorkspace>;
 }
 
 export class WhatsAppChannel implements Channel {
@@ -42,7 +42,7 @@ export class WhatsAppChannel implements Channel {
   private lidToPhoneMap: Record<string, string> = {};
   private outgoingQueue: Array<{ jid: string; text: string }> = [];
   private flushing = false;
-  private groupSyncTimerStarted = false;
+  private workspaceSyncTimerStarted = false;
 
   private opts: WhatsAppChannelOpts;
 
@@ -127,18 +127,18 @@ export class WhatsAppChannel implements Channel {
           logger.error({ err }, 'Failed to flush outgoing queue'),
         );
 
-        // Sync group metadata on startup (respects 24h cache)
-        this.syncGroupMetadata().catch((err) =>
-          logger.error({ err }, 'Initial group sync failed'),
+        // Sync workspace metadata on startup (respects 24h cache)
+        this.syncWorkspaceMetadata().catch((err) =>
+          logger.error({ err }, 'Initial workspace sync failed'),
         );
         // Set up daily sync timer (only once)
-        if (!this.groupSyncTimerStarted) {
-          this.groupSyncTimerStarted = true;
+        if (!this.workspaceSyncTimerStarted) {
+          this.workspaceSyncTimerStarted = true;
           setInterval(() => {
-            this.syncGroupMetadata().catch((err) =>
-              logger.error({ err }, 'Periodic group sync failed'),
+            this.syncWorkspaceMetadata().catch((err) =>
+              logger.error({ err }, 'Periodic workspace sync failed'),
             );
-          }, GROUP_SYNC_INTERVAL_MS);
+          }, WORKSPACE_SYNC_INTERVAL_MS);
         }
 
         // Signal first connection to caller
@@ -164,12 +164,12 @@ export class WhatsAppChannel implements Channel {
           Number(msg.messageTimestamp) * 1000,
         ).toISOString();
 
-        // Always notify about chat metadata for group discovery
+        // Always notify about chat metadata for workspace discovery
         this.opts.onChatMetadata(chatJid, timestamp);
 
-        // Only deliver full message for registered groups
-        const groups = this.opts.registeredGroups();
-        if (groups[chatJid]) {
+        // Only deliver full message for registered workspaces
+        const workspaces = this.opts.registeredWorkspaces();
+        if (workspaces[chatJid]) {
           const content =
             msg.message?.conversation ||
             msg.message?.extendedTextMessage?.text ||
@@ -252,28 +252,28 @@ export class WhatsAppChannel implements Channel {
   }
 
   /**
-   * Sync group metadata from WhatsApp.
-   * Fetches all participating groups and stores their names in the database.
+   * Sync workspace metadata from WhatsApp.
+   * Fetches all participating WhatsApp groups and stores their names in the database.
    * Called on startup, daily, and on-demand via IPC.
    */
-  async syncGroupMetadata(force = false): Promise<void> {
+  async syncWorkspaceMetadata(force = false): Promise<void> {
     if (!force) {
       const lastSync = getLastGroupSync();
       if (lastSync) {
         const lastSyncTime = new Date(lastSync).getTime();
-        if (Date.now() - lastSyncTime < GROUP_SYNC_INTERVAL_MS) {
-          logger.debug({ lastSync }, 'Skipping group sync - synced recently');
+        if (Date.now() - lastSyncTime < WORKSPACE_SYNC_INTERVAL_MS) {
+          logger.debug({ lastSync }, 'Skipping workspace sync - synced recently');
           return;
         }
       }
     }
 
     try {
-      logger.info('Syncing group metadata from WhatsApp...');
-      const groups = await this.sock.groupFetchAllParticipating();
+      logger.info('Syncing workspace metadata from WhatsApp...');
+      const waGroups = await this.sock.groupFetchAllParticipating();
 
       let count = 0;
-      for (const [jid, metadata] of Object.entries(groups)) {
+      for (const [jid, metadata] of Object.entries(waGroups)) {
         if (metadata.subject) {
           updateChatName(jid, metadata.subject);
           count++;
@@ -281,15 +281,15 @@ export class WhatsAppChannel implements Channel {
       }
 
       setLastGroupSync();
-      logger.info({ count }, 'Group metadata synced');
+      logger.info({ count }, 'Workspace metadata synced');
     } catch (err) {
-      logger.error({ err }, 'Failed to sync group metadata');
+      logger.error({ err }, 'Failed to sync workspace metadata');
     }
   }
 
-  /** Channel interface alias for syncGroupMetadata */
-  async syncGroups(force = false): Promise<void> {
-    return this.syncGroupMetadata(force);
+  /** Channel interface alias for syncWorkspaceMetadata */
+  async syncWorkspaces(force = false): Promise<void> {
+    return this.syncWorkspaceMetadata(force);
   }
 
   private async translateJid(jid: string): Promise<string> {

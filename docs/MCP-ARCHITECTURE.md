@@ -93,7 +93,7 @@ This compiles TypeScript to JavaScript in `container/agent-runner/dist/`.
 
 ### Step 3: Document
 
-Update `groups/global/dna/TOOLS.md` with usage examples:
+Update `workspaces/global/dna/TOOLS.md` with usage examples:
 
 ```markdown
 ## Tool Name
@@ -235,7 +235,7 @@ Tool invocations are logged:
 1. **Tool not found** - Did you run `bun run build`?
 2. **Environment variable undefined** - Check if variable is passed in `container-runner.ts` or `direct-runner.ts`
 3. **Permission denied** - Check file paths and permissions
-4. **Tool returns error** - Check logs in `groups/{group}/logs/`
+4. **Tool returns error** - Check logs in `workspaces/{workspace}/logs/`
 
 ## Further Reading
 

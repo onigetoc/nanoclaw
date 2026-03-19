@@ -9,7 +9,7 @@ This plan implements automatic registration of the first chat as the 'main' grou
 - [x] 1. Create auto-registration module with core logic
   - Create `src/auto-registration.ts` with `attemptAutoRegistration()`, `hasMainGroup()`, and `initializeGroupFolders()` functions
   - Implement logic to check if main group exists using database query
-  - Implement folder structure creation (groups/main/, logs/, conversations/)
+  - Implement folder structure creation (workspaces/main/, logs/, conversations/)
   - Implement AGENTS.md template file creation for main and global
   - _Requirements: 1.4, 1.6, 4.1, 4.2, 5.3, 5.4, 5.5_
 

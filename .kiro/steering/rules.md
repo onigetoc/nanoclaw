@@ -58,7 +58,7 @@ When you don't know something or are uncertain about information:
 
 ## EureClaw Documentation Reference
 
-**Complete Project Documentation:** `groups/global/dna/DOCUMENTATION.md`
+**Complete Project Documentation:** `workspaces/global/dna/DOCUMENTATION.md`
 
 **SDK & Tools Reference:** `Project-Docs-Ressources-Helps/`
 This folder contains important reference documentation:
@@ -77,25 +77,25 @@ When adding new tools for EureClaw:
 1. **DO NOT create a new MCP server** - add tools to the existing `ipc-mcp-stdio.ts`
 2. Add the tool using `server.tool()` in that file
 3. Run `bun run build` to compile
-4. Update `groups/global/dna/TOOLS.md` with usage documentation
+4. Update `workspaces/global/dna/TOOLS.md` with usage documentation
 
 See `docs/MCP-ARCHITECTURE.md` for detailed guide on adding tools.
 
 Existing tools include:
 - `send_message` - Send messages to users
 - `schedule_task`, `list_tasks`, `pause_task`, `resume_task`, `cancel_task` - Task scheduling
-- `register_group` - Register new WhatsApp/Telegram groups
+- `register_workspace` - Register new WhatsApp/Telegram workspaces
 - `show_opencode_stats` - Usage statistics
 - `send_image` - Send images/files
 - `list_logs`, `read_log` - Read execution logs (for debugging)
 - `create_downloadable_file`, `list_downloadable_files` - File downloads
 
 When users ask questions about EureClaw architecture, features, or how things work:
-- Consult `groups/global/dna/DOCUMENTATION.md` first
+- Consult `workspaces/global/dna/DOCUMENTATION.md` first
 - This file contains comprehensive documentation covering:
   - Architecture and data flows
   - All components and their responsibilities
-  - Memory systems and group management
+  - Memory systems and workspace management
   - Security and isolation model
   - Configuration and customization
   - Development and debugging guides
@@ -103,12 +103,12 @@ When users ask questions about EureClaw architecture, features, or how things wo
 
 Use this as your primary reference for answering EureClaw-related questions.
 
-## Group Folder Structure
+## Workspace Folder Structure
 
-Each group follows this structure:
+Each workspace follows this structure:
 
 ```
-groups/{name}/
+workspaces/{name}/
 ├── dna/           ← Personality files (AGENTS.md, IDENTITY.md, MEMORY.md, SOUL.md, TOOLS.md, USER.md, GUIDELINES.md)
 ├── workspace/     ← Agent-generated content
 │   ├── screenshots/
@@ -132,7 +132,7 @@ groups/{name}/
 
 When the user asks you to "take note" or "remember this for later", use the appropriate location:
 
-**IMPORTANT: `groups/` is for EureClaw (Andy via Telegram), NOT for development notes!**
+**IMPORTANT: `workspaces/` is for EureClaw (Andy via Telegram), NOT for development notes!**
 
 **For development notes (Gino + Kiro):**
 - Location: `dev-notes/` folder
@@ -142,7 +142,7 @@ When the user asks you to "take note" or "remember this for later", use the appr
   - `decisions.md` - Technical decisions, why we chose X over Y
   - `todo.md` - Actionable tasks, things to do
   - `preferences.md` - User preferences and personal info
-- These files are ignored by EureClaw (not in groups/)
+- These files are ignored by EureClaw (not in workspaces/)
 - Format: Markdown with clear sections and dates
 
 ### Note-Taking Best Practices

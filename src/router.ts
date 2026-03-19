@@ -162,10 +162,20 @@ export function convertMarkdownForChannel(text: string, jid: string): string {
   return text;
 }
 
+/**
+ * Strip [tool_call: ...] markers that some models (e.g. Gemini) include
+ * in their text output when narrating tool usage.
+ * Matches patterns like: [tool_call: agent-browser for command 'open https://...']
+ */
+export function stripToolCalls(text: string): string {
+  return text.replace(/\[tool_call:[^\]]*\]/g, '');
+}
+
 export function formatOutbound(rawText: string, jid?: string): string {
   // First strip internal tags and message XML that agent might echo
   let text = stripInternalTags(rawText);
   text = stripMessageXml(text);
+  text = stripToolCalls(text);
 
   // Strip security flag tags from agent output and log events
   SECURITY_FLAG_TAG.lastIndex = 0;

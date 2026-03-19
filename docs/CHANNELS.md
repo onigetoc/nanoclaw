@@ -4,20 +4,20 @@ EureClaw supports multiple messaging channels to communicate with the assistant.
 
 ## What are Channels?
 
-Channels are messaging platforms where you interact with your EureClaw assistant. Each channel can have multiple groups (or chats), and each group has its own isolated memory and context.
+Channels are messaging platforms where you interact with your EureClaw assistant. Each channel can have multiple workspaces (or chats), and each workspace has its own isolated memory and context.
 
-## What are Groups?
+## What are Workspaces?
 
-In EureClaw, a "group" is any chat or conversation where the bot is present:
+In EureClaw, a "workspace" is any chat or conversation where the bot is present:
 
 - **Private chats** (DMs) - One-on-one conversations with the bot
 - **Group chats** - Multi-user conversations (WhatsApp groups, Telegram groups, Discord servers, etc.)
-- **Main group** - Your primary control channel (usually your self-chat or DM with the bot)
+- **Main workspace** - Your primary control channel (usually your self-chat or DM with the bot)
 
-Each group has:
-- Its own memory files in `groups/{name}/dna/` (AGENTS.md, SOUL.md, IDENTITY.md, etc.)
-- Its own workspace in `groups/{name}/workspace/` for generated content
-- Isolated context (what happens in one group doesn't affect others)
+Each workspace has:
+- Its own memory files in `workspaces/{name}/dna/` (AGENTS.md, SOUL.md, IDENTITY.md, etc.)
+- Its own workspace folder in `workspaces/{name}/workspace/` for generated content
+- Isolated context (what happens in one workspace doesn't affect others)
 - Its own scheduled tasks
 - Separate conversation history
 
@@ -28,7 +28,7 @@ Each group has:
 - Matrix: "Rooms"
 - Teams: "Teams" and "Channels"
 
-All of these are treated as "groups" in EureClaw.
+All of these are treated as "workspaces" in EureClaw.
 
 ## Supported Channels
 
@@ -50,21 +50,21 @@ Most popular messaging platforms support bots with group/channel functionality:
 
 See the "Adding a New Channel" section below for implementation guidance.
 
-## Main Channel vs Other Groups
+## Main Channel vs Other Workspaces
 
 ### Main Channel
 Your "main" channel is your primary control interface:
 - Usually your self-chat or private DM with the bot
-- Has full privileges (can manage other groups, view all tasks, access global memory)
+- Has full privileges (can manage other workspaces, view all tasks, access global memory)
 - Doesn't require trigger words (bot responds to all messages)
 - Auto-registered on first message
 
-### Other Groups
-Additional groups you register:
+### Other Workspaces
+Additional workspaces you register:
 - Isolated memory and context
 - Require trigger word by default (e.g., `@Andy`)
 - Can only manage their own tasks
-- Cannot access other groups' data
+- Cannot access other workspaces' data
 
 ## Telegram
 

@@ -1,10 +1,10 @@
 import fs from 'fs';
 import path from 'path';
 
-import { GROUPS_DIR, TRIGGER_PATTERN } from './config.js';
-import { hasGroupWithFolder, setRegisteredGroup } from './db.js';
+import { WORKSPACES_DIR, TRIGGER_PATTERN } from './config.js';
+import { hasWorkspaceWithFolder, setRegisteredWorkspace } from './db.js';
 import { logger } from './logger.js';
-import { RegisteredGroup } from './types.js';
+import { RegisteredWorkspace } from './types.js';
 
 export interface AutoRegistrationResult {
   registered: boolean;
@@ -12,36 +12,36 @@ export interface AutoRegistrationResult {
 }
 
 /**
- * Check if the 'main' group already exists.
+ * Check if the 'main' workspace already exists.
  * 
- * @returns true if main group is registered, false otherwise
+ * @returns true if main workspace is registered, false otherwise
  */
-export function hasMainGroup(): boolean {
-  return hasGroupWithFolder('main');
+export function hasMainWorkspace(): boolean {
+  return hasWorkspaceWithFolder('main');
 }
 
 /**
- * Initialize the main group folder structure and files.
+ * Initialize the main workspace folder structure and files.
  * Creates:
- * - groups/main/dna/
- * - groups/main/workspace/ (screenshots, reports, tasks, downloads)
- * - groups/main/uploads/
- * - groups/main/logs/
- * - groups/main/conversations/
- * - groups/main/dna/AGENTS.md
- * - groups/global/dna/AGENTS.md (if not exists)
+ * - workspaces/main/dna/
+ * - workspaces/main/workspace/ (screenshots, reports, tasks, downloads)
+ * - workspaces/main/uploads/
+ * - workspaces/main/logs/
+ * - workspaces/main/conversations/
+ * - workspaces/main/dna/AGENTS.md
+ * - workspaces/global/dna/AGENTS.md (if not exists)
  * 
- * @param groupFolder - The folder name (always 'main' for auto-registration)
+ * @param workspaceFolder - The folder name (always 'main' for auto-registration)
  */
-export function initializeGroupFolders(groupFolder: string): void {
-  const groupPath = path.join(GROUPS_DIR, groupFolder);
-  const dnaPath = path.join(groupPath, 'dna');
-  const workspacePath = path.join(groupPath, 'workspace');
-  const logsPath = path.join(groupPath, 'logs');
-  const conversationsPath = path.join(groupPath, 'conversations');
-  const uploadsPath = path.join(groupPath, 'uploads');
+export function initializeWorkspaceFolders(workspaceFolder: string): void {
+  const wsRootPath = path.join(WORKSPACES_DIR, workspaceFolder);
+  const dnaPath = path.join(wsRootPath, 'dna');
+  const workspacePath = path.join(wsRootPath, 'workspace');
+  const logsPath = path.join(wsRootPath, 'logs');
+  const conversationsPath = path.join(wsRootPath, 'conversations');
+  const uploadsPath = path.join(wsRootPath, 'uploads');
   const agentsPath = path.join(dnaPath, 'AGENTS.md');
-  const globalDnaPath = path.join(GROUPS_DIR, 'global', 'dna');
+  const globalDnaPath = path.join(WORKSPACES_DIR, 'global', 'dna');
   const globalAgentsPath = path.join(globalDnaPath, 'AGENTS.md');
 
   // Create folder structure
@@ -81,7 +81,7 @@ This is your personal chat memory. You can store information here that you want 
   if (!fs.existsSync(globalAgentsPath)) {
     const globalTemplate = `# Global Memory
 
-This memory is shared across all groups. Store general knowledge and capabilities here.
+This memory is shared across all workspaces. Store general knowledge and capabilities here.
 
 ## Available Skills
 
@@ -93,17 +93,17 @@ Skills are located in \`.opencode/skills/\`. To use a skill, read its SKILL.md f
 - File reading and writing
 - Code analysis and generation
 - Task scheduling
-- Multi-group management
+- Multi-workspace management
 `;
     fs.writeFileSync(globalAgentsPath, globalTemplate, 'utf-8');
   }
 }
 
 /**
- * Attempt to auto-register a chat as the 'main' group.
+ * Attempt to auto-register a chat as the 'main' workspace.
  * 
  * @param chatJid - The JID of the chat attempting to register
- * @param chatName - The name of the chat (user name for private, group name for groups)
+ * @param chatName - The name of the chat (user name for private, workspace name for workspaces)
  * @param isPrivateChat - Whether this is a private/DM chat
  * @returns Result indicating whether registration occurred
  */
@@ -112,26 +112,26 @@ export function attemptAutoRegistration(
   chatName: string,
   isPrivateChat: boolean,
 ): AutoRegistrationResult {
-  // Check if main group already exists
-  if (hasMainGroup()) {
+  // Check if main workspace already exists
+  if (hasMainWorkspace()) {
     return { registered: false, reason: 'already_exists' };
   }
 
-  // Auto-register this chat as main
-  const group: RegisteredGroup = {
+  // Auto-register this chat as main workspace
+  const workspace: RegisteredWorkspace = {
     name: chatName || chatJid, // Fallback to JID if name is empty
     folder: 'main',
     trigger: TRIGGER_PATTERN.source,
     added_at: new Date().toISOString(),
-    requiresTrigger: false, // Main group doesn't need @mentions
+    requiresTrigger: false, // Main workspace doesn't need @mentions
   };
 
   try {
     // Initialize folder structure first
-    initializeGroupFolders('main');
+    initializeWorkspaceFolders('main');
 
     // Register in database
-    setRegisteredGroup(chatJid, group);
+    setRegisteredWorkspace(chatJid, workspace);
 
     return { registered: true, reason: 'registered' };
   } catch (error) {

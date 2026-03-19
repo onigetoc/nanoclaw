@@ -7,7 +7,7 @@ import { logger } from './logger.js';
 import { runContainerAgent, shouldUseDirectMode } from './container-runner.js';
 import { runDirectAgent } from './direct-runner.js';
 import type { ContainerInput, ContainerOutput } from './container-runner.js';
-import type { RegisteredGroup } from './types.js';
+import type { RegisteredWorkspace } from './types.js';
 
 interface RetryConfig {
   maxRetries: number;
@@ -30,7 +30,7 @@ const DEFAULT_RETRY_CONFIG: RetryConfig = {
  */
 export async function executeAgentWithRetry(
   input: ContainerInput,
-  group: RegisteredGroup,
+  workspace: RegisteredWorkspace,
   onProcess: (proc: ChildProcess, processName: string) => void,
   config: Partial<RetryConfig> = {},
 ): Promise<ContainerOutput> {
@@ -46,19 +46,19 @@ export async function executeAgentWithRetry(
     
     try {
       logger.info(
-        { attempt, maxRetries: retryConfig.maxRetries, group: group.name },
+        { attempt, maxRetries: retryConfig.maxRetries, workspace: workspace.name },
         'Executing agent',
       );
       
       const result = useDirectMode
-        ? await runDirectAgent(group, input, onProcess)
-        : await runContainerAgent(group, input, onProcess);
+        ? await runDirectAgent(workspace, input, onProcess)
+        : await runContainerAgent(workspace, input, onProcess);
       
       // Success!
       if (result.status === 'success') {
         if (attempt > 1) {
           logger.info(
-            { attempt, group: group.name },
+            { attempt, workspace: workspace.name },
             'Agent execution succeeded after retry',
           );
         }
@@ -68,14 +68,14 @@ export async function executeAgentWithRetry(
       // Got a result but it's an error
       lastError = new Error(result.error || 'Unknown error');
       logger.warn(
-        { attempt, error: result.error, group: group.name },
+        { attempt, error: result.error, workspace: workspace.name },
         'Agent execution failed',
       );
       
     } catch (error) {
       lastError = error as Error;
       logger.error(
-        { attempt, error: (error as Error).message, group: group.name },
+        { attempt, error: (error as Error).message, workspace: workspace.name },
         'Agent execution threw exception',
       );
     }
@@ -84,7 +84,7 @@ export async function executeAgentWithRetry(
     if (attempt < retryConfig.maxRetries) {
       const waitMs = retryConfig.backoffMs * Math.pow(2, attempt - 1);
       logger.info(
-        { attempt, waitMs, group: group.name },
+        { attempt, waitMs, workspace: workspace.name },
         'Waiting before retry',
       );
       await sleep(waitMs);
@@ -93,7 +93,7 @@ export async function executeAgentWithRetry(
   
   // All retries exhausted
   logger.error(
-    { attempts: attempt, group: group.name, lastError: lastError?.message },
+    { attempts: attempt, workspace: workspace.name, lastError: lastError?.message },
     'Agent execution failed after all retries',
   );
   

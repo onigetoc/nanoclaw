@@ -26,7 +26,7 @@ EureClaw is a partnership between two components:
 - **Security** - Container isolation, filesystem sandboxing
 - **Process management** - Message queues, task scheduling
 - **Channel connectivity** - WhatsApp, Telegram integration
-- **State persistence** - SQLite database, group memory
+- **State persistence** - SQLite database, workspace memory
 - **User registration** - Auto-discovery of new chats
 
 Think of EureClaw as the secure shell that lets OpenCode safely interact with your digital life.
@@ -117,7 +117,7 @@ Then run `/setup`. OpenCode handles everything: dependencies, authentication, co
 
 **Windows Users:** See the [Windows Setup Guide](docs/WINDOWS-SETUP.md) for platform-specific instructions. You'll need to install OpenCode manually: `npm install -g opencode-ai`
 
-**Auto-Registration**: After setup, just send your first message to the bot on any channel (WhatsApp, Telegram). That chat will automatically be registered as your 'main' group—no manual JID entry or configuration scripts needed. The bot responds immediately.
+**Auto-Registration**: After setup, just send your first message to the bot on any channel (WhatsApp, Telegram). That chat will automatically be registered as your 'main' workspace—no manual JID entry or configuration scripts needed. The bot responds immediately.
 
 ## Philosophy
 
@@ -138,8 +138,8 @@ Then run `/setup`. OpenCode handles everything: dependencies, authentication, co
 ## What It Supports
 
 - **WhatsApp I/O** - Message OpenCode from your phone
-- **Isolated group context** - Each group has its own `AGENTS.md` memory, isolated filesystem, and runs in its own container sandbox with only that filesystem mounted
-- **Main channel** - Your private channel (self-chat) for admin control; every other group is completely isolated
+- **Isolated workspace context** - Each workspace has its own `AGENTS.md` memory, isolated filesystem, and runs in its own container sandbox with only that filesystem mounted
+- **Main channel** - Your private channel (self-chat) for admin control; every other workspace is completely isolated
 - **Scheduled tasks** - Recurring jobs that run OpenCode and can message you back
 - **Web access** - Search and fetch content
 - **Container isolation** - Agents sandboxed in Apple Container (macOS) or Docker (macOS/Linux)
@@ -157,7 +157,7 @@ Then run `/setup`. OpenCode handles everything: dependencies, authentication, co
 3. Start EureClaw: `npm start` (automatically checks and installs OpenCode if needed)
 4. Send your first message to the bot on any channel
 
-**That's it.** Your first message automatically registers that chat as your 'main' group. No manual JID entry, no configuration scripts. The bot responds immediately and you're ready to go.
+**That's it.** Your first message automatically registers that chat as your 'main' workspace. No manual JID entry, no configuration scripts. The bot responds immediately and you're ready to go.
 
 **Note:** The `npm start` command now automatically:
 - Checks if npm is installed
@@ -170,15 +170,15 @@ If you prefer to manage OpenCode manually, use `npm run start:simple` instead.
 
 ### How Auto-Registration Works
 
-- The first chat to send a message becomes your 'main' group
+- The first chat to send a message becomes your 'main' workspace
 - Works with private chats (DMs) or group chats
-- Creates the necessary folder structure (`groups/main/`) automatically
+- Creates the necessary folder structure (`workspaces/main/`) automatically
 - Sets up memory files (`AGENTS.md`) for context persistence
-- Main group doesn't require trigger words (messages are processed directly)
+- Main workspace doesn't require trigger words (messages are processed directly)
 
 ### Manual Registration (Optional)
 
-For advanced users who want to register additional groups or have specific setup needs, manual registration is still available:
+For advanced users who want to register additional workspaces or have specific setup needs, manual registration is still available:
 
 - Use the `register-chat.js` script with a specific JID
 - Send IPC commands for programmatic registration
@@ -196,11 +196,11 @@ Talk to your assistant with the trigger word (default: `@Andy`):
 @Andy every Monday at 8am, compile news on AI developments from Hacker News and TechCrunch and message me a briefing
 ```
 
-From the main channel (your self-chat), you can manage groups and tasks:
+From the main channel (your self-chat), you can manage workspaces and tasks:
 ```
-@Andy list all scheduled tasks across groups
+@Andy list all scheduled tasks across workspaces
 @Andy pause the Monday briefing task
-@Andy join the Family Chat group
+@Andy join the Family Chat workspace
 ```
 
 ### Slash Commands
@@ -325,12 +325,12 @@ Key files:
 - `src/channels/telegram.ts` - Telegram channel implementation (optional)
 - `src/ipc.ts` - IPC watcher and task processing
 - `src/router.ts` - Message formatting and outbound routing
-- `src/group-queue.ts` - Per-group queue with global concurrency limit
+- `src/workspace-queue.ts` - Per-workspace queue with global concurrency limit
 - `src/container-runner.ts` - Spawns streaming agent containers with OpenCode SDK
 - `src/task-scheduler.ts` - Runs scheduled tasks
-- `src/db.ts` - SQLite operations (messages, groups, sessions, state)
-- `groups/*/dna/AGENTS.md` - Per-group memory and context
-- `groups/*/workspace/` - Agent-generated content (screenshots, reports, downloads)
+- `src/db.ts` - SQLite operations (messages, workspaces, sessions, state)
+- `workspaces/*/dna/AGENTS.md` - Per-workspace memory and context
+- `workspaces/*/workspace/` - Agent-generated content (screenshots, reports, downloads)
 
 ## Environment Variables
 
@@ -357,7 +357,7 @@ opencode auth login
 ```
 
 **Note on Chat Registration:**
-After configuring your environment and starting EureClaw, simply send your first message to the bot. That chat will automatically be registered as your 'main' group—no manual JID entry required.
+After configuring your environment and starting EureClaw, simply send your first message to the bot. That chat will automatically be registered as your 'main' workspace—no manual JID entry required.
 
 See `.env.example` for a template configuration file.
 

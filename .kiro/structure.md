@@ -15,14 +15,14 @@ eureclaw/
 │   ├── ipc.ts             # Inter-process communication
 │   ├── container-runner.ts # Container spawning and management
 │   ├── task-scheduler.ts  # Scheduled task execution
-│   ├── group-queue.ts     # Message queue per group
+│   ├── workspace-queue.ts     # Message queue per workspace
 │   └── types.ts           # TypeScript type definitions
 ├── container/
 │   ├── agent-runner/      # Agent SDK wrapper
 │   ├── Dockerfile         # Container image definition
 │   └── build.sh           # Container build script
-├── groups/                # Per-group isolated contexts
-│   ├── main/              # Main control group
+├── workspaces/            # Per-workspace isolated contexts
+│   ├── main/              # Main control workspace
 │   └── global/            # Global shared context
 └── .kiro/
     ├── steering/          # Coding standards and guidelines
@@ -42,13 +42,13 @@ All messaging platforms implement the `Channel` interface:
 ### Message Flow
 1. Channel receives message → stores in SQLite
 2. Message loop polls for new messages
-3. Queue manages per-group processing
+3. Queue manages per-workspace processing
 4. Container spawns with isolated filesystem
 5. Agent processes and responds
 6. Response routes back through channel
 
-### Group Isolation
-Each group has:
+### Workspace Isolation
+Each workspace has:
 - Isolated filesystem mount
 - Separate AGENTS.md memory
 - Independent message queue

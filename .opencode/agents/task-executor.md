@@ -1,5 +1,5 @@
 ---
-description: Executes task plans from groups/{group}/tasks/
+description: Executes task plans from workspaces/{workspace}/tasks/
 mode: subagent
 model: google/gemini-3.1-flash-lite-preview
 temperature: 0.1
@@ -12,7 +12,7 @@ tools:
   bash: true
 permission:
   edit:
-    'groups/{context:group_name}/tasks/*.md': allow
+    'workspaces/{context:workspace_name}/tasks/*.md': allow
     '*': allow
 ---
 
@@ -28,17 +28,17 @@ You must mark each task as completed when done.
 
 ---
 
-## Group Context (CRITICAL)
+## Workspace Context (CRITICAL)
 
-The orchestrator passes the current group as `[GROUP: {name}]` at the start of the prompt.
+The orchestrator passes the current workspace as `[WORKSPACE: {name}]` at the start of the prompt.
 
-**You MUST use this group name to locate the correct task file.**
+**You MUST use this workspace name to locate the correct task file.**
 
-Example: If prompt is `[GROUP: personal] Execute groups/personal/tasks/add-auth.md`
-- Read the task file from: `groups/personal/tasks/add-auth.md`
-- All file operations should stay within the correct group context
+Example: If prompt is `[WORKSPACE: personal] Execute workspaces/personal/tasks/add-auth.md`
+- Read the task file from: `workspaces/personal/tasks/add-auth.md`
+- All file operations should stay within the correct workspace context
 
-If NO `[GROUP: ...]` prefix is found, check the Runtime Environment for "Current group folder" and use that.
+If NO `[WORKSPACE: ...]` prefix is found, check the Runtime Environment for "Current workspace folder" and use that.
 
 ---
 

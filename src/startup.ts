@@ -6,21 +6,21 @@ import os from 'os';
 import path from 'path';
 import fs from 'fs';
 
-import { ASSISTANT_NAME, DATA_DIR, TELEGRAM_ONLY, MAIN_GROUP_FOLDER } from './config.js';
+import { ASSISTANT_NAME, DATA_DIR, TELEGRAM_ONLY, MAIN_WORKSPACE_FOLDER } from './config.js';
 import { readEnvFile } from './env.js';
 import './channels/index.js'; // Triggers self-registration of all channels
 import { getRegisteredChannelNames, getChannelFactory } from './channels/registry.js';
-import { writeGroupsSnapshot } from './container-runner.js';
+import { writeWorkspacesSnapshot } from './container-runner.js';
 import {
   initDatabase,
   storeMessage,
   storeChatMetadata,
   storeMessageDirect,
 } from './db.js';
-import { GroupQueue } from './group-queue.js';
+import { WorkspaceQueue } from './workspace-queue.js';
 import { startIpcWatcher } from './ipc.js';
 import { findChannel, formatOutbound, sendDeduped } from './router.js';
-import { startSchedulerLoop } from './task-scheduler.js';
+import { startSchedulerLoop, triggerTaskNow } from './task-scheduler.js';
 import { NewMessage, Channel } from './types.js';
 import { logger } from './logger.js';
 import { attemptAutoRegistration } from './auto-registration.js';
@@ -47,26 +47,28 @@ import {
 import { initMonitoring } from './monitoring.js';
 import {
   loadState,
-  getRegisteredGroups,
+  getRegisteredWorkspaces,
   getSessions,
-  reloadRegisteredGroups,
+  reloadRegisteredWorkspaces,
   setLastAgentTimestampForJid,
   saveState,
 } from './state.js';
 import {
-  registerGroup,
-  getAvailableGroups,
+  registerWorkspace,
+  getAvailableWorkspaces,
   isPrivateChat,
-} from './group-manager.js';
+} from './workspace-manager.js';
 import {
   startApiServer,
   stopApiServer,
   setSendMessageFunction,
   setProcessApiMessageFn,
+  setQueueRef,
   broadcastToToken,
   broadcastStatus,
 } from './api-server.js';
-import { processGroupMessages } from './message-processor.js';
+import { setTriggerTaskFunction } from './api-tasks-routes.js';
+import { processWorkspaceMessages } from './message-processor.js';
 import { startMessageLoop, recoverPendingMessages } from './message-loop.js';
 
 export function ensureContainerSystemRunning(): void {
@@ -411,7 +413,7 @@ export async function main(): Promise<void> {
   logger.info({ isSleeping: isSleeping() }, 'Sleep state loaded');
 
   let channels: Channel[] = [];
-  const queue = new GroupQueue();
+  const queue = new WorkspaceQueue();
 
   // Wire queue status broadcasts to web UI
   queue.setStatusCallback((chatJid, status, detail) => {
@@ -449,26 +451,26 @@ export async function main(): Promise<void> {
   // Channel callbacks
   const channelOpts = {
     onMessage: async (chatJid: string, msg: NewMessage) => {
-      let registeredGroups = getRegisteredGroups();
-      let group = registeredGroups[chatJid];
+      let registeredWorkspaces = getRegisteredWorkspaces();
+      let workspace = registeredWorkspaces[chatJid];
 
-      if (!group) {
+      if (!workspace) {
         const chatName = msg.sender_name || chatJid;
         const isPrivate = msg.is_private_chat ?? isPrivateChat(chatJid);
         const result = attemptAutoRegistration(chatJid, chatName, isPrivate);
 
         if (result.registered) {
-          reloadRegisteredGroups();
-          registeredGroups = getRegisteredGroups();
-          group = registeredGroups[chatJid];
+          reloadRegisteredWorkspaces();
+          registeredWorkspaces = getRegisteredWorkspaces();
+          workspace = registeredWorkspaces[chatJid];
           logger.info(
             { jid: chatJid, name: chatName, isPrivate, folder: 'main' },
-            'Auto-registered chat as main group',
+            'Auto-registered chat as main workspace',
           );
         } else if (result.reason === 'already_exists') {
           logger.debug(
             { jid: chatJid, reason: result.reason },
-            'Auto-registration skipped: main group already exists',
+            'Auto-registration skipped: main workspace already exists',
           );
         } else if (result.reason === 'not_eligible') {
           logger.error(
@@ -479,9 +481,9 @@ export async function main(): Promise<void> {
       }
 
       // --- Security Layer: Rate Limiting ---
-      if (isSecurityEnabled() && group) {
-        const isMain = group.folder === MAIN_GROUP_FOLDER;
-        const customThreshold = group.containerConfig?.timeout ? undefined : undefined; // future: per-group threshold
+      if (isSecurityEnabled() && workspace) {
+        const isMain = workspace.folder === MAIN_WORKSPACE_FOLDER;
+        const customThreshold = workspace.containerConfig?.timeout ? undefined : undefined; // future: per-workspace threshold
         const rateResult = checkRateLimit(chatJid, isMain, customThreshold);
         if (!rateResult.allowed) {
           const waitSec = Math.ceil(rateResult.retryAfterMs / 1000);
@@ -493,7 +495,7 @@ export async function main(): Promise<void> {
 
       // --- Security Layer: Input Scanning ---
       if (isSecurityEnabled()) {
-        const scanResult = scanInput(msg.content, chatJid, group?.folder ?? 'unknown');
+        const scanResult = scanInput(msg.content, chatJid, workspace?.folder ?? 'unknown');
         if (scanResult.action === 'blocked') {
           const ch = findChannel(channels, chatJid);
           if (ch) await ch.sendMessage(chatJid, '⚠️ Your message was blocked by the security filter.');
@@ -509,7 +511,7 @@ export async function main(): Promise<void> {
         chatJid,
         senderName: msg.sender_name,
         senderId: msg.sender,
-        group,
+        group: workspace,
       });
 
       if (commandResult) {
@@ -627,7 +629,7 @@ export async function main(): Promise<void> {
         saveState();
 
         // Handle side effects (e.g. /new session creation) — shared across all channels
-        await handleCommandSideEffects(commandResult, chatJid, group);
+        await handleCommandSideEffects(commandResult, chatJid, workspace, queue);
 
         if (commandResult.reply) {
           const channel = findChannel(channels, chatJid);
@@ -691,7 +693,7 @@ export async function main(): Promise<void> {
     },
     onChatMetadata: (chatJid: string, timestamp: string, name?: string) =>
       storeChatMetadata(chatJid, timestamp, name),
-    registeredGroups: () => getRegisteredGroups(),
+    registeredWorkspaces: () => getRegisteredWorkspaces(),
   };
 
   // Load secrets and set API keys in env
@@ -757,7 +759,7 @@ export async function main(): Promise<void> {
   });
 
   // Trigger message processing when API receives a message
-  // web: JIDs (e.g. web:main) are registered natively in registered_groups,
+  // web: JIDs (e.g. web:main) are registered natively in registered_workspaces,
   // so the pipeline handles them like any other channel JID.
   setProcessApiMessageFn((jid: string, model?: string, agent?: string) => {
     // Store model/agent preferences for this JID temporarily
@@ -769,18 +771,21 @@ export async function main(): Promise<void> {
     }
   });
 
+  // Give the API server access to the queue for /new reset
+  setQueueRef(queue);
+
   const apiPort = await startApiServer();
   console.log(`\n🌐 API Server: http://127.0.0.1:${apiPort}\n`);
 
   // Start subsystems
   startSchedulerLoop({
-    registeredGroups: () => getRegisteredGroups(),
+    registeredWorkspaces: () => getRegisteredWorkspaces(),
     getSessions: () => getSessions(),
     queue,
-    onProcess: (groupJid, proc, containerName, groupFolder) =>
-      queue.registerProcess(groupJid, proc, containerName, groupFolder),
+    onProcess: (workspaceJid, proc, containerName, workspaceFolder) =>
+      queue.registerProcess(workspaceJid, proc, containerName, workspaceFolder),
     sendMessage: async (jid, rawText) => {
-      const text = formatOutbound(rawText);
+      const text = formatOutbound(rawText, jid);
       if (!text) return;
 
       const isWebUI = jid.startsWith('web:');
@@ -825,8 +830,13 @@ export async function main(): Promise<void> {
     },
   });
 
+  // Wire up the trigger function so the web UI can trigger tasks immediately
+  setTriggerTaskFunction(triggerTaskNow);
+
   startIpcWatcher({
-    sendMessage: async (jid, text) => {
+    sendMessage: async (jid, rawText) => {
+      const text = formatOutbound(rawText, jid);
+      if (!text) return;
       const channel = findChannel(channels, jid);
       let wasSent = false;
       if (channel) {
@@ -878,19 +888,19 @@ export async function main(): Promise<void> {
         );
       }
     },
-    registeredGroups: () => getRegisteredGroups(),
-    registerGroup,
-    syncGroupMetadata: (force) => {
-      const ch = channels.find((c) => typeof c.syncGroups === 'function');
-      return ch?.syncGroups?.(force) ?? Promise.resolve();
+    registeredWorkspaces: () => getRegisteredWorkspaces(),
+    registerWorkspace: registerWorkspace,
+    syncWorkspaceMetadata: (force) => {
+      const ch = channels.find((c) => typeof c.syncWorkspaces === 'function');
+      return ch?.syncWorkspaces?.(force) ?? Promise.resolve();
     },
-    getAvailableGroups,
-    writeGroupsSnapshot: (gf, im, ag, rj) =>
-      writeGroupsSnapshot(gf, im, ag, rj),
+    getAvailableWorkspaces: getAvailableWorkspaces,
+    writeWorkspacesSnapshot: (gf, im, ag, rj) =>
+      writeWorkspacesSnapshot(gf, im, ag, rj),
   });
 
   queue.setProcessMessagesFn((chatJid) =>
-    processGroupMessages(chatJid, queue, channels),
+    processWorkspaceMessages(chatJid, queue, channels),
   );
   recoverPendingMessages(queue);
   startMessageLoop(queue, channels, ASSISTANT_NAME);

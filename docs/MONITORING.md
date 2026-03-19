@@ -216,7 +216,7 @@ const stats = await use_mcp_tool('show_execution_stats', {});
 
 Le système de monitoring complète les logs existants :
 
-- **Logs d'exécution** (`groups/{group}/logs/`) - Logs détaillés de chaque exécution
+- **Logs d'exécution** (`workspaces/{workspace}/logs/`) - Logs détaillés de chaque exécution
 - **Logs de monitoring** (`data/monitoring/`) - Métadonnées et statistiques
 - **Logs système** (stdout/stderr) - Logs structurés avec pino
 
@@ -261,4 +261,4 @@ Pour ajouter de nouvelles métriques :
 1. Ajoutez les champs dans `AgentExecution` (`src/monitoring.ts`)
 2. Mettez à jour `writeSystemStatus()` dans `src/monitoring-writer.ts`
 3. Ajoutez l'affichage dans les outils MCP (`container/agent-runner/src/ipc-mcp-stdio.ts`)
-4. Mettez à jour la documentation dans `groups/global/dna/TOOLS.md`
+4. Mettez à jour la documentation dans `workspaces/global/dna/TOOLS.md`

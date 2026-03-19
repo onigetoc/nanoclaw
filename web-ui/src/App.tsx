@@ -322,7 +322,7 @@ function App() {
       const attachMode = mode || 'analyze';
 
       if (attachMode === 'transfer') {
-        // File Transfer mode — save all files to group uploads
+        // File Transfer mode — save all files to workspace uploads
         try {
           const uploadResult = await apiService.uploadFiles(state.selectedChat.jid, fileAttachments);
           for (const f of uploadResult.files) {
@@ -575,7 +575,7 @@ function App() {
         </main>
 
         {settings.debugPanel && state.selectedChat && (
-          <DebugPanel messages={state.messages} onClose={() => updateSetting('debugPanel', false)} isDark={isDark} chatFolder={state.selectedChat?.groupInfo?.folder} />
+          <DebugPanel messages={state.messages} onClose={() => updateSetting('debugPanel', false)} isDark={isDark} chatFolder={state.selectedChat?.workspaceInfo?.folder} />
         )}
       </div>
     </div>

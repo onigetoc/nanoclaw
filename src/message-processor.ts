@@ -1,17 +1,17 @@
 /**
- * Message processing: runs the agent for a group and handles output streaming.
+ * Message processing: runs the agent for a workspace and handles output streaming.
  */
 import {
   ASSISTANT_NAME,
   IDLE_TIMEOUT,
-  MAIN_GROUP_FOLDER,
+  MAIN_WORKSPACE_FOLDER,
   TRIGGER_PATTERN,
 } from './config.js';
 import {
   ContainerOutput,
   runContainerAgent,
   shouldUseDirectMode,
-  writeGroupsSnapshot,
+  writeWorkspacesSnapshot,
   writeTasksSnapshot,
 } from './container-runner.js';
 import { runDirectAgent } from './direct-runner.js';
@@ -21,7 +21,7 @@ import {
   getMessagesSinceLinked,
   storeMessageDirect,
 } from './db.js';
-import { GroupQueue } from './group-queue.js';
+import { WorkspaceQueue } from './workspace-queue.js';
 import {
   findChannel,
   formatMessages,
@@ -29,15 +29,15 @@ import {
   isDuplicate,
 } from './router.js';
 import {
-  getRegisteredGroups,
+  getRegisteredWorkspaces,
   getSessions,
   getLastAgentTimestampForJid,
   setLastAgentTimestampForJid,
-  setGroupSession,
+  setWorkspaceSession,
   saveState,
 } from './state.js';
-import { getAvailableGroups } from './group-manager.js';
-import { RegisteredGroup, Channel } from './types.js';
+import { getAvailableWorkspaces } from './workspace-manager.js';
+import { RegisteredWorkspace, Channel } from './types.js';
 import { logger } from './logger.js';
 import { redactOutput } from './security/index.js';
 import { ensureServerHealthy } from './opencode-server.js';
@@ -45,21 +45,21 @@ import { getMonitoring } from './monitoring.js';
 import { broadcastToToken, broadcastStatus } from './api-server.js';
 
 /**
- * Process all pending messages for a group.
- * Called by the GroupQueue when it's this group's turn.
+ * Process all pending messages for a workspace.
+ * Called by the WorkspaceQueue when it's this workspace's turn.
  */
-export async function processGroupMessages(
+export async function processWorkspaceMessages(
   chatJid: string,
-  queue: GroupQueue,
+  queue: WorkspaceQueue,
   channels: Channel[],
 ): Promise<boolean> {
-  const registeredGroups = getRegisteredGroups();
-  const group = registeredGroups[chatJid];
-  if (!group) return true;
+  const registeredWorkspaces = getRegisteredWorkspaces();
+  const workspace = registeredWorkspaces[chatJid];
+  if (!workspace) return true;
 
-  const isMainGroup = group.folder === MAIN_GROUP_FOLDER;
+  const isMainWorkspace = workspace.folder === MAIN_WORKSPACE_FOLDER;
   const sessions = getSessions();
-  const sessionId = sessions[group.folder];
+  const sessionId = sessions[workspace.folder];
 
   const sinceTimestamp = getLastAgentTimestampForJid(chatJid);
 
@@ -69,8 +69,8 @@ export async function processGroupMessages(
 
   if (missedMessages.length === 0) return true;
 
-  // For non-main groups, check if trigger is required and present
-  if (!isMainGroup && group.requiresTrigger !== false) {
+  // For non-main workspaces, check if trigger is required and present
+  if (!isMainWorkspace && workspace.requiresTrigger !== false) {
     const hasTrigger = missedMessages.some((m) =>
       TRIGGER_PATTERN.test(m.content.trim()),
     );
@@ -90,7 +90,7 @@ export async function processGroupMessages(
   saveState();
 
   logger.info(
-    { group: group.name, messageCount: missedMessages.length, model: preferences?.model, agent: preferences?.agent },
+    { workspace: workspace.name, messageCount: missedMessages.length, model: preferences?.model, agent: preferences?.agent },
     'Processing messages',
   );
 
@@ -99,8 +99,8 @@ export async function processGroupMessages(
 
   const monitoring = getMonitoring();
   const executionId = monitoring.startExecution({
-    groupName: group.name,
-    groupFolder: group.folder,
+    groupName: workspace.name,
+    groupFolder: workspace.folder,
     chatJid,
     messageCount: missedMessages.length,
     sessionId: sessionId,
@@ -111,7 +111,7 @@ export async function processGroupMessages(
     if (idleTimer) clearTimeout(idleTimer);
     idleTimer = setTimeout(() => {
       logger.debug(
-        { group: group.name },
+        { workspace: workspace.name },
         'Idle timeout, closing container stdin',
       );
       queue.closeStdin(chatJid);
@@ -139,9 +139,10 @@ export async function processGroupMessages(
   await channel.setTyping?.(chatJid, true);
   let hadError = false;
   let lastErrorMessage = '';
+  let actualModel: string | undefined;
 
   let output = await runAgent(
-    group,
+    workspace,
     prompt,
     chatJid,
     queue,
@@ -156,13 +157,17 @@ export async function processGroupMessages(
             : JSON.stringify(result.result);
 
         // Security: redact credentials/PII from agent output
-        const { redacted: redactedRaw } = redactOutput(raw, chatJid, isMainGroup);
+        const { redacted: redactedRaw } = redactOutput(raw, chatJid, isMainWorkspace);
 
         const text = redactedRaw.replace(/<internal>[\s\S]*?<\/internal>/g, '').trim();
         logger.info(
-          { group: group.name },
+          { workspace: workspace.name, model: result.metadata?.modelID, provider: result.metadata?.providerID, agent: result.metadata?.agent },
           `Agent output: ${raw.slice(0, 200)}`,
         );
+        // Track actual model used for monitoring
+        if (result.metadata?.modelID && !actualModel) {
+          actualModel = `${result.metadata.providerID || 'unknown'}/${result.metadata.modelID}`;
+        }
         if (text) {
           const msgMetadata = result.metadata
             ? {
@@ -266,10 +271,10 @@ export async function processGroupMessages(
 
     // Always keep the cursor advanced after showing the error to the user.
     // Rolling back causes infinite retry loops where the same messages keep
-    // failing and the group appears "dead". The user sees the error message
+    // failing and the workspace appears "dead". The user sees the error message
     // and can simply send a new message to retry.
     logger.warn(
-      { group: group.name, error: errorDetail },
+      { workspace: workspace.name, error: errorDetail },
       'Agent error — cursor kept advanced, user notified',
     );
     monitoring.updateExecution(executionId, {
@@ -279,7 +284,7 @@ export async function processGroupMessages(
     return true; // Return true so the queue doesn't retry automatically
   }
 
-  monitoring.updateExecution(executionId, { status: 'completed' });
+  monitoring.updateExecution(executionId, { status: 'completed', model: actualModel });
   return true;
 }
 
@@ -396,25 +401,25 @@ function formatErrorForUser(rawError: string): string {
 }
 
 /**
- * Run the agent (container or direct mode) for a group.
+ * Run the agent (container or direct mode) for a workspace.
  */
 async function runAgent(
-  group: RegisteredGroup,
+  workspace: RegisteredWorkspace,
   prompt: string,
   chatJid: string,
-  queue: GroupQueue,
+  queue: WorkspaceQueue,
   preferences?: { model?: string; agent?: string },
   onOutput?: (output: ContainerOutput) => Promise<void>,
 ): Promise<'success' | 'error'> {
-  const isMain = group.folder === MAIN_GROUP_FOLDER;
+  const isMain = workspace.folder === MAIN_WORKSPACE_FOLDER;
   const sessions = getSessions();
-  const sessionId = sessions[group.folder];
-  const registeredGroups = getRegisteredGroups();
+  const sessionId = sessions[workspace.folder];
+  const registeredWorkspaces = getRegisteredWorkspaces();
 
   const serverOk = await ensureServerHealthy();
   if (!serverOk) {
     logger.error(
-      { group: group.name },
+      { workspace: workspace.name },
       'OpenCode server unreachable, skipping agent run',
     );
     broadcastStatus(chatJid, 'error', 'OpenCode server unreachable');
@@ -432,11 +437,11 @@ async function runAgent(
   // Update tasks snapshot
   const tasks = getAllTasks();
   writeTasksSnapshot(
-    group.folder,
+    workspace.folder,
     isMain,
     tasks.map((t) => ({
       id: t.id,
-      groupFolder: t.group_folder,
+      workspaceFolder: t.workspace_folder,
       prompt: t.prompt,
       schedule_type: t.schedule_type,
       schedule_value: t.schedule_value,
@@ -445,26 +450,26 @@ async function runAgent(
     })),
   );
 
-  // Update available groups snapshot
-  const availableGroups = getAvailableGroups();
-  writeGroupsSnapshot(
-    group.folder,
+  // Update available workspaces snapshot
+  const availableWorkspaces = getAvailableWorkspaces();
+  writeWorkspacesSnapshot(
+    workspace.folder,
     isMain,
-    availableGroups,
-    new Set(Object.keys(registeredGroups)),
+    availableWorkspaces,
+    new Set(Object.keys(registeredWorkspaces)),
   );
 
   const wrappedOnOutput = onOutput
     ? async (output: ContainerOutput) => {
         if (output.newSessionId) {
           // Only update session if it wasn't changed externally (e.g. by /new).
-          const currentInState = getSessions()[group.folder];
+          const currentInState = getSessions()[workspace.folder];
           if (
             !currentInState ||
             currentInState === sessionId ||
             currentInState === output.newSessionId
           ) {
-            setGroupSession(group.folder, output.newSessionId);
+            setWorkspaceSession(workspace.folder, output.newSessionId);
           }
         }
         await onOutput(output);
@@ -479,11 +484,11 @@ async function runAgent(
     broadcastStatus(chatJid, 'connecting', 'Starting agent…');
 
     const output = await runAgentFn(
-      group,
+      workspace,
       {
         prompt,
         sessionId,
-        groupFolder: group.folder,
+        workspaceFolder: workspace.folder,
         chatJid,
         isMain,
         forceNewSession: !sessionId || sessionId === '',
@@ -491,7 +496,7 @@ async function runAgent(
         agent: preferences?.agent,
       },
       (proc, containerName) => {
-        queue.registerProcess(chatJid, proc, containerName, group.folder);
+        queue.registerProcess(chatJid, proc, containerName, workspace.folder);
         broadcastStatus(chatJid, 'waiting', 'Waiting for model response…');
       },
       wrappedOnOutput,
@@ -501,19 +506,19 @@ async function runAgent(
     queue.clearMessagePreferences(chatJid);
 
     if (output.newSessionId) {
-      const currentInState = getSessions()[group.folder];
+      const currentInState = getSessions()[workspace.folder];
       if (
         !currentInState ||
         currentInState === sessionId ||
         currentInState === output.newSessionId
       ) {
-        setGroupSession(group.folder, output.newSessionId);
+        setWorkspaceSession(workspace.folder, output.newSessionId);
       }
     }
 
     if (output.status === 'error') {
       logger.error(
-        { group: group.name, error: output.error },
+        { workspace: workspace.name, error: output.error },
         'Container agent error',
       );
       if (onOutput && output.error) {
@@ -524,7 +529,7 @@ async function runAgent(
 
     return 'success';
   } catch (err) {
-    logger.error({ group: group.name, err }, 'Agent error');
+    logger.error({ workspace: workspace.name, err }, 'Agent error');
     broadcastStatus(chatJid, 'error', err instanceof Error ? err.message : String(err));
     if (onOutput) {
       const errMsg = err instanceof Error ? err.message : String(err);

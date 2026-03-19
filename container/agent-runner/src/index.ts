@@ -23,7 +23,7 @@ import { sanitizeContextFile } from './context-security.js';
 interface ContainerInput {
   prompt: string;
   sessionId?: string;
-  groupFolder: string;
+  workspaceFolder: string;
   chatJid: string;
   isMain: boolean;
   isScheduledTask?: boolean;
@@ -34,7 +34,7 @@ interface ContainerInput {
   // Direct mode (Windows/Linux): real paths instead of container mount points
   directMode?: {
     ipcDir: string;       // replaces /workspace/ipc
-    groupDir: string;     // replaces /workspace/group
+    workspaceDir: string;     // replaces /workspace/group
     globalDir?: string;   // replaces /workspace/global
     projectDir?: string;  // replaces /workspace/project
   };
@@ -100,7 +100,9 @@ async function createOpencodeClient(
     // Note: Model configuration is passed to the OpenCode server via environment variables,
     // not via SDK client options. The SDK client only needs to know how to connect to the server.
     const client = _createOpencodeClient({
-      baseUrl: baseURL
+      baseUrl: baseURL,
+      timeout: 120_000,   // 2 min per HTTP request (provider-level timeout)
+      maxRetries: 2,      // Retry failed requests up to 2 times
     });
     
     log(`✓ OpenCode client initialized successfully`);
@@ -188,16 +190,16 @@ function getSessionSummary(sessionId: string, transcriptPath: string): string | 
  * 
  * @param client - OpenCode client instance
  * @param sessionId - Session ID to archive
- * @param groupDir - Group directory path for saving archives
+ * @param workspaceDir - Workspace directory path for saving archives
  */
 async function archiveSessionConversation(
   client: any,
   sessionId: string,
-  groupDir: string
+  workspaceDir: string
 ): Promise<void> {
   try {
     log(`Archiving conversation for session ${sessionId}...`);
-    debugLog(`Archive context: sessionId=${sessionId}, groupDir=${groupDir}, timestamp=${new Date().toISOString()}`);
+    debugLog(`Archive context: sessionId=${sessionId}, workspaceDir=${workspaceDir}, timestamp=${new Date().toISOString()}`);
     
     // Fetch all messages from the session using OpenCode SDK
     // Requirement 7.1, 7.2, 7.3: Catch OpenCode SDK errors
@@ -255,7 +257,7 @@ async function archiveSessionConversation(
     
     // Generate filename
     const name = summary ? sanitizeFilename(summary) : generateFallbackName();
-    const conversationsDir = path.join(groupDir, 'conversations');
+    const conversationsDir = path.join(workspaceDir, 'conversations');
     fs.mkdirSync(conversationsDir, { recursive: true });
     
     const date = new Date().toISOString().split('T')[0];
@@ -277,7 +279,7 @@ async function archiveSessionConversation(
     if (errorStack) {
       log(`Stack trace: ${errorStack}`);
     }
-    log(`Context: sessionId=${sessionId}, groupDir=${groupDir}, timestamp=${new Date().toISOString()}`);
+    log(`Context: sessionId=${sessionId}, workspaceDir=${workspaceDir}, timestamp=${new Date().toISOString()}`);
     
     // Don't throw - archiving is non-critical, continue execution
   }
@@ -370,9 +372,9 @@ function detectComplexTask(prompt: string): boolean {
 
 /**
  * Add deterministic path hints for common virtual paths used by users.
- * Example: /tasks/foo.md should resolve to {groupDir}/tasks/foo.md for the current group.
+ * Example: /tasks/foo.md should resolve to {workspaceDir}/tasks/foo.md for the current workspace.
  */
-function applyPathHints(prompt: string, groupDir: string): string {
+function applyPathHints(prompt: string, workspaceDir: string): string {
   const mentionsTasksPath =
     prompt.includes('/tasks/') ||
     prompt.includes('\\tasks\\') ||
@@ -382,13 +384,13 @@ function applyPathHints(prompt: string, groupDir: string): string {
     return prompt;
   }
 
-  const groupTasksPath = path.join(groupDir, 'tasks').replace(/\\/g, '/');
+  const workspaceTasksPath = path.join(workspaceDir, 'tasks').replace(/\\/g, '/');
   const hint = [
     '',
     '[SYSTEM PATH HINT]',
-    `If the user references /tasks/... it maps to ${groupTasksPath}/... for this group.`,
-    'This refers to FILE TASKS (markdown files in group/tasks), not scheduled tasks in IPC/DB.',
-    'When user asks about /tasks files, inspect the filesystem first (group/tasks) before using any scheduled-task tool.',
+    `If the user references /tasks/... it maps to ${workspaceTasksPath}/... for this workspace.`,
+    'This refers to FILE TASKS (markdown files in workspace/tasks), not scheduled tasks in IPC/DB.',
+    'When user asks about /tasks files, inspect the filesystem first (workspace/tasks) before using any scheduled-task tool.',
     'Do not search project root for these task files unless explicitly requested.',
   ].join('\n');
 
@@ -575,14 +577,14 @@ async function runQuery(
   mcpServerPath: string,
   containerInput: ContainerInput,
   sdkEnv: Record<string, string | undefined>,
-  groupDir: string,
+  workspaceDir: string,
   ipcBaseDir: string,
   globalDir: string | undefined,
   resumeAt?: string,
   existingClient?: any,
   contextAlreadyInjected?: boolean
 ): Promise<{ newSessionId?: string; lastAssistantUuid?: string; closedDuringQuery: boolean; client: any; contextInjected: boolean; hadError?: boolean }> {
-  const effectivePrompt = applyPathHints(prompt, groupDir);
+  const effectivePrompt = applyPathHints(prompt, workspaceDir);
 
   // Reuse existing OpenCode client or create a new one
   let client: any;
@@ -641,7 +643,7 @@ async function runQuery(
     if (errorStack) {
       log(`Stack trace: ${errorStack}`);
     }
-    log(`Context: sessionId=${sessionId || 'none'}, groupFolder=${containerInput.groupFolder}`);
+    log(`Context: sessionId=${sessionId || 'none'}, workspaceFolder=${containerInput.workspaceFolder}`);
     
     // Return error via container output protocol (Requirement 7.5)
     writeOutput({
@@ -662,7 +664,7 @@ async function runQuery(
   let resultCount = 0;
   let closedDuringQuery = false;
 
-  // Load global AGENTS.md as additional system context (shared across all groups)
+  // Load global AGENTS.md as additional system context (shared across all workspaces)
   // Check both new structure (dna/) and legacy (root)
   const globalDnaDir = globalDir ? path.join(globalDir, 'dna') : '/workspace/global/dna';
   const globalAgentsMdPath = fs.existsSync(path.join(globalDnaDir, 'AGENTS.md'))
@@ -674,7 +676,7 @@ async function runQuery(
     log(`Loaded global AGENTS.md (${globalAgentsMd.length} chars)`);
   }
 
-  // Load global SECURITY.md for all groups (security instructions for the agent)
+  // Load global SECURITY.md for all workspaces (security instructions for the agent)
   const globalSecurityPath = fs.existsSync(path.join(globalDnaDir, 'SECURITY.md'))
     ? path.join(globalDnaDir, 'SECURITY.md')
     : globalDir ? path.join(globalDir, 'SECURITY.md') : '/workspace/global/SECURITY.md';
@@ -684,37 +686,37 @@ async function runQuery(
     log(`Loaded global SECURITY.md (${globalSecurityMd.length} chars)`);
   }
 
-  // Load group-specific context files (AGENTS.md, GUIDELINES.md, IDENTITY.md, SOUL.md, TOOLS.md)
-  // These files contain group-specific instructions, personality, and capabilities
+  // Load workspace-specific context files (AGENTS.md, GUIDELINES.md, IDENTITY.md, SOUL.md, TOOLS.md)
+  // These files contain workspace-specific instructions, personality, and capabilities
   // Check both new structure (dna/) and legacy (root) for backward compatibility
-  const dnaDir = path.join(groupDir, 'dna');
-  const groupContextFiles = ['AGENTS.md', 'GUIDELINES.md', 'IDENTITY.md', 'SOUL.md', 'TOOLS.md', 'USER.md', 'SECURITY.md'];
-  const groupContexts: string[] = [];
+  const dnaDir = path.join(workspaceDir, 'dna');
+  const workspaceContextFiles = ['AGENTS.md', 'GUIDELINES.md', 'IDENTITY.md', 'SOUL.md', 'TOOLS.md', 'USER.md', 'SECURITY.md'];
+  const workspaceContexts: string[] = [];
   
-  for (const filename of groupContextFiles) {
+  for (const filename of workspaceContextFiles) {
     // Try dna/ first (new structure), then root (legacy)
     const dnaPath = path.join(dnaDir, filename);
-    const legacyPath = path.join(groupDir, filename);
+    const legacyPath = path.join(workspaceDir, filename);
     const filePath = fs.existsSync(dnaPath) ? dnaPath : legacyPath;
     
     if (fs.existsSync(filePath)) {
       const rawContent = fs.readFileSync(filePath, 'utf-8');
       const content = sanitizeContextFile(rawContent, filename);
-      groupContexts.push(`\n## ${filename}\n\n${content}`);
+      workspaceContexts.push(`\n## ${filename}\n\n${content}`);
       log(`Loaded ${filename} from ${filePath.includes('/dna/') ? 'dna/' : 'root'} (${content.length} chars)`);
     } else {
       log(`${filename} not found - skipping`);
     }
   }
   
-  const groupContext = groupContexts.length > 0 ? groupContexts.join('\n\n') : undefined;
+  const workspaceContext = workspaceContexts.length > 0 ? workspaceContexts.join('\n\n') : undefined;
 
-  // Load MEMORY.md for long-term context (main group only)
+  // Load MEMORY.md for long-term context (main workspace only)
   // Check both new structure (dna/) and legacy (root)
   let memoryContext: string | undefined;
   if (containerInput.isMain) {
     const dnaMemoryPath = path.join(dnaDir, 'MEMORY.md');
-    const legacyMemoryPath = path.join(groupDir, 'MEMORY.md');
+    const legacyMemoryPath = path.join(workspaceDir, 'MEMORY.md');
     const memoryPath = fs.existsSync(dnaMemoryPath) ? dnaMemoryPath : legacyMemoryPath;
     
     if (fs.existsSync(memoryPath)) {
@@ -791,9 +793,9 @@ async function runQuery(
   // making EureClaw work on Windows, Linux, and macOS without templates.
   // Requirement 9.3: Generate platform-specific environment context
   const shell = platform === 'win32' ? 'PowerShell/cmd' : 'bash';
-  const groupsBasePath = isDirectMode
-    ? path.join(containerInput.directMode!.projectDir!, 'groups')
-    : '/workspace/project/groups';
+  const workspacesBasePath = isDirectMode
+    ? path.join(containerInput.directMode!.projectDir!, 'workspaces')
+    : '/workspace/project/workspaces';
   const globalMemoryPath = globalDir
     ? path.join(globalDir, 'AGENTS.md')
     : '/workspace/global/AGENTS.md';
@@ -802,23 +804,23 @@ async function runQuery(
     `\n## Runtime Environment`,
     `- Platform: ${platform} (${isDirectMode ? 'direct mode' : 'container mode'})`,
     `- Shell: ${shell}`,
-    `- Current group folder: ${containerInput.groupFolder}`,
-    `- Current group path: groups/${containerInput.groupFolder}/`,
-    `- Is main group: ${containerInput.isMain ? 'yes' : 'no'}`,
-    `- Working directory: ${groupDir}`,
+    `- Current workspace folder: ${containerInput.workspaceFolder}`,
+    `- Current workspace path: workspaces/${containerInput.workspaceFolder}/`,
+    `- Is main workspace: ${containerInput.isMain ? 'yes' : 'no'}`,
+    `- Working directory: ${workspaceDir}`,
     `- SQLite database: ${dbPath}`,
-    `- Groups base directory: ${groupsBasePath}`,
+    `- Workspaces base directory: ${workspacesBasePath}`,
     `- Global memory: ${globalMemoryPath}`,
     `- IPC directory: ${ipcBaseDir}`,
     ``,
     `Use these paths for file operations and database queries.`,
-    `IMPORTANT: When delegating to subagents (Task tool), ALWAYS include the current group folder in the prompt.`,
-    `Example: Task(agent="task-planner", prompt="[GROUP: ${containerInput.groupFolder}] Create a plan to ...")`,
-    `This ensures subagents write files to the correct group workspace (groups/${containerInput.groupFolder}/).`,
+    `IMPORTANT: When delegating to subagents (Task tool), ALWAYS include the current workspace folder in the prompt.`,
+    `Example: Task(agent="task-planner", prompt="[WORKSPACE: ${containerInput.workspaceFolder}] Create a plan to ...")`,
+    `This ensures subagents write files to the correct workspace (workspaces/${containerInput.workspaceFolder}/).`,
     ``,
-    `For group management, prefer MCP tools (mcp__eureclaw__register_group, etc.).`,
-    `IMPORTANT: mcp__eureclaw__list_tasks shows SCHEDULED tasks (alarms/cron), not markdown task files under group/tasks.`,
-    `If the user mentions /tasks/... path or a .md task file, treat it as filesystem task file lookup in group/tasks.`,
+    `For workspace management, prefer MCP tools (mcp__eureclaw__register_workspace, etc.).`,
+    `IMPORTANT: mcp__eureclaw__list_tasks shows SCHEDULED tasks (alarms/cron), not markdown task files under workspace/tasks.`,
+    `If the user mentions /tasks/... path or a .md task file, treat it as filesystem task file lookup in workspace/tasks.`,
   ].join('\n');
 
   // Determine which agent to use.
@@ -893,27 +895,13 @@ async function runQuery(
     log(`🎯 Using ${agentName} agent (${routingReason})`);
   }
 
-  // Load session context (agents and skills available)
-  // This is generated by scripts/generate-session-context.ts
-  let sessionContext = '';
-  try {
-    const sessionContextPath = isDirectMode
-      ? path.join(containerInput.directMode!.projectDir!, '.opencode', 'session-context.md')
-      : '/workspace/project/.opencode/session-context.md';
-    
-    if (fs.existsSync(sessionContextPath)) {
-      sessionContext = fs.readFileSync(sessionContextPath, 'utf-8');
-      log(`Loaded session context (${sessionContext.length} chars)`);
-    } else {
-      log(`⚠ Session context not found at ${sessionContextPath}`);
-    }
-  } catch (err) {
-    log(`⚠ Failed to load session context: ${err instanceof Error ? err.message : String(err)}`);
-  }
+  // Session context removed — agents/skills are discovered dynamically below
 
-  // Discover agents and skills dynamically for orchestrator
+  // Discover agents and skills dynamically for ALL agents
+  // Build agent needs this to answer "list your agents" questions
+  // Orchestrator needs this to delegate to subagents
   let agentsAndSkillsContext = '';
-  if (agentName === 'orchestrator') {
+  {
     try {
       log('🔍 Discovering available agents and skills...');
       
@@ -1036,7 +1024,7 @@ Use the Task tool to invoke agents when appropriate.
   const systemAppend = [
     globalAgentsMd,
     globalSecurityMd,
-    groupContext,
+    workspaceContext,
     memoryContext,
     conversationContext,
     envContext,
@@ -1136,7 +1124,7 @@ Use the Task tool to invoke agents when appropriate.
 
   // Helper: call session.prompt with a timeout (default 10 minutes)
   // Keep this aligned with provider timeout expectations (often 600000 ms).
-  const PROMPT_TIMEOUT_MS = Number(process.env.PROMPT_TIMEOUT_MS || 10 * 60 * 1000);
+  const PROMPT_TIMEOUT_MS = Number(process.env.PROMPT_TIMEOUT_MS || 3 * 60 * 1000);
 
   const modelOverride = parseModelOverride(containerInput.model);
   if (modelOverride) {
@@ -1356,7 +1344,7 @@ Use the Task tool to invoke agents when appropriate.
 
   log(`Query completed successfully`);
   log(`Summary: events=${messageCount}, results=${resultCount}, lastAssistantUuid=${lastAssistantUuid || 'none'}, closedDuringQuery=${closedDuringQuery}`);
-  debugLog(`Query statistics: sessionId=${currentSessionId}, groupFolder=${containerInput.groupFolder}, chatJid=${containerInput.chatJid}, timestamp=${new Date().toISOString()}`);
+  debugLog(`Query statistics: sessionId=${currentSessionId}, workspaceFolder=${containerInput.workspaceFolder}, chatJid=${containerInput.chatJid}, timestamp=${new Date().toISOString()}`);
   
   return { newSessionId, lastAssistantUuid, closedDuringQuery, client, contextInjected, hadError: false };
 }
@@ -1371,7 +1359,7 @@ async function main(): Promise<void> {
     try { fs.unlinkSync('/tmp/input.json'); } catch { /* may not exist */ }
     
     log(`=== EureClaw Agent Runner Started ===`);
-    log(`Group: ${containerInput.groupFolder}, ChatJID: ${containerInput.chatJid}, IsMain: ${containerInput.isMain}`);
+    log(`Workspace: ${containerInput.workspaceFolder}, ChatJID: ${containerInput.chatJid}, IsMain: ${containerInput.isMain}`);
     debugLog(`Container input: sessionId=${containerInput.sessionId || 'none'}, isScheduledTask=${containerInput.isScheduledTask || false}, directMode=${!!containerInput.directMode}`);
   } catch (err) {
     writeOutput({
@@ -1406,17 +1394,17 @@ async function main(): Promise<void> {
   // Direct mode: override hardcoded container paths with real host paths
   // Requirements: 10.2, 10.3, 10.4
   let ipcBaseDir = '/workspace/ipc';
-  let groupDir = '/workspace/group';
+  let workspaceDir = '/workspace/group';
   let globalDir: string | undefined = '/workspace/global';
   if (containerInput.directMode) {
     ipcBaseDir = containerInput.directMode.ipcDir;
-    groupDir = containerInput.directMode.groupDir;
+    workspaceDir = containerInput.directMode.workspaceDir;
     globalDir = containerInput.directMode.globalDir;
     IPC_INPUT_DIR = path.join(ipcBaseDir, 'input');
     IPC_INPUT_CLOSE_SENTINEL = path.join(IPC_INPUT_DIR, '_close');
     
     log(`Direct mode enabled`);
-    log(`Paths: ipc=${ipcBaseDir}, group=${groupDir}, global=${globalDir || 'none'}`);
+    log(`Paths: ipc=${ipcBaseDir}, workspace=${workspaceDir}, global=${globalDir || 'none'}`);
     debugLog(`Direct mode configuration: platform=${process.platform}, projectDir=${containerInput.directMode.projectDir || 'none'}`);
     
     // Fix PATH for Windows: ensure node is findable by SDK subprocesses
@@ -1430,13 +1418,13 @@ async function main(): Promise<void> {
       }
     }
     
-    // Pass HEADED and GROUP_FOLDER to subprocesses (for browser automation)
+    // Pass HEADED and WORKSPACE_FOLDER to subprocesses (for browser automation)
     // These are set by direct-runner.ts and need to be inherited by bash commands
     if (process.env.HEADED) {
       log(`HEADED=${process.env.HEADED} will be passed to subprocesses`);
     }
-    if (process.env.GROUP_FOLDER) {
-      log(`GROUP_FOLDER=${process.env.GROUP_FOLDER} will be passed to subprocesses`);
+    if (process.env.WORKSPACE_FOLDER) {
+      log(`WORKSPACE_FOLDER=${process.env.WORKSPACE_FOLDER} will be passed to subprocesses`);
     }
   } else {
     log(`Container mode enabled (paths: /workspace/*)`);
@@ -1450,7 +1438,7 @@ async function main(): Promise<void> {
   // Build initial prompt (drain any pending IPC messages too)
   let prompt = containerInput.prompt;
   if (containerInput.isScheduledTask) {
-    prompt = `[SCHEDULED TASK - The following message was sent automatically and is not coming directly from the user or group.]\n\n${prompt}`;
+    prompt = `[SCHEDULED TASK - The following message was sent automatically and is not coming directly from the user or workspace.]\n\n${prompt}`;
     log(`Processing scheduled task`);
   }
   const pending = drainIpcInput();
@@ -1491,10 +1479,10 @@ async function main(): Promise<void> {
     // Environment variables for the MCP server process
     const mcpEnv: Record<string, string> = {
       EURECLAW_CHAT_JID: containerInput.chatJid,
-      EURECLAW_GROUP_FOLDER: containerInput.groupFolder,
+      EURECLAW_WORKSPACE_FOLDER: containerInput.workspaceFolder,
       EURECLAW_IS_MAIN: containerInput.isMain ? '1' : '0',
       EURECLAW_IPC_DIR: ipcBaseDir,
-      EURECLAW_GROUP_DIR: groupDir,
+      EURECLAW_WORKSPACE_DIR: workspaceDir,
       PROJECT_DIR: containerInput.directMode?.projectDir || '/workspace/project',
     };
 
@@ -1549,11 +1537,11 @@ async function main(): Promise<void> {
       queryCount++;
       log(`--- Query #${queryCount} ---`);
       log(`Session: ${sessionId || 'new'}, ResumeAt: ${resumeAt || 'latest'}`);
-      debugLog(`Query context: chatJid=${containerInput.chatJid}, groupFolder=${containerInput.groupFolder}, timestamp=${new Date().toISOString()}`);
+      debugLog(`Query context: chatJid=${containerInput.chatJid}, workspaceFolder=${containerInput.workspaceFolder}, timestamp=${new Date().toISOString()}`);
 
       let queryResult;
       try {
-        queryResult = await runQuery(prompt, sessionId, mcpServerPath, containerInput, sdkEnv, groupDir, ipcBaseDir, globalDir, resumeAt, clientInstance, contextInjected);
+        queryResult = await runQuery(prompt, sessionId, mcpServerPath, containerInput, sdkEnv, workspaceDir, ipcBaseDir, globalDir, resumeAt, clientInstance, contextInjected);
       } catch (queryErr) {
         // Query failed catastrophically (e.g. session creation failed).
         // Write error output but DON'T crash — exit the loop gracefully.
@@ -1601,7 +1589,7 @@ async function main(): Promise<void> {
       // Requirement 5.3: Maintain conversation archiving functionality
       if (sessionId && queryCount % ARCHIVE_INTERVAL === 0 && clientInstance) {
         log(`Periodic archive triggered (query count: ${queryCount})`);
-        await archiveSessionConversation(clientInstance, sessionId, groupDir);
+        await archiveSessionConversation(clientInstance, sessionId, workspaceDir);
       }
 
       // If _close was consumed during the query, exit immediately.
@@ -1647,7 +1635,7 @@ async function main(): Promise<void> {
     if (errorStack) {
       log(`Stack trace: ${errorStack}`);
     }
-    log(`Context: sessionId=${sessionId || 'none'}, queryCount=${queryCount}, groupFolder=${containerInput.groupFolder}, chatJid=${containerInput.chatJid}`);
+    log(`Context: sessionId=${sessionId || 'none'}, queryCount=${queryCount}, workspaceFolder=${containerInput.workspaceFolder}, chatJid=${containerInput.chatJid}`);
     
     writeOutput({
       status: 'error',

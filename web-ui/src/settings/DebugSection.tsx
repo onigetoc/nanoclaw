@@ -57,7 +57,7 @@ export default function DebugSection({ executions, isDark }: DebugSectionProps) 
                     {exec.status}
                   </span>
                   <span className={`text-sm font-medium ${isDark ? 'text-zinc-200' : 'text-zinc-800'}`}>
-                    {exec.groupName}
+                    {exec.workspaceName}
                   </span>
                 </div>
                 <span className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-zinc-400'}`}>

@@ -415,7 +415,7 @@ export default function ComposerBar({
                         <Paperclip className="h-4 w-4 text-blue-500" />
                         <div>
                           <div className="font-medium">File Transfer</div>
-                          <div className={`text-xs ${isDark ? 'text-zinc-400' : 'text-zinc-500'}`}>Save files to group uploads</div>
+                          <div className={`text-xs ${isDark ? 'text-zinc-400' : 'text-zinc-500'}`}>Save files to workspace uploads</div>
                         </div>
                       </button>
                     </div>

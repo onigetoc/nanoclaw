@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 
-import { GroupQueue } from './group-queue.js';
+import { WorkspaceQueue } from './workspace-queue.js';
 
 // Mock config to control concurrency limit
 vi.mock('./config.js', () => ({
@@ -22,25 +22,25 @@ vi.mock('fs', async () => {
   };
 });
 
-describe('GroupQueue', () => {
-  let queue: GroupQueue;
+describe('WorkspaceQueue', () => {
+  let queue: WorkspaceQueue;
 
   beforeEach(() => {
     vi.useFakeTimers();
-    queue = new GroupQueue();
+    queue = new WorkspaceQueue();
   });
 
   afterEach(() => {
     vi.useRealTimers();
   });
 
-  // --- Single group at a time ---
+  // --- Single workspace at a time ---
 
-  it('only runs one container per group at a time', async () => {
+  it('only runs one container per workspace at a time', async () => {
     let concurrentCount = 0;
     let maxConcurrent = 0;
 
-    const processMessages = vi.fn(async (groupJid: string) => {
+    const processMessages = vi.fn(async (workspaceJid: string) => {
       concurrentCount++;
       maxConcurrent = Math.max(maxConcurrent, concurrentCount);
       // Simulate async work
@@ -51,7 +51,7 @@ describe('GroupQueue', () => {
 
     queue.setProcessMessagesFn(processMessages);
 
-    // Enqueue two messages for the same group
+    // Enqueue two messages for the same workspace
     queue.enqueueMessageCheck('group1@g.us');
     queue.enqueueMessageCheck('group1@g.us');
 
@@ -69,7 +69,7 @@ describe('GroupQueue', () => {
     let maxActive = 0;
     const completionCallbacks: Array<() => void> = [];
 
-    const processMessages = vi.fn(async (groupJid: string) => {
+    const processMessages = vi.fn(async (workspaceJid: string) => {
       activeCount++;
       maxActive = Math.max(maxActive, activeCount);
       await new Promise<void>((resolve) => completionCallbacks.push(resolve));
@@ -79,7 +79,7 @@ describe('GroupQueue', () => {
 
     queue.setProcessMessagesFn(processMessages);
 
-    // Enqueue 3 groups (limit is 2)
+    // Enqueue 3 workspaces (limit is 2)
     queue.enqueueMessageCheck('group1@g.us');
     queue.enqueueMessageCheck('group2@g.us');
     queue.enqueueMessageCheck('group3@g.us');
@@ -100,11 +100,11 @@ describe('GroupQueue', () => {
 
   // --- Tasks prioritized over messages ---
 
-  it('drains tasks before messages for same group', async () => {
+  it('drains tasks before messages for same workspace', async () => {
     const executionOrder: string[] = [];
     let resolveFirst: () => void;
 
-    const processMessages = vi.fn(async (groupJid: string) => {
+    const processMessages = vi.fn(async (workspaceJid: string) => {
       if (executionOrder.length === 0) {
         // First call: block until we release it
         await new Promise<void>((resolve) => {
@@ -211,14 +211,14 @@ describe('GroupQueue', () => {
     expect(callCount).toBe(countAfterMaxRetries);
   });
 
-  // --- Waiting groups get drained when slots free up ---
+  // --- Waiting workspaces get drained when slots free up ---
 
-  it('drains waiting groups when active slots free up', async () => {
+  it('drains waiting workspaces when active slots free up', async () => {
     const processed: string[] = [];
     const completionCallbacks: Array<() => void> = [];
 
-    const processMessages = vi.fn(async (groupJid: string) => {
-      processed.push(groupJid);
+    const processMessages = vi.fn(async (workspaceJid: string) => {
+      processed.push(workspaceJid);
       await new Promise<void>((resolve) => completionCallbacks.push(resolve));
       return true;
     });

@@ -13,6 +13,7 @@
     "serve": "vite preview --host"
   },
   "dependencies": {
+    "js-tiktoken": "^1.0.21",
     "lucide-react": "^0.575.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",

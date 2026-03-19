@@ -99,7 +99,7 @@ netstat -ano | findstr ":4100"
 **Solution:**
 1. Ensure OpenCode is installed: `npm install -g opencode-ai`
 2. Restart EureClaw: `bun start`
-3. Check logs in `groups/main/logs/` for details
+3. Check logs in `workspaces/main/logs/` for details
 
 #### Port 4100 already in use
 
@@ -124,11 +124,11 @@ echo OPENCODE_PORT=4101 >> .env
 **Check:**
 1. Is OpenCode installed? `opencode --version`
 2. Is the server running? `netstat -ano | findstr ":4100"`
-3. Check recent logs: `groups/main/logs/direct-*.log`
+3. Check recent logs: `workspaces/main/logs/direct-*.log`
 
 **Solution:**
 - Restart EureClaw: `bun start`
-- If problem persists, check `groups/main/logs/` for detailed error messages
+- If problem persists, check `workspaces/main/logs/` for detailed error messages
 
 ## Performance Tips
 
@@ -172,7 +172,7 @@ LOG_LEVEL=debug
 
 Then restart EureClaw. Check logs in:
 - Console output
-- `groups/main/logs/direct-*.log`
+- `workspaces/main/logs/direct-*.log`
 
 ### Clean Restart
 
@@ -196,7 +196,7 @@ bun start
 ### Get Help
 
 If you're still stuck:
-1. Check the logs in `groups/main/logs/`
+1. Check the logs in `workspaces/main/logs/`
 2. Look for error messages in the console
 3. Open an issue on GitHub with:
    - Your Windows version

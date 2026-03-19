@@ -5,10 +5,10 @@ export interface ChatInfo {
   name: string;
   last_message_time: string;
   isRegistered: boolean;
-  groupInfo: RegisteredGroup | null;
+  workspaceInfo: RegisteredWorkspace | null;
 }
 
-export interface RegisteredGroup {
+export interface RegisteredWorkspace {
   name: string;
   folder: string;
   trigger: string;
@@ -57,8 +57,8 @@ export interface ApiToken {
 export interface AgentExecution {
   id: string;
   timestamp: string;
-  groupName: string;
-  groupFolder: string;
+  workspaceName: string;
+  workspaceFolder: string;
   chatJid: string;
   agentType: string;
   status: 'started' | 'running' | 'completed' | 'error';
@@ -70,12 +70,38 @@ export interface AgentExecution {
   outputSent: boolean;
 }
 
+export interface ScheduledTaskInfo {
+  id: string;
+  workspace_folder: string;
+  workspace_name: string;
+  chat_jid: string;
+  prompt: string;
+  schedule_type: 'cron' | 'interval' | 'once';
+  schedule_value: string;
+  context_mode: 'workspace' | 'isolated';
+  next_run: string | null;
+  last_run: string | null;
+  last_result: string | null;
+  status: 'active' | 'paused' | 'completed';
+  created_at: string;
+}
+
+export interface TaskRunLogEntry {
+  id: number;
+  task_id: string;
+  run_at: string;
+  duration_ms: number;
+  status: 'success' | 'error';
+  result: string | null;
+  error: string | null;
+}
+
 export interface MonitoringData {
   system: {
     openCodeServerStatus: 'running' | 'stopped' | 'error';
     openCodeServerPort: number;
     activeAgents: number;
-    registeredGroups: number;
+    registeredWorkspaces: number;
     isSleeping: boolean;
     uptime: number;
   };
@@ -84,7 +110,7 @@ export interface MonitoringData {
     successRate: number;
     averageDuration: number;
     byAgent: Record<string, number>;
-    byGroup: Record<string, number>;
+    byWorkspace: Record<string, number>;
   };
   active: AgentExecution[];
   recent: AgentExecution[];
@@ -175,9 +201,12 @@ class ApiService {
     }
 
     const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
       ...(options.headers as Record<string, string>),
     };
+    // Only set Content-Type: application/json when there's actually a body
+    if (options.body) {
+      headers['Content-Type'] = 'application/json';
+    }
     if (token && requireAuth) {
       headers['Authorization'] = `Bearer ${token}`;
     }
@@ -377,14 +406,14 @@ class ApiService {
     return response.json();
   }
 
-  async getGroups(): Promise<Record<string, RegisteredGroup>> {
+  async getWorkspaces(): Promise<Record<string, RegisteredWorkspace>> {
     const result = await this.request<{
-      groups: Record<string, RegisteredGroup>;
-    }>('/groups');
-    return result.groups;
+      workspaces: Record<string, RegisteredWorkspace>;
+    }>('/workspaces');
+    return result.workspaces;
   }
 
-  async createGroup(
+  async createWorkspace(
     name: string,
     folder: string,
   ): Promise<{ success: boolean; jid: string; name: string; folder: string }> {
@@ -393,7 +422,7 @@ class ApiService {
       jid: string;
       name: string;
       folder: string;
-    }>('/groups', {
+    }>('/workspaces', {
       method: 'POST',
       body: JSON.stringify({ name, folder }),
     });
@@ -492,6 +521,53 @@ class ApiService {
     return this.request('/models/cache/clear', { method: 'POST' });
   }
 
+  // === Scheduled Tasks / Cron Jobs ===
+
+  async getTasks(workspace?: string): Promise<ScheduledTaskInfo[]> {
+    const query = workspace ? `?workspace=${encodeURIComponent(workspace)}` : '';
+    const result = await this.request<{ tasks: ScheduledTaskInfo[] }>(`/tasks${query}`);
+    return result.tasks;
+  }
+
+  async getTask(id: string): Promise<{ task: ScheduledTaskInfo; logs: TaskRunLogEntry[] }> {
+    return this.request(`/tasks/${encodeURIComponent(id)}`);
+  }
+
+  async createTask(data: {
+    workspace_folder: string;
+    chat_jid: string;
+    prompt: string;
+    schedule_type: string;
+    schedule_value: string;
+    context_mode?: string;
+  }): Promise<{ success: boolean; id: string }> {
+    return this.request('/tasks', { method: 'POST', body: JSON.stringify(data) });
+  }
+
+  async updateTask(id: string, data: {
+    prompt?: string;
+    schedule_type?: string;
+    schedule_value?: string;
+  }): Promise<{ success: boolean }> {
+    return this.request(`/tasks/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify(data) });
+  }
+
+  async deleteTask(id: string): Promise<{ success: boolean }> {
+    return this.request(`/tasks/${encodeURIComponent(id)}`, { method: 'DELETE' });
+  }
+
+  async pauseTask(id: string): Promise<{ success: boolean }> {
+    return this.request(`/tasks/${encodeURIComponent(id)}/pause`, { method: 'POST' });
+  }
+
+  async resumeTask(id: string): Promise<{ success: boolean }> {
+    return this.request(`/tasks/${encodeURIComponent(id)}/resume`, { method: 'POST' });
+  }
+
+  async triggerTask(id: string): Promise<{ success: boolean; message: string }> {
+    return this.request(`/tasks/${encodeURIComponent(id)}/run`, { method: 'POST' });
+  }
+
   async checkHealth(): Promise<{ status: string; timestamp: string }> {
     const response = await fetch(`${API_BASE}/health`);
     return response.json();
@@ -503,20 +579,20 @@ class ApiService {
 
   // === Markdown File Browser ===
 
-  async getMdGroups(): Promise<{ groups: Array<{ name: string; folders: string[] }> }> {
-    return this.request('/md/groups');
+  async getMdWorkspaces(): Promise<{ workspaces: Array<{ name: string; folders: string[] }> }> {
+    return this.request('/md/workspaces');
   }
 
-  async getMdTree(group: string): Promise<{ group: string; tree: MdFileEntry[] }> {
-    return this.request(`/md/groups/${encodeURIComponent(group)}/tree`);
+  async getMdTree(workspace: string): Promise<{ workspace: string; tree: MdFileEntry[] }> {
+    return this.request(`/md/workspaces/${encodeURIComponent(workspace)}/tree`);
   }
 
-  async getMdFile(group: string, filePath: string): Promise<{ path: string; content: string; size: number; modified: string }> {
-    return this.request(`/md/groups/${encodeURIComponent(group)}/file?path=${encodeURIComponent(filePath)}`);
+  async getMdFile(workspace: string, filePath: string): Promise<{ path: string; content: string; size: number; modified: string }> {
+    return this.request(`/md/workspaces/${encodeURIComponent(workspace)}/file?path=${encodeURIComponent(filePath)}`);
   }
 
-  async saveMdFile(group: string, filePath: string, content: string): Promise<{ success: boolean; size: number; modified: string }> {
-    return this.request(`/md/groups/${encodeURIComponent(group)}/file?path=${encodeURIComponent(filePath)}`, {
+  async saveMdFile(workspace: string, filePath: string, content: string): Promise<{ success: boolean; size: number; modified: string }> {
+    return this.request(`/md/workspaces/${encodeURIComponent(workspace)}/file?path=${encodeURIComponent(filePath)}`, {
       method: 'PUT',
       body: JSON.stringify({ content }),
     });

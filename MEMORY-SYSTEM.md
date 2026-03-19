@@ -35,20 +35,20 @@ EureClaw uses a hybrid memory system combining SQLite and markdown files for opt
 
 ## Files
 
-### Per-Group Files
+### Per-Workspace Files
 
-Each group has its own memory:
+Each workspace has its own memory:
 
-- `groups/{name}/dna/MEMORY.md` - Long-term memory for this group
-- `groups/{name}/conversations/` - Archived conversations
-- SQLite database (shared) - Recent messages for all groups
+- `workspaces/{name}/dna/MEMORY.md` - Long-term memory for this workspace
+- `workspaces/{name}/conversations/` - Archived conversations
+- SQLite database (shared) - Recent messages for all workspaces
 
 ### Global Files
 
-Shared across all groups:
+Shared across all workspaces:
 
-- `groups/templates/MEMORY.tpl.md` - Template for new groups
-- `groups/global/dna/AGENTS.md` - Global instructions
+- `workspaces/templates/MEMORY.tpl.md` - Template for new workspaces
+- `workspaces/global/dna/AGENTS.md` - Global instructions
 
 ## How It Works
 
@@ -127,7 +127,7 @@ if (containerInput.isMain) {
 
 ### Agent doesn't remember conversations
 
-1. Check if MEMORY.md exists: `groups/main/dna/MEMORY.md`
+1. Check if MEMORY.md exists: `workspaces/main/dna/MEMORY.md`
 2. Check SQLite has messages: `sqlite3 store/messages.db "SELECT COUNT(*) FROM messages;"`
 3. Check agent logs for "Loaded MEMORY.md" and "Loaded X recent messages"
 
@@ -151,14 +151,14 @@ sqlite3 store/messages.db "
 "
 ```
 
-Or check archived conversations in `groups/main/conversations/`.
+Or check archived conversations in `workspaces/main/conversations/`.
 
 ## Folder Structure
 
-Each group follows this structure:
+Each workspace follows this structure:
 
 ```
-groups/{name}/
+workspaces/{name}/
 ├── dna/           ← Personality files (AGENTS.md, IDENTITY.md, MEMORY.md, SOUL.md, TOOLS.md, USER.md, GUIDELINES.md)
 ├── workspace/     ← Agent-generated content
 │   ├── screenshots/
@@ -218,8 +218,8 @@ Total context size: ~5-10K tokens
 
 - Implementation: `container/agent-runner/src/index.ts`
 - Database functions: `src/db.ts`
-- Documentation: `groups/main/dna/AGENTS.md`
-- Architecture decision: `groups/main/workspace/decisions.md`
+- Documentation: `workspaces/main/dna/AGENTS.md`
+- Architecture decision: `workspaces/main/workspace/decisions.md`
 
 ---
 

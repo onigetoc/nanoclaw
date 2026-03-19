@@ -64,8 +64,8 @@ async function runScript(script: string, args: object): Promise<SkillResult> {
 }
 
 // Write result to IPC results directory
-function writeResult(dataDir: string, sourceGroup: string, requestId: string, result: SkillResult): void {
-  const resultsDir = path.join(dataDir, 'ipc', sourceGroup, 'x_results');
+function writeResult(dataDir: string, sourceWorkspace: string, requestId: string, result: SkillResult): void {
+  const resultsDir = path.join(dataDir, 'ipc', sourceWorkspace, 'x_results');
   fs.mkdirSync(resultsDir, { recursive: true });
   fs.writeFileSync(path.join(resultsDir, `${requestId}.json`), JSON.stringify(result));
 }
@@ -77,7 +77,7 @@ function writeResult(dataDir: string, sourceGroup: string, requestId: string, re
  */
 export async function handleXIpc(
   data: Record<string, unknown>,
-  sourceGroup: string,
+  sourceWorkspace: string,
   isMain: boolean,
   dataDir: string
 ): Promise<boolean> {
@@ -88,9 +88,9 @@ export async function handleXIpc(
     return false;
   }
 
-  // Only main group can use X integration
+  // Only main workspace can use X integration
   if (!isMain) {
-    logger.warn({ sourceGroup, type }, 'X integration blocked: not main group');
+    logger.warn({ sourceWorkspace, type }, 'X integration blocked: not main workspace');
     return true;
   }
 
@@ -149,7 +149,7 @@ export async function handleXIpc(
       return false;
   }
 
-  writeResult(dataDir, sourceGroup, requestId, result);
+  writeResult(dataDir, sourceWorkspace, requestId, result);
   if (result.success) {
     logger.info({ type, requestId }, 'X request completed');
   } else {

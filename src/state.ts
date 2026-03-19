@@ -1,21 +1,21 @@
 /**
  * Global state management for EureClaw.
- * Centralizes sessions, registered groups, timestamps, and persistence.
+ * Centralizes sessions, registered workspaces, timestamps, and persistence.
  */
 import {
-  getAllRegisteredGroups,
+  getAllRegisteredWorkspaces,
   getAllSessions,
   getRouterState,
-  setRegisteredGroup,
+  setRegisteredWorkspace,
   setRouterState,
   setSession,
 } from './db.js';
-import { RegisteredGroup } from './types.js';
+import { RegisteredWorkspace } from './types.js';
 import { logger } from './logger.js';
 
 let lastTimestamp = '';
 let sessions: Record<string, string> = {};
-let registeredGroups: Record<string, RegisteredGroup> = {};
+let registeredWorkspaces: Record<string, RegisteredWorkspace> = {};
 let lastAgentTimestamp: Record<string, string> = {};
 let messageLoopRunning = false;
 
@@ -29,8 +29,8 @@ export function getSessions(): Record<string, string> {
   return sessions;
 }
 
-export function getRegisteredGroups(): Record<string, RegisteredGroup> {
-  return registeredGroups;
+export function getRegisteredWorkspaces(): Record<string, RegisteredWorkspace> {
+  return registeredWorkspaces;
 }
 
 export function getLastAgentTimestamp(): Record<string, string> {
@@ -51,7 +51,7 @@ export function setMessageLoopRunning(running: boolean): void {
   messageLoopRunning = running;
 }
 
-export function setGroupSession(folder: string, sessionId: string): void {
+export function setWorkspaceSession(folder: string, sessionId: string): void {
   sessions[folder] = sessionId;
   setSession(folder, sessionId);
 }
@@ -64,14 +64,14 @@ export function getLastAgentTimestampForJid(jid: string): string {
   return lastAgentTimestamp[jid] || '';
 }
 
-/** Replace registeredGroups entirely (used by auto-registration reload). */
-export function reloadRegisteredGroups(): void {
-  registeredGroups = getAllRegisteredGroups();
+/** Replace registeredWorkspaces entirely (used by auto-registration reload). */
+export function reloadRegisteredWorkspaces(): void {
+  registeredWorkspaces = getAllRegisteredWorkspaces();
 }
 
 /** @internal - exported for testing */
-export function _setRegisteredGroups(groups: Record<string, RegisteredGroup>): void {
-  registeredGroups = groups;
+export function _setRegisteredWorkspaces(workspaces: Record<string, RegisteredWorkspace>): void {
+  registeredWorkspaces = workspaces;
 }
 
 // --- Persistence ---
@@ -86,9 +86,9 @@ export function loadState(): void {
     lastAgentTimestamp = {};
   }
   sessions = getAllSessions();
-  registeredGroups = getAllRegisteredGroups();
+  registeredWorkspaces = getAllRegisteredWorkspaces();
   logger.info(
-    { groupCount: Object.keys(registeredGroups).length, groups: registeredGroups },
+    { workspaceCount: Object.keys(registeredWorkspaces).length, workspaces: registeredWorkspaces },
     'State loaded',
   );
 }

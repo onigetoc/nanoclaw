@@ -8,11 +8,11 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 
-import { CONTAINER_MAX_OUTPUT_SIZE, CONTAINER_TIMEOUT, DATA_DIR, GROUPS_DIR } from './config.js';
+import { CONTAINER_MAX_OUTPUT_SIZE, CONTAINER_TIMEOUT, DATA_DIR, WORKSPACES_DIR } from './config.js';
 import { readEnvFile } from './env.js';
 import { logger } from './logger.js';
 import { getOpenCodePort, getOpenCodeHost } from './opencode-server.js';
-import { RegisteredGroup } from './types.js';
+import { RegisteredWorkspace } from './types.js';
 import { ContainerInput, ContainerOutput } from './container-runner.js';
 import { filterEnv } from './security/env-filter.js';
 
@@ -23,29 +23,29 @@ const OUTPUT_END_MARKER = '---EURECLAW_OUTPUT_END---';
  * Run agent directly using Node.js (no container isolation)
  */
 export async function runDirectAgent(
-  group: RegisteredGroup,
+  workspace: RegisteredWorkspace,
   input: ContainerInput,
   onProcess: (proc: ChildProcess, processName: string) => void,
   onOutput?: (output: ContainerOutput) => Promise<void>,
 ): Promise<ContainerOutput> {
   const startTime = Date.now();
 
-  const groupDir = path.join(GROUPS_DIR, group.folder);
-  fs.mkdirSync(groupDir, { recursive: true});
+  const workspaceDir = path.join(WORKSPACES_DIR, workspace.folder);
+  fs.mkdirSync(workspaceDir, { recursive: true});
 
   // Setup IPC directory
-  const groupIpcDir = path.join(DATA_DIR, 'ipc', group.folder);
-  fs.mkdirSync(path.join(groupIpcDir, 'messages'), { recursive: true });
-  fs.mkdirSync(path.join(groupIpcDir, 'tasks'), { recursive: true });
-  fs.mkdirSync(path.join(groupIpcDir, 'input'), { recursive: true });
+  const workspaceIpcDir = path.join(DATA_DIR, 'ipc', workspace.folder);
+  fs.mkdirSync(path.join(workspaceIpcDir, 'messages'), { recursive: true });
+  fs.mkdirSync(path.join(workspaceIpcDir, 'tasks'), { recursive: true });
+  fs.mkdirSync(path.join(workspaceIpcDir, 'input'), { recursive: true });
 
   // Setup sessions directory and sync skills (same as container mode)
-  const groupSessionsDir = path.join(DATA_DIR, 'sessions', group.folder);
-  fs.mkdirSync(groupSessionsDir, { recursive: true });
+  const workspaceSessionsDir = path.join(DATA_DIR, 'sessions', workspace.folder);
+  fs.mkdirSync(workspaceSessionsDir, { recursive: true });
 
   // Sync skills from container/skills/ into sessions directory
   const skillsSrc = path.join(process.cwd(), 'container', 'skills');
-  const skillsDst = path.join(groupSessionsDir, 'skills');
+  const skillsDst = path.join(workspaceSessionsDir, 'skills');
   if (fs.existsSync(skillsSrc)) {
     for (const skillDir of fs.readdirSync(skillsSrc)) {
       const srcDir = path.join(skillsSrc, skillDir);
@@ -60,15 +60,15 @@ export async function runDirectAgent(
     }
   }
 
-  const processName = `eureclaw-direct-${group.folder}-${Date.now()}`;
+  const processName = `eureclaw-direct-${workspace.folder}-${Date.now()}`;
   const agentRunnerPath = path.join(process.cwd(), 'container', 'agent-runner', 'src', 'index.ts');
 
   logger.info(
-    { group: group.name, processName, isMain: input.isMain },
+    { workspace: workspace.name, processName, isMain: input.isMain },
     'Spawning direct agent (no container)',
   );
 
-  const logsDir = path.join(GROUPS_DIR, group.folder, 'logs');
+  const logsDir = path.join(WORKSPACES_DIR, workspace.folder, 'logs');
   fs.mkdirSync(logsDir, { recursive: true });
 
   return new Promise((resolve) => {
@@ -82,8 +82,8 @@ export async function runDirectAgent(
     // Add HEADED explicitly (for browser automation)
     filteredEnv['HEADED'] = headedValue;
     
-    // Add GROUP_FOLDER for browser scripts to save files in correct location
-    filteredEnv['GROUP_FOLDER'] = group.folder;
+    // Add WORKSPACE_FOLDER for browser scripts to save files in correct location
+    filteredEnv['WORKSPACE_FOLDER'] = workspace.folder;
     
     // Add PROJECT_DIR so scripts can find the project root
     filteredEnv['PROJECT_DIR'] = process.cwd();
@@ -93,11 +93,11 @@ export async function runDirectAgent(
     const opencodeHost = getOpenCodeHost();
     filteredEnv['OPENCODE_BASE_URL'] = `http://${opencodeHost}:${opencodePort}`;
     
-    logger.debug({ group: group.name, opencodeUrl: filteredEnv['OPENCODE_BASE_URL'] }, `Filtered env has ${Object.keys(filteredEnv).length} vars (secrets removed)`);
+    logger.debug({ workspace: workspace.name, opencodeUrl: filteredEnv['OPENCODE_BASE_URL'] }, `Filtered env has ${Object.keys(filteredEnv).length} vars (secrets removed)`);
     
     const agentProcess = spawn('node', ['--import', 'tsx/esm', agentRunnerPath], {
       stdio: ['pipe', 'pipe', 'pipe'],
-      cwd: groupDir,
+      cwd: workspaceDir,
       env: filteredEnv,
     });
 
@@ -113,9 +113,9 @@ export async function runDirectAgent(
     input.secrets = {};
     // Direct mode: pass real host paths so agent-runner doesn't use container paths
     (input as any).directMode = {
-      ipcDir: groupIpcDir,
-      groupDir: groupDir,
-      globalDir: path.join(GROUPS_DIR, 'global'),
+      ipcDir: workspaceIpcDir,
+      workspaceDir: workspaceDir,
+      globalDir: path.join(WORKSPACES_DIR, 'global'),
       projectDir: process.cwd(),
     };
     agentProcess.stdin.write(JSON.stringify(input));
@@ -155,17 +155,17 @@ export async function runDirectAgent(
 
           try {
             const parsed: ContainerOutput = JSON.parse(jsonStr);
-            logger.info({ group: group.name, result: parsed.result?.toString().slice(0, 100) }, 'Parsed output from agent');
+            logger.info({ workspace: workspace.name, result: parsed.result?.toString().slice(0, 100) }, 'Parsed output from agent');
             if (parsed.newSessionId) {
               newSessionId = parsed.newSessionId;
             }
             hadStreamingOutput = true;
             outputChain = outputChain.then(() => {
-              logger.info({ group: group.name }, 'Calling onOutput callback');
+              logger.info({ workspace: workspace.name }, 'Calling onOutput callback');
               return onOutput(parsed);
             });
           } catch (err) {
-            logger.warn({ group: group.name, error: err }, 'Failed to parse output');
+            logger.warn({ workspace: workspace.name, error: err }, 'Failed to parse output');
           }
         }
       }
@@ -175,7 +175,7 @@ export async function runDirectAgent(
       const chunk = data.toString();
       const lines = chunk.trim().split('\n');
       for (const line of lines) {
-        if (line) logger.debug({ process: group.folder }, line);
+        if (line) logger.debug({ process: workspace.folder }, line);
       }
       if (stderrTruncated) return;
       const remaining = CONTAINER_MAX_OUTPUT_SIZE - stderr.length;
@@ -188,7 +188,7 @@ export async function runDirectAgent(
     });
 
     const timeout = setTimeout(() => {
-      logger.error({ group: group.name }, 'Agent timeout');
+      logger.error({ workspace: workspace.name }, 'Agent timeout');
       agentProcess.kill('SIGTERM');
     }, CONTAINER_TIMEOUT);
 
@@ -202,7 +202,7 @@ export async function runDirectAgent(
       fs.writeFileSync(logFile, [
         `=== Direct Run Log ===`,
         `Timestamp: ${new Date().toISOString()}`,
-        `Group: ${group.name}`,
+        `Workspace: ${workspace.name}`,
         `Duration: ${duration}ms`,
         `Exit Code: ${code}`,
         ``,
@@ -214,7 +214,7 @@ export async function runDirectAgent(
       ].join('\n'));
 
       if (code !== 0) {
-        logger.error({ group: group.name, code, logFile }, 'Agent exited with error');
+        logger.error({ workspace: workspace.name, code, logFile }, 'Agent exited with error');
         resolve({
           status: 'error',
           result: null,
@@ -225,14 +225,14 @@ export async function runDirectAgent(
 
       if (onOutput) {
         outputChain.then(() => {
-          logger.info({ group: group.name, duration, newSessionId }, 'Agent completed');
+          logger.info({ workspace: workspace.name, duration, newSessionId }, 'Agent completed');
           resolve({
             status: 'success',
             result: null,
             newSessionId,
           });
         }).catch((err) => {
-          logger.error({ group: group.name, error: err }, 'Error in onOutput callback chain');
+          logger.error({ workspace: workspace.name, error: err }, 'Error in onOutput callback chain');
           resolve({
             status: 'error',
             result: null,
@@ -254,10 +254,10 @@ export async function runDirectAgent(
           jsonLine = lines[lines.length - 1];
         }
         const output: ContainerOutput = JSON.parse(jsonLine);
-        logger.info({ group: group.name, duration, status: output.status }, 'Agent completed');
+        logger.info({ workspace: workspace.name, duration, status: output.status }, 'Agent completed');
         resolve(output);
       } catch (err) {
-        logger.error({ group: group.name, error: err }, 'Failed to parse output');
+        logger.error({ workspace: workspace.name, error: err }, 'Failed to parse output');
         resolve({
           status: 'error',
           result: null,
@@ -268,7 +268,7 @@ export async function runDirectAgent(
 
     agentProcess.on('error', (err) => {
       clearTimeout(timeout);
-      logger.error({ group: group.name, error: err }, 'Agent spawn error');
+      logger.error({ workspace: workspace.name, error: err }, 'Agent spawn error');
       resolve({
         status: 'error',
         result: null,

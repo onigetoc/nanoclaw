@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-# 06-register-channel.sh — Write channel registration config, create group folders
+# 06-register-channel.sh — Write channel registration config, create workspace folders
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
@@ -56,20 +56,20 @@ TIMESTAMP=$(date -u '+%Y-%m-%dT%H:%M:%S.000Z')
 DB_PATH="$PROJECT_ROOT/store/messages.db"
 REQUIRES_TRIGGER_INT=$( [ "$REQUIRES_TRIGGER" = "true" ] && echo 1 || echo 0 )
 
-sqlite3 "$DB_PATH" "INSERT OR REPLACE INTO registered_groups (jid, name, folder, trigger_pattern, added_at, container_config, requires_trigger) VALUES ('$JID', '$NAME', '$FOLDER', '$TRIGGER', '$TIMESTAMP', NULL, $REQUIRES_TRIGGER_INT);"
+sqlite3 "$DB_PATH" "INSERT OR REPLACE INTO registered_workspaces (jid, name, folder, trigger_pattern, added_at, container_config, requires_trigger) VALUES ('$JID', '$NAME', '$FOLDER', '$TRIGGER', '$TIMESTAMP', NULL, $REQUIRES_TRIGGER_INT);"
 
 log "Wrote registration to SQLite"
 
-# Create group folders
-mkdir -p "$PROJECT_ROOT/groups/$FOLDER/logs"
-log "Created groups/$FOLDER/logs/"
+# Create workspace folders
+mkdir -p "$PROJECT_ROOT/workspaces/$FOLDER/logs"
+log "Created workspaces/$FOLDER/logs/"
 
 # Update assistant name in AGENTS.md files if different from default
 NAME_UPDATED="false"
 if [ "$ASSISTANT_NAME" != "Andy" ]; then
   log "Updating assistant name from Andy to $ASSISTANT_NAME"
 
-  for md_file in groups/global/AGENTS.md groups/main/AGENTS.md; do
+  for md_file in workspaces/global/AGENTS.md workspaces/main/AGENTS.md; do
     if [ -f "$PROJECT_ROOT/$md_file" ]; then
       sed -i '' "s/^# Andy$/# $ASSISTANT_NAME/" "$PROJECT_ROOT/$md_file"
       sed -i '' "s/You are Andy/You are $ASSISTANT_NAME/g" "$PROJECT_ROOT/$md_file"

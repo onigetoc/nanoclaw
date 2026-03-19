@@ -72,15 +72,15 @@ if [ -d "$PROJECT_ROOT/store/auth" ] && [ "$(ls -A "$PROJECT_ROOT/store/auth" 2>
   log "WhatsApp auth credentials found"
 fi
 
-HAS_REGISTERED_GROUPS="false"
-if [ -f "$PROJECT_ROOT/data/registered_groups.json" ]; then
-  HAS_REGISTERED_GROUPS="true"
-  log "Registered groups config found (JSON)"
+HAS_REGISTERED_WORKSPACES="false"
+if [ -f "$PROJECT_ROOT/data/registered_workspaces.json" ]; then
+  HAS_REGISTERED_WORKSPACES="true"
+  log "Registered workspaces config found (JSON)"
 elif [ -f "$PROJECT_ROOT/store/messages.db" ]; then
-  RG_COUNT=$(sqlite3 "$PROJECT_ROOT/store/messages.db" "SELECT COUNT(*) FROM registered_groups" 2>/dev/null || echo "0")
+  RG_COUNT=$(sqlite3 "$PROJECT_ROOT/store/messages.db" "SELECT COUNT(*) FROM registered_workspaces" 2>/dev/null || echo "0")
   if [ "$RG_COUNT" -gt 0 ] 2>/dev/null; then
-    HAS_REGISTERED_GROUPS="true"
-    log "Registered groups found in database ($RG_COUNT)"
+    HAS_REGISTERED_WORKSPACES="true"
+    log "Registered workspaces found in database ($RG_COUNT)"
   fi
 fi
 
@@ -96,7 +96,7 @@ APPLE_CONTAINER: $APPLE_CONTAINER
 DOCKER: $DOCKER
 HAS_ENV: $HAS_ENV
 HAS_AUTH: $HAS_AUTH
-HAS_REGISTERED_GROUPS: $HAS_REGISTERED_GROUPS
+HAS_REGISTERED_WORKSPACES: $HAS_REGISTERED_WORKSPACES
 STATUS: success
 LOG: logs/setup.log
 === END ===

@@ -6,25 +6,25 @@ import { CronExpressionParser } from 'cron-parser';
 import {
   DATA_DIR,
   IPC_POLL_INTERVAL,
-  MAIN_GROUP_FOLDER,
+  MAIN_WORKSPACE_FOLDER,
   TIMEZONE,
 } from './config.js';
-import { AvailableGroup } from './container-runner.js';
+import { AvailableWorkspace } from './container-runner.js';
 import { createTask, deleteTask, getTaskById, updateTask } from './db.js';
 import { logger } from './logger.js';
-import { RegisteredGroup } from './types.js';
+import { RegisteredWorkspace } from './types.js';
 
 export interface IpcDeps {
   sendMessage: (jid: string, text: string) => Promise<void>;
   sendImage: (jid: string, filePath: string, options?: { caption?: string }) => Promise<void>;
-  registeredGroups: () => Record<string, RegisteredGroup>;
-  registerGroup: (jid: string, group: RegisteredGroup) => void;
-  syncGroupMetadata: (force: boolean) => Promise<void>;
-  getAvailableGroups: () => AvailableGroup[];
-  writeGroupsSnapshot: (
-    groupFolder: string,
+  registeredWorkspaces: () => Record<string, RegisteredWorkspace>;
+  registerWorkspace: (jid: string, workspace: RegisteredWorkspace) => void;
+  syncWorkspaceMetadata: (force: boolean) => Promise<void>;
+  getAvailableWorkspaces: () => AvailableWorkspace[];
+  writeWorkspacesSnapshot: (
+    workspaceFolder: string,
     isMain: boolean,
-    availableGroups: AvailableGroup[],
+    availableWorkspaces: AvailableWorkspace[],
     registeredJids: Set<string>,
   ) => void;
 }
@@ -42,10 +42,10 @@ export function startIpcWatcher(deps: IpcDeps): void {
   fs.mkdirSync(ipcBaseDir, { recursive: true });
 
   const processIpcFiles = async () => {
-    // Scan all group IPC directories (identity determined by directory)
-    let groupFolders: string[];
+    // Scan all workspace IPC directories (identity determined by directory)
+    let workspaceFolders: string[];
     try {
-      groupFolders = fs.readdirSync(ipcBaseDir).filter((f) => {
+      workspaceFolders = fs.readdirSync(ipcBaseDir).filter((f) => {
         const stat = fs.statSync(path.join(ipcBaseDir, f));
         return stat.isDirectory() && f !== 'errors';
       });
@@ -55,14 +55,14 @@ export function startIpcWatcher(deps: IpcDeps): void {
       return;
     }
 
-    const registeredGroups = deps.registeredGroups();
+    const registeredWorkspaces = deps.registeredWorkspaces();
 
-    for (const sourceGroup of groupFolders) {
-      const isMain = sourceGroup === MAIN_GROUP_FOLDER;
-      const messagesDir = path.join(ipcBaseDir, sourceGroup, 'messages');
-      const tasksDir = path.join(ipcBaseDir, sourceGroup, 'tasks');
+    for (const sourceWorkspace of workspaceFolders) {
+      const isMain = sourceWorkspace === MAIN_WORKSPACE_FOLDER;
+      const messagesDir = path.join(ipcBaseDir, sourceWorkspace, 'messages');
+      const tasksDir = path.join(ipcBaseDir, sourceWorkspace, 'tasks');
 
-      // Process messages from this group's IPC directory
+      // Process messages from this workspace's IPC directory
       try {
         if (fs.existsSync(messagesDir)) {
           const messageFiles = fs
@@ -73,38 +73,38 @@ export function startIpcWatcher(deps: IpcDeps): void {
             try {
               const data = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
               if (data.type === 'message' && data.chatJid && data.text) {
-                // Authorization: verify this group can send to this chatJid
-                const targetGroup = registeredGroups[data.chatJid];
+                // Authorization: verify this workspace can send to this chatJid
+                const targetWorkspace = registeredWorkspaces[data.chatJid];
                 if (
                   isMain ||
-                  (targetGroup && targetGroup.folder === sourceGroup)
+                  (targetWorkspace && targetWorkspace.folder === sourceWorkspace)
                 ) {
                   await deps.sendMessage(data.chatJid, data.text);
                   logger.info(
-                    { chatJid: data.chatJid, sourceGroup },
+                    { chatJid: data.chatJid, sourceWorkspace },
                     'IPC message sent',
                   );
                 } else {
                   logger.warn(
-                    { chatJid: data.chatJid, sourceGroup },
+                    { chatJid: data.chatJid, sourceWorkspace },
                     'Unauthorized IPC message attempt blocked',
                   );
                 }
               } else if (data.type === 'send_image' && data.chatJid && data.filePath) {
-                // Authorization: verify this group can send to this chatJid
-                const targetGroup = registeredGroups[data.chatJid];
+                // Authorization: verify this workspace can send to this chatJid
+                const targetWorkspace = registeredWorkspaces[data.chatJid];
                 if (
                   isMain ||
-                  (targetGroup && targetGroup.folder === sourceGroup)
+                  (targetWorkspace && targetWorkspace.folder === sourceWorkspace)
                 ) {
                   await deps.sendImage(data.chatJid, data.filePath, { caption: data.caption });
                   logger.info(
-                    { chatJid: data.chatJid, filePath: data.filePath, sourceGroup },
+                    { chatJid: data.chatJid, filePath: data.filePath, sourceWorkspace },
                     'IPC image sent',
                   );
                 } else {
                   logger.warn(
-                    { chatJid: data.chatJid, sourceGroup },
+                    { chatJid: data.chatJid, sourceWorkspace },
                     'Unauthorized IPC image attempt blocked',
                   );
                 }
@@ -112,26 +112,26 @@ export function startIpcWatcher(deps: IpcDeps): void {
               fs.unlinkSync(filePath);
             } catch (err) {
               logger.error(
-                { file, sourceGroup, err },
+                { file, sourceWorkspace, err },
                 'Error processing IPC message',
               );
               const errorDir = path.join(ipcBaseDir, 'errors');
               fs.mkdirSync(errorDir, { recursive: true });
               fs.renameSync(
                 filePath,
-                path.join(errorDir, `${sourceGroup}-${file}`),
+                path.join(errorDir, `${sourceWorkspace}-${file}`),
               );
             }
           }
         }
       } catch (err) {
         logger.error(
-          { err, sourceGroup },
+          { err, sourceWorkspace },
           'Error reading IPC messages directory',
         );
       }
 
-      // Process tasks from this group's IPC directory
+      // Process tasks from this workspace's IPC directory
       try {
         if (fs.existsSync(tasksDir)) {
           const taskFiles = fs
@@ -141,25 +141,25 @@ export function startIpcWatcher(deps: IpcDeps): void {
             const filePath = path.join(tasksDir, file);
             try {
               const data = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
-              // Pass source group identity to processTaskIpc for authorization
-              await processTaskIpc(data, sourceGroup, isMain, deps);
+              // Pass source workspace identity to processTaskIpc for authorization
+              await processTaskIpc(data, sourceWorkspace, isMain, deps);
               fs.unlinkSync(filePath);
             } catch (err) {
               logger.error(
-                { file, sourceGroup, err },
+                { file, sourceWorkspace, err },
                 'Error processing IPC task',
               );
               const errorDir = path.join(ipcBaseDir, 'errors');
               fs.mkdirSync(errorDir, { recursive: true });
               fs.renameSync(
                 filePath,
-                path.join(errorDir, `${sourceGroup}-${file}`),
+                path.join(errorDir, `${sourceWorkspace}-${file}`),
               );
             }
           }
         }
       } catch (err) {
-        logger.error({ err, sourceGroup }, 'Error reading IPC tasks directory');
+        logger.error({ err, sourceWorkspace }, 'Error reading IPC tasks directory');
       }
     }
 
@@ -167,7 +167,7 @@ export function startIpcWatcher(deps: IpcDeps): void {
   };
 
   processIpcFiles();
-  logger.info('IPC watcher started (per-group namespaces)');
+  logger.info('IPC watcher started (per-workspace namespaces)');
 }
 
 export async function processTaskIpc(
@@ -181,19 +181,19 @@ export async function processTaskIpc(
     groupFolder?: string;
     chatJid?: string;
     targetJid?: string;
-    // For register_group
+    // For register_workspace
     jid?: string;
     name?: string;
     folder?: string;
     trigger?: string;
     requiresTrigger?: boolean;
-    containerConfig?: RegisteredGroup['containerConfig'];
+    containerConfig?: RegisteredWorkspace['containerConfig'];
   },
-  sourceGroup: string, // Verified identity from IPC directory
+  sourceWorkspace: string, // Verified identity from IPC directory
   isMain: boolean, // Verified from directory path
   deps: IpcDeps,
 ): Promise<void> {
-  const registeredGroups = deps.registeredGroups();
+  const registeredWorkspaces = deps.registeredWorkspaces();
 
   switch (data.type) {
     case 'schedule_task':
@@ -203,24 +203,24 @@ export async function processTaskIpc(
         data.schedule_value &&
         data.targetJid
       ) {
-        // Resolve the target group from JID
+        // Resolve the target workspace from JID
         const targetJid = data.targetJid as string;
-        const targetGroupEntry = registeredGroups[targetJid];
+        const targetWorkspaceEntry = registeredWorkspaces[targetJid];
 
-        if (!targetGroupEntry) {
+        if (!targetWorkspaceEntry) {
           logger.warn(
             { targetJid },
-            'Cannot schedule task: target group not registered',
+            'Cannot schedule task: target workspace not registered',
           );
           break;
         }
 
-        const targetFolder = targetGroupEntry.folder;
+        const targetFolder = targetWorkspaceEntry.folder;
 
-        // Authorization: non-main groups can only schedule for themselves
-        if (!isMain && targetFolder !== sourceGroup) {
+        // Authorization: non-main workspaces can only schedule for themselves
+        if (!isMain && targetFolder !== sourceWorkspace) {
           logger.warn(
-            { sourceGroup, targetFolder },
+            { sourceWorkspace, targetFolder },
             'Unauthorized schedule_task attempt blocked',
           );
           break;
@@ -266,23 +266,23 @@ export async function processTaskIpc(
 
         const taskId = `task-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
         const contextMode =
-          data.context_mode === 'group' || data.context_mode === 'isolated'
+          data.context_mode === 'group' || data.context_mode === 'workspace' || data.context_mode === 'isolated'
             ? data.context_mode
             : 'isolated';
         createTask({
           id: taskId,
-          group_folder: targetFolder,
+          workspace_folder: targetFolder,
           chat_jid: targetJid,
           prompt: data.prompt,
           schedule_type: scheduleType,
           schedule_value: data.schedule_value,
-          context_mode: contextMode,
+          context_mode: contextMode === 'group' ? 'workspace' : contextMode as 'workspace' | 'isolated',
           next_run: nextRun,
           status: 'active',
           created_at: new Date().toISOString(),
         });
         logger.info(
-          { taskId, sourceGroup, targetFolder, contextMode },
+          { taskId, sourceWorkspace, targetFolder, contextMode },
           'Task created via IPC',
         );
       }
@@ -291,15 +291,15 @@ export async function processTaskIpc(
     case 'pause_task':
       if (data.taskId) {
         const task = getTaskById(data.taskId);
-        if (task && (isMain || task.group_folder === sourceGroup)) {
+        if (task && (isMain || task.workspace_folder === sourceWorkspace)) {
           updateTask(data.taskId, { status: 'paused' });
           logger.info(
-            { taskId: data.taskId, sourceGroup },
+            { taskId: data.taskId, sourceWorkspace },
             'Task paused via IPC',
           );
         } else {
           logger.warn(
-            { taskId: data.taskId, sourceGroup },
+            { taskId: data.taskId, sourceWorkspace },
             'Unauthorized task pause attempt',
           );
         }
@@ -309,15 +309,15 @@ export async function processTaskIpc(
     case 'resume_task':
       if (data.taskId) {
         const task = getTaskById(data.taskId);
-        if (task && (isMain || task.group_folder === sourceGroup)) {
+        if (task && (isMain || task.workspace_folder === sourceWorkspace)) {
           updateTask(data.taskId, { status: 'active' });
           logger.info(
-            { taskId: data.taskId, sourceGroup },
+            { taskId: data.taskId, sourceWorkspace },
             'Task resumed via IPC',
           );
         } else {
           logger.warn(
-            { taskId: data.taskId, sourceGroup },
+            { taskId: data.taskId, sourceWorkspace },
             'Unauthorized task resume attempt',
           );
         }
@@ -327,56 +327,56 @@ export async function processTaskIpc(
     case 'cancel_task':
       if (data.taskId) {
         const task = getTaskById(data.taskId);
-        if (task && (isMain || task.group_folder === sourceGroup)) {
+        if (task && (isMain || task.workspace_folder === sourceWorkspace)) {
           deleteTask(data.taskId);
           logger.info(
-            { taskId: data.taskId, sourceGroup },
+            { taskId: data.taskId, sourceWorkspace },
             'Task cancelled via IPC',
           );
         } else {
           logger.warn(
-            { taskId: data.taskId, sourceGroup },
+            { taskId: data.taskId, sourceWorkspace },
             'Unauthorized task cancel attempt',
           );
         }
       }
       break;
 
-    case 'refresh_groups':
-      // Only main group can request a refresh
+    case 'refresh_workspaces':
+      // Only main workspace can request a refresh
       if (isMain) {
         logger.info(
-          { sourceGroup },
-          'Group metadata refresh requested via IPC',
+          { sourceWorkspace },
+          'Workspace metadata refresh requested via IPC',
         );
-        await deps.syncGroupMetadata(true);
+        await deps.syncWorkspaceMetadata(true);
         // Write updated snapshot immediately
-        const availableGroups = deps.getAvailableGroups();
-        deps.writeGroupsSnapshot(
-          sourceGroup,
+        const availableWorkspaces = deps.getAvailableWorkspaces();
+        deps.writeWorkspacesSnapshot(
+          sourceWorkspace,
           true,
-          availableGroups,
-          new Set(Object.keys(registeredGroups)),
+          availableWorkspaces,
+          new Set(Object.keys(registeredWorkspaces)),
         );
       } else {
         logger.warn(
-          { sourceGroup },
-          'Unauthorized refresh_groups attempt blocked',
+          { sourceWorkspace },
+          'Unauthorized refresh_workspaces attempt blocked',
         );
       }
       break;
 
-    case 'register_group':
-      // Only main group can register new groups
+    case 'register_workspace':
+      // Only main workspace can register new workspaces
       if (!isMain) {
         logger.warn(
-          { sourceGroup },
-          'Unauthorized register_group attempt blocked',
+          { sourceWorkspace },
+          'Unauthorized register_workspace attempt blocked',
         );
         break;
       }
       if (data.jid && data.name && data.folder && data.trigger) {
-        deps.registerGroup(data.jid, {
+        deps.registerWorkspace(data.jid, {
           name: data.name,
           folder: data.folder,
           trigger: data.trigger,
@@ -387,7 +387,7 @@ export async function processTaskIpc(
       } else {
         logger.warn(
           { data },
-          'Invalid register_group request - missing required fields',
+          'Invalid register_workspace request - missing required fields',
         );
       }
       break;

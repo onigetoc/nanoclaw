@@ -4,7 +4,7 @@ import path from 'path';
 
 import { ASSISTANT_NAME, DATA_DIR, STORE_DIR } from './config.js';
 import { logger } from './logger.js';
-import { NewMessage, RegisteredGroup, ScheduledTask, TaskRunLog } from './types.js';
+import { NewMessage, RegisteredWorkspace, ScheduledTask, TaskRunLog } from './types.js';
 
 let db: Database.Database;
 
@@ -31,7 +31,7 @@ function createSchema(database: Database.Database): void {
 
     CREATE TABLE IF NOT EXISTS scheduled_tasks (
       id TEXT PRIMARY KEY,
-      group_folder TEXT NOT NULL,
+      workspace_folder TEXT NOT NULL,
       chat_jid TEXT NOT NULL,
       prompt TEXT NOT NULL,
       schedule_type TEXT NOT NULL,
@@ -62,10 +62,10 @@ function createSchema(database: Database.Database): void {
       value TEXT NOT NULL
     );
     CREATE TABLE IF NOT EXISTS sessions (
-      group_folder TEXT PRIMARY KEY,
+      workspace_folder TEXT PRIMARY KEY,
       session_id TEXT NOT NULL
     );
-    CREATE TABLE IF NOT EXISTS registered_groups (
+    CREATE TABLE IF NOT EXISTS registered_workspaces (
       jid TEXT PRIMARY KEY,
       name TEXT NOT NULL,
       folder TEXT NOT NULL,
@@ -138,30 +138,45 @@ export function initDatabase(): void {
   db = new Database(dbPath);
   createSchema(db);
 
-  // Remove UNIQUE constraint on folder in registered_groups.
+  // Remove UNIQUE constraint on folder in registered_workspaces (or legacy registered_groups).
   // Multiple JIDs (e.g. tg:123 and web:main) can legitimately share the same folder.
   migrateDropFolderUnique(db);
+
+  // Migrate groups → workspaces terminology in DB tables/columns
+  migrateGroupsToWorkspaces(db);
 
   // Migrate from JSON files if they exist
   migrateJsonState();
 }
 
 /**
- * Migration: remove the UNIQUE constraint on `folder` in registered_groups.
+ * Migration: remove the UNIQUE constraint on `folder` in registered_workspaces (or legacy registered_groups).
  * SQLite doesn't support ALTER TABLE DROP CONSTRAINT, so we recreate the table.
+ * Checks both old and new table names since this runs BEFORE migrateGroupsToWorkspaces.
  */
 function migrateDropFolderUnique(database: Database.Database): void {
   try {
+    // Check both old (registered_groups) and new (registered_workspaces) table names
+    const tableName = database
+      .prepare(
+        `SELECT name FROM sqlite_master WHERE type='table' AND name IN ('registered_workspaces', 'registered_groups') LIMIT 1`,
+      )
+      .get() as { name: string } | undefined;
+    if (!tableName) return; // No table exists yet (fresh DB will create it via createSchema)
+
+    const tbl = tableName.name;
+
     // Check if the UNIQUE index on folder still exists
     const idx = database
       .prepare(
-        `SELECT 1 FROM sqlite_master WHERE type='index' AND tbl_name='registered_groups' AND sql LIKE '%UNIQUE%' AND sql LIKE '%folder%'`,
+        `SELECT 1 FROM sqlite_master WHERE type='index' AND tbl_name=? AND sql LIKE '%UNIQUE%' AND sql LIKE '%folder%'`,
       )
-      .get();
+      .get(tbl);
     if (!idx) return; // Already migrated
 
+    const tmpTable = `${tbl}_new`;
     database.exec(`
-      CREATE TABLE IF NOT EXISTS registered_groups_new (
+      CREATE TABLE IF NOT EXISTS ${tmpTable} (
         jid TEXT PRIMARY KEY,
         name TEXT NOT NULL,
         folder TEXT NOT NULL,
@@ -170,13 +185,126 @@ function migrateDropFolderUnique(database: Database.Database): void {
         container_config TEXT,
         requires_trigger INTEGER DEFAULT 1
       );
-      INSERT OR IGNORE INTO registered_groups_new SELECT * FROM registered_groups;
-      DROP TABLE registered_groups;
-      ALTER TABLE registered_groups_new RENAME TO registered_groups;
+      INSERT OR IGNORE INTO ${tmpTable} SELECT * FROM ${tbl};
+      DROP TABLE ${tbl};
+      ALTER TABLE ${tmpTable} RENAME TO ${tbl};
     `);
-    logger.info('Migrated registered_groups: removed UNIQUE constraint on folder');
+    logger.info(`Migrated ${tbl}: removed UNIQUE constraint on folder`);
   } catch (err) {
-    logger.warn({ err }, 'Failed to migrate registered_groups UNIQUE constraint (may already be done)');
+    logger.warn({ err }, 'Failed to migrate UNIQUE constraint on folder (may already be done)');
+  }
+}
+
+/**
+ * Migration: rename groups → workspaces in DB tables and columns.
+ * - registered_groups → registered_workspaces
+ * - sessions.group_folder → sessions.workspace_folder
+ * - scheduled_tasks.group_folder → scheduled_tasks.workspace_folder
+ * - scheduled_tasks.context_mode 'group' → 'workspace'
+ *
+ * Idempotent: skips if registered_workspaces already exists.
+ * Requirements: 4.1, 4.2, 4.3, 4.4, 4.7
+ */
+export function migrateGroupsToWorkspaces(database: Database.Database): void {
+  try {
+    // --- Step 1: Migrate registered_groups → registered_workspaces ---
+    const hasOldTable = database
+      .prepare(
+        `SELECT 1 FROM sqlite_master WHERE type='table' AND name='registered_groups'`,
+      )
+      .get();
+    const hasNewTable = database
+      .prepare(
+        `SELECT 1 FROM sqlite_master WHERE type='table' AND name='registered_workspaces'`,
+      )
+      .get();
+    if (hasOldTable) {
+      if (hasNewTable) {
+        // Both tables exist (createSchema created the new one, old one still around).
+        // Merge any data from old table into new, then drop old.
+        database.exec(`INSERT OR IGNORE INTO registered_workspaces SELECT * FROM registered_groups;`);
+        database.exec(`DROP TABLE registered_groups;`);
+        logger.info('Merged registered_groups into registered_workspaces and dropped old table');
+      } else {
+        database.exec(`ALTER TABLE registered_groups RENAME TO registered_workspaces;`);
+        logger.info('Migrated table: registered_groups → registered_workspaces');
+      }
+    }
+
+    // --- Step 2: Migrate sessions: group_folder → workspace_folder ---
+    // Check if sessions table still has the old column name
+    const sessionsColumns = database
+      .prepare(`PRAGMA table_info(sessions)`)
+      .all() as Array<{ name: string }>;
+    const hasOldSessionCol = sessionsColumns.some(c => c.name === 'group_folder');
+    if (hasOldSessionCol) {
+      database.exec(`
+        CREATE TABLE sessions_new (
+          workspace_folder TEXT PRIMARY KEY,
+          session_id TEXT NOT NULL,
+          model TEXT
+        );
+        INSERT INTO sessions_new SELECT group_folder, session_id, model FROM sessions;
+        DROP TABLE sessions;
+        ALTER TABLE sessions_new RENAME TO sessions;
+      `);
+      logger.info('Migrated sessions: group_folder → workspace_folder');
+    }
+
+    // --- Step 3: Migrate scheduled_tasks: group_folder → workspace_folder ---
+    // Recovery: if a previous migration left scheduled_tasks_new behind, complete it
+    const hasNewTasksTable = database
+      .prepare(`SELECT 1 FROM sqlite_master WHERE type='table' AND name='scheduled_tasks_new'`)
+      .get();
+    if (hasNewTasksTable) {
+      database.exec(`DROP TABLE IF EXISTS scheduled_tasks;`);
+      database.exec(`ALTER TABLE scheduled_tasks_new RENAME TO scheduled_tasks;`);
+      database.exec(`CREATE INDEX IF NOT EXISTS idx_next_run ON scheduled_tasks(next_run);`);
+      database.exec(`CREATE INDEX IF NOT EXISTS idx_status ON scheduled_tasks(status);`);
+      logger.info('Recovered scheduled_tasks from leftover scheduled_tasks_new');
+    }
+
+    const tasksColumns = database
+      .prepare(`PRAGMA table_info(scheduled_tasks)`)
+      .all() as Array<{ name: string }>;
+    const hasOldTaskCol = tasksColumns.some(c => c.name === 'group_folder');
+    if (hasOldTaskCol) {
+      // Use separate statements so partial failures are recoverable on next startup
+      database.exec(`
+        CREATE TABLE scheduled_tasks_new (
+          id TEXT PRIMARY KEY,
+          workspace_folder TEXT NOT NULL,
+          chat_jid TEXT NOT NULL,
+          prompt TEXT NOT NULL,
+          schedule_type TEXT NOT NULL,
+          schedule_value TEXT NOT NULL,
+          next_run TEXT,
+          last_run TEXT,
+          last_result TEXT,
+          status TEXT DEFAULT 'active',
+          created_at TEXT NOT NULL,
+          context_mode TEXT DEFAULT 'isolated'
+        );
+      `);
+      database.exec(`
+        INSERT INTO scheduled_tasks_new
+          SELECT id, group_folder, chat_jid, prompt, schedule_type, schedule_value,
+                 next_run, last_run, last_result, status, created_at, context_mode
+          FROM scheduled_tasks;
+      `);
+      database.exec(`DROP TABLE scheduled_tasks;`);
+      database.exec(`ALTER TABLE scheduled_tasks_new RENAME TO scheduled_tasks;`);
+      database.exec(`CREATE INDEX IF NOT EXISTS idx_next_run ON scheduled_tasks(next_run);`);
+      database.exec(`CREATE INDEX IF NOT EXISTS idx_status ON scheduled_tasks(status);`);
+      logger.info('Migrated scheduled_tasks: group_folder → workspace_folder');
+    }
+
+    // --- Step 4: Migrate context_mode: 'group' → 'workspace' ---
+    database.exec(
+      `UPDATE scheduled_tasks SET context_mode = 'workspace' WHERE context_mode = 'group';`,
+    );
+  } catch (err) {
+    logger.error({ err }, 'Failed to migrate groups → workspaces in DB');
   }
 }
 
@@ -185,6 +313,7 @@ export function _initTestDatabase(): void {
   db = new Database(':memory:');
   createSchema(db);
   migrateDropFolderUnique(db);
+  migrateGroupsToWorkspaces(db);
 }
 
 /**
@@ -373,13 +502,13 @@ export function getMessagesSince(
 
 export function getLinkedChatJids(chatJid: string): string[] {
   const folderRow = db
-    .prepare('SELECT folder FROM registered_groups WHERE jid = ?')
+    .prepare('SELECT folder FROM registered_workspaces WHERE jid = ?')
     .get(chatJid) as { folder: string } | undefined;
 
   if (!folderRow?.folder) return [chatJid];
 
   const linked = db
-    .prepare('SELECT jid FROM registered_groups WHERE folder = ?')
+    .prepare('SELECT jid FROM registered_workspaces WHERE folder = ?')
     .all(folderRow.folder) as Array<{ jid: string }>;
 
   const jids = linked.map((r) => r.jid);
@@ -601,12 +730,12 @@ export function createTask(
 ): void {
   db.prepare(
     `
-    INSERT INTO scheduled_tasks (id, group_folder, chat_jid, prompt, schedule_type, schedule_value, context_mode, next_run, status, created_at)
+    INSERT INTO scheduled_tasks (id, workspace_folder, chat_jid, prompt, schedule_type, schedule_value, context_mode, next_run, status, created_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `,
   ).run(
     task.id,
-    task.group_folder,
+    task.workspace_folder,
     task.chat_jid,
     task.prompt,
     task.schedule_type,
@@ -624,10 +753,10 @@ export function getTaskById(id: string): ScheduledTask | undefined {
     | undefined;
 }
 
-export function getTasksForGroup(groupFolder: string): ScheduledTask[] {
+export function getTasksForWorkspace(groupFolder: string): ScheduledTask[] {
   return db
     .prepare(
-      'SELECT * FROM scheduled_tasks WHERE group_folder = ? ORDER BY created_at DESC',
+      'SELECT * FROM scheduled_tasks WHERE workspace_folder = ? ORDER BY created_at DESC',
     )
     .all(groupFolder) as ScheduledTask[];
 }
@@ -713,6 +842,14 @@ export function updateTaskAfterRun(
   ).run(nextRun, now, lastResult, nextRun, id);
 }
 
+export function getTaskRunLogs(taskId: string, limit = 20): (TaskRunLog & { id: number })[] {
+  return db
+    .prepare(
+      'SELECT * FROM task_run_logs WHERE task_id = ? ORDER BY run_at DESC LIMIT ?',
+    )
+    .all(taskId, limit) as (TaskRunLog & { id: number })[];
+}
+
 export function logTaskRun(log: TaskRunLog): void {
   db.prepare(
     `
@@ -748,24 +885,24 @@ export function setRouterState(key: string, value: string): void {
 
 export function getSession(groupFolder: string): string | undefined {
   const row = db
-    .prepare('SELECT session_id FROM sessions WHERE group_folder = ?')
+    .prepare('SELECT session_id FROM sessions WHERE workspace_folder = ?')
     .get(groupFolder) as { session_id: string } | undefined;
   return row?.session_id;
 }
 
 export function setSession(groupFolder: string, sessionId: string, model?: string): void {
   db.prepare(
-    'INSERT OR REPLACE INTO sessions (group_folder, session_id, model) VALUES (?, ?, ?)',
+    'INSERT OR REPLACE INTO sessions (workspace_folder, session_id, model) VALUES (?, ?, ?)',
   ).run(groupFolder, sessionId, model ?? getCurrentModel() ?? null);
 }
 
 export function getAllSessions(): Record<string, string> {
   const rows = db
-    .prepare('SELECT group_folder, session_id FROM sessions')
-    .all() as Array<{ group_folder: string; session_id: string }>;
+    .prepare('SELECT workspace_folder, session_id FROM sessions')
+    .all() as Array<{ workspace_folder: string; session_id: string }>;
   const result: Record<string, string> = {};
   for (const row of rows) {
-    result[row.group_folder] = row.session_id;
+    result[row.workspace_folder] = row.session_id;
   }
   return result;
 }
@@ -796,8 +933,8 @@ export function purgeSessionsIfModelChanged(): void {
   }
 
   const stale = db
-    .prepare('SELECT group_folder, session_id, model FROM sessions WHERE model IS NULL OR model != ?')
-    .all(currentModel) as Array<{ group_folder: string; session_id: string; model: string | null }>;
+    .prepare('SELECT workspace_folder, session_id, model FROM sessions WHERE model IS NULL OR model != ?')
+    .all(currentModel) as Array<{ workspace_folder: string; session_id: string; model: string | null }>;
 
   if (stale.length === 0) {
     logger.info({ model: currentModel }, 'All sessions match current model — no purge needed');
@@ -806,7 +943,7 @@ export function purgeSessionsIfModelChanged(): void {
 
   for (const row of stale) {
     logger.info(
-      { group: row.group_folder, oldModel: row.model, newModel: currentModel },
+      { workspace: row.workspace_folder, oldModel: row.model, newModel: currentModel },
       'Purging stale session (model changed)',
     );
   }
@@ -815,13 +952,13 @@ export function purgeSessionsIfModelChanged(): void {
   logger.info({ purged: stale.length, currentModel }, `Purged ${stale.length} stale session(s) due to model change`);
 }
 
-// --- Registered group accessors ---
+// --- Registered workspace accessors ---
 
-export function getRegisteredGroup(
+export function getRegisteredWorkspace(
   jid: string,
-): (RegisteredGroup & { jid: string }) | undefined {
+): (RegisteredWorkspace & { jid: string }) | undefined {
   const row = db
-    .prepare('SELECT * FROM registered_groups WHERE jid = ?')
+    .prepare('SELECT * FROM registered_workspaces WHERE jid = ?')
     .get(jid) as
     | {
         jid: string;
@@ -847,9 +984,9 @@ export function getRegisteredGroup(
   };
 }
 
-export function setRegisteredGroup(
+export function setRegisteredWorkspace(
   jid: string,
-  group: RegisteredGroup,
+  group: RegisteredWorkspace,
 ): void {
   // Use ON CONFLICT(jid) instead of INSERT OR REPLACE to avoid
   // silently deleting other JIDs that share the same folder.
@@ -857,7 +994,7 @@ export function setRegisteredGroup(
   // delete a different row (e.g. tg: JID) when inserting a web: JID
   // with the same folder name.
   db.prepare(
-    `INSERT INTO registered_groups (jid, name, folder, trigger_pattern, added_at, container_config, requires_trigger)
+    `INSERT INTO registered_workspaces (jid, name, folder, trigger_pattern, added_at, container_config, requires_trigger)
      VALUES (?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(jid) DO UPDATE SET
        name = excluded.name,
@@ -877,9 +1014,9 @@ export function setRegisteredGroup(
   );
 }
 
-export function getAllRegisteredGroups(): Record<string, RegisteredGroup> {
+export function getAllRegisteredWorkspaces(): Record<string, RegisteredWorkspace> {
   const rows = db
-    .prepare('SELECT * FROM registered_groups')
+    .prepare('SELECT * FROM registered_workspaces')
     .all() as Array<{
     jid: string;
     name: string;
@@ -889,7 +1026,7 @@ export function getAllRegisteredGroups(): Record<string, RegisteredGroup> {
     container_config: string | null;
     requires_trigger: number | null;
   }>;
-  const result: Record<string, RegisteredGroup> = {};
+  const result: Record<string, RegisteredWorkspace> = {};
   for (const row of rows) {
     result[row.jid] = {
       name: row.name,
@@ -906,14 +1043,14 @@ export function getAllRegisteredGroups(): Record<string, RegisteredGroup> {
 }
 
 /**
- * Check if a group with the specified folder name exists.
+ * Check if a workspace with the specified folder name exists.
  * 
  * @param folder - The folder name to check (e.g., 'main')
- * @returns true if a group with this folder exists, false otherwise
+ * @returns true if a workspace with this folder exists, false otherwise
  */
-export function hasGroupWithFolder(folder: string): boolean {
+export function hasWorkspaceWithFolder(folder: string): boolean {
   const row = db
-    .prepare('SELECT 1 FROM registered_groups WHERE folder = ? LIMIT 1')
+    .prepare('SELECT 1 FROM registered_workspaces WHERE folder = ? LIMIT 1')
     .get(folder) as { 1: number } | undefined;
   return row !== undefined;
 }
@@ -964,11 +1101,11 @@ function migrateJsonState(): void {
   // Migrate registered_groups.json
   const groups = migrateFile('registered_groups.json') as Record<
     string,
-    RegisteredGroup
+    RegisteredWorkspace
   > | null;
   if (groups) {
     for (const [jid, group] of Object.entries(groups)) {
-      setRegisteredGroup(jid, group);
+      setRegisteredWorkspace(jid, group);
     }
   }
 }

@@ -203,12 +203,12 @@ sqlite3 ~/eureclaw/store/messages.db "SELECT chat_jid, session_id, created_at FR
 ### File System Preservation
 
 **Group Memory (AGENTS.md):**
-- Location: `~/eureclaw/groups/{group_name}/AGENTS.md`
+- Location: `~/eureclaw/workspaces/{workspace_name}/AGENTS.md`
 - Format: Unchanged
 - Action: No changes required during rollback
 
 **Conversation Archives:**
-- Location: `~/eureclaw/groups/{group_name}/conversations/`
+- Location: `~/eureclaw/workspaces/{workspace_name}/conversations/`
 - Format: Unchanged
 - Action: Archives created by OpenCode SDK remain valid
 
@@ -218,7 +218,7 @@ sqlite3 ~/eureclaw/store/messages.db "SELECT chat_jid, session_id, created_at FR
 - Action: Clear stale IPC files after rollback
 
 **Logs:**
-- Location: `~/eureclaw/logs/` and `~/eureclaw/groups/{group_name}/logs/`
+- Location: `~/eureclaw/logs/` and `~/eureclaw/workspaces/{workspace_name}/logs/`
 - Format: May differ slightly (OpenCode vs Claude SDK)
 - Action: Preserve all logs for debugging
 
@@ -274,8 +274,8 @@ To minimize risk, consider a gradual migration strategy instead of immediate ful
 4. **Monitor Both Groups:**
    ```bash
    # Compare logs side-by-side
-   tail -f ~/eureclaw/groups/test-group/logs/*.log &
-   tail -f ~/eureclaw/groups/main/logs/*.log &
+   tail -f ~/eureclaw/workspaces/test-workspace/logs/*.log &
+   tail -f ~/eureclaw/workspaces/main/logs/*.log &
    
    # Compare session behavior
    sqlite3 ~/eureclaw/store/messages.db "SELECT chat_jid, COUNT(*) as msg_count FROM messages WHERE created_at > datetime('now', '-1 day') GROUP BY chat_jid;"
@@ -417,7 +417,7 @@ After executing rollback, verify the following:
 # Collect logs from failed deployment
 mkdir -p ~/eureclaw/rollback-analysis/$(date +%Y%m%d)
 cp -r ~/eureclaw/logs ~/eureclaw/rollback-analysis/$(date +%Y%m%d)/
-cp -r ~/eureclaw/groups/*/logs ~/eureclaw/rollback-analysis/$(date +%Y%m%d)/
+cp -r ~/eureclaw/workspaces/*/logs ~/eureclaw/rollback-analysis/$(date +%Y%m%d)/
 
 # Extract error patterns
 grep -r "ERROR" ~/eureclaw/rollback-analysis/$(date +%Y%m%d)/ > errors.txt

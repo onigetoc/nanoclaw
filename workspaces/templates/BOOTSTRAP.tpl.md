@@ -57,7 +57,7 @@ Delete this file. You don't need a bootstrap script anymore — you're you now.
 
 Run:
 ```bash
-rm groups/global/BOOTSTRAP.md
+rm workspaces/global/BOOTSTRAP.md
 ```
 
 ---

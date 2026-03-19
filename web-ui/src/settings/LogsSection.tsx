@@ -79,7 +79,7 @@ export default function LogsSection({ executions, onRefresh, isDark }: LogsSecti
               >
                 <div className="flex items-center justify-between mb-1">
                   <span className={`text-xs font-medium ${isDark ? 'text-zinc-300' : 'text-zinc-700'}`}>
-                    {err.groupName}
+                    {err.workspaceName}
                   </span>
                   <span className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-zinc-400'}`}>
                     {formatDate(err.timestamp)} {formatTime(err.timestamp)}
@@ -119,7 +119,7 @@ export default function LogsSection({ executions, onRefresh, isDark }: LogsSecti
             <thead>
               <tr className={isDark ? 'bg-zinc-900/80' : 'bg-zinc-50'}>
                 <th className={`px-4 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider ${isDark ? 'text-zinc-500' : 'text-zinc-400'}`}>Status</th>
-                <th className={`px-4 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider ${isDark ? 'text-zinc-500' : 'text-zinc-400'}`}>Group</th>
+                <th className={`px-4 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider ${isDark ? 'text-zinc-500' : 'text-zinc-400'}`}>Workspace</th>
                 <th className={`px-4 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider ${isDark ? 'text-zinc-500' : 'text-zinc-400'}`}>Model</th>
                 <th className={`px-4 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider ${isDark ? 'text-zinc-500' : 'text-zinc-400'}`}>Duration</th>
                 <th className={`px-4 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider ${isDark ? 'text-zinc-500' : 'text-zinc-400'}`}>Time</th>
@@ -144,7 +144,7 @@ export default function LogsSection({ executions, onRefresh, isDark }: LogsSecti
                     )}
                   </td>
                   <td className={`px-4 py-2.5 ${isDark ? 'text-zinc-200' : 'text-zinc-800'}`}>
-                    {exec.groupName}
+                    {exec.workspaceName}
                   </td>
                   <td className={`px-4 py-2.5 font-mono text-xs ${isDark ? 'text-zinc-400' : 'text-zinc-500'}`}>
                     {exec.model.split('/').pop() || exec.model}

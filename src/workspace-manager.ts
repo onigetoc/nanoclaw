@@ -1,21 +1,21 @@
 /**
- * Group registration, template management, and group utilities.
+ * Workspace registration, template management, and workspace utilities.
  */
 import fs from 'fs';
 import path from 'path';
 
-import { ASSISTANT_NAME, GROUPS_DIR } from './config.js';
-import { getAllChats, setRegisteredGroup } from './db.js';
-import { getRegisteredGroups } from './state.js';
-import { RegisteredGroup } from './types.js';
+import { ASSISTANT_NAME, WORKSPACES_DIR } from './config.js';
+import { getAllChats, setRegisteredWorkspace } from './db.js';
+import { getRegisteredWorkspaces } from './state.js';
+import { RegisteredWorkspace } from './types.js';
 import { logger } from './logger.js';
-import type { AvailableGroup } from './container-runner.js';
+import type { AvailableWorkspace } from './container-runner.js';
 
 /**
- * Register a new group and create its folder structure.
+ * Register a new workspace and create its folder structure.
  * 
  * New structure:
- * groups/{name}/
+ * workspaces/{name}/
  * ├── dna/           ← Personality files (AGENTS.md, IDENTITY.md, etc.)
  * ├── workspace/     ← Agent-generated content
  * │   ├── screenshots/
@@ -26,38 +26,38 @@ import type { AvailableGroup } from './container-runner.js';
  * ├── logs/          ← Execution logs
  * └── conversations/ ← Conversation archives
  */
-export function registerGroup(jid: string, group: RegisteredGroup): void {
-  const registeredGroups = getRegisteredGroups();
-  registeredGroups[jid] = group;
-  setRegisteredGroup(jid, group);
+export function registerWorkspace(jid: string, workspace: RegisteredWorkspace): void {
+  const registeredGroups = getRegisteredWorkspaces();
+  registeredGroups[jid] = workspace;
+  setRegisteredWorkspace(jid, workspace);
 
-  const groupDir = path.join(GROUPS_DIR, group.folder);
+  const workspaceDir = path.join(WORKSPACES_DIR, workspace.folder);
   
   // Create folder structure
-  fs.mkdirSync(path.join(groupDir, 'dna'), { recursive: true });
-  fs.mkdirSync(path.join(groupDir, 'workspace', 'screenshots'), { recursive: true });
-  fs.mkdirSync(path.join(groupDir, 'workspace', 'reports'), { recursive: true });
-  fs.mkdirSync(path.join(groupDir, 'workspace', 'tasks'), { recursive: true });
-  fs.mkdirSync(path.join(groupDir, 'workspace', 'downloads'), { recursive: true });
-  fs.mkdirSync(path.join(groupDir, 'uploads'), { recursive: true });
-  fs.mkdirSync(path.join(groupDir, 'logs'), { recursive: true });
-  fs.mkdirSync(path.join(groupDir, 'conversations'), { recursive: true });
+  fs.mkdirSync(path.join(workspaceDir, 'dna'), { recursive: true });
+  fs.mkdirSync(path.join(workspaceDir, 'workspace', 'screenshots'), { recursive: true });
+  fs.mkdirSync(path.join(workspaceDir, 'workspace', 'reports'), { recursive: true });
+  fs.mkdirSync(path.join(workspaceDir, 'workspace', 'tasks'), { recursive: true });
+  fs.mkdirSync(path.join(workspaceDir, 'workspace', 'downloads'), { recursive: true });
+  fs.mkdirSync(path.join(workspaceDir, 'uploads'), { recursive: true });
+  fs.mkdirSync(path.join(workspaceDir, 'logs'), { recursive: true });
+  fs.mkdirSync(path.join(workspaceDir, 'conversations'), { recursive: true });
 
-  copyTemplatesToGroup(groupDir);
+  copyTemplatesToWorkspace(workspaceDir);
 
   logger.info(
-    { jid, name: group.name, folder: group.folder },
-    'Group registered',
+    { jid, name: workspace.name, folder: workspace.folder },
+    'Workspace registered',
   );
 }
 
 /**
- * Copy template files from groups/templates/ into a new group's dna/ folder.
+ * Copy template files from workspaces/templates/ into a new workspace's dna/ folder.
  * Renames .tpl.md → .md and substitutes {{ASSISTANT_NAME}}.
- * Skips if the group already has .md files in dna/ (not a fresh group).
+ * Skips if the workspace already has .md files in dna/ (not a fresh workspace).
  */
-export function copyTemplatesToGroup(groupDir: string): void {
-  const dnaDir = path.join(groupDir, 'dna');
+export function copyTemplatesToWorkspace(workspaceDir: string): void {
+  const dnaDir = path.join(workspaceDir, 'dna');
   fs.mkdirSync(dnaDir, { recursive: true });
   
   const existingFiles = fs.readdirSync(dnaDir);
@@ -66,7 +66,7 @@ export function copyTemplatesToGroup(groupDir: string): void {
   );
   if (hasMdFiles) return;
 
-  const templatesDir = path.join(GROUPS_DIR, 'templates');
+  const templatesDir = path.join(WORKSPACES_DIR, 'templates');
   if (!fs.existsSync(templatesDir)) {
     logger.warn({ templatesDir }, 'Templates directory not found, skipping template copy');
     return;
@@ -91,18 +91,18 @@ export function copyTemplatesToGroup(groupDir: string): void {
   }
 
   logger.info(
-    { groupDir, dnaDir, templateCount: templates.length },
-    'Copied templates to new group dna/',
+    { workspaceDir, dnaDir, templateCount: templates.length },
+    'Copied templates to new workspace dna/',
   );
 }
 
 /**
- * Get available groups list for the agent.
- * Returns groups ordered by most recent activity.
+ * Get available workspaces list for the agent.
+ * Returns workspaces ordered by most recent activity.
  */
-export function getAvailableGroups(): AvailableGroup[] {
+export function getAvailableWorkspaces(): AvailableWorkspace[] {
   const chats = getAllChats();
-  const registeredGroups = getRegisteredGroups();
+  const registeredGroups = getRegisteredWorkspaces();
   const registeredJids = new Set(Object.keys(registeredGroups));
 
   return chats

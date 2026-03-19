@@ -5,8 +5,8 @@
 
 // Re-exports for backwards compatibility
 export { escapeXml, formatMessages } from './router.js';
-export { getAvailableGroups } from './group-manager.js';
-export { _setRegisteredGroups } from './state.js';
+export { getAvailableWorkspaces } from './workspace-manager.js';
+export { _setRegisteredWorkspaces } from './state.js';
 
 import { logger } from './logger.js';
 import { main } from './startup.js';

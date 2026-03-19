@@ -17,7 +17,7 @@ const { chromium } = require('playwright');
   });
   await page.waitForTimeout(2000);
   await page.screenshot({
-    path: './groups/main/bing-nav-1.png',
+    path: './workspaces/main/bing-nav-1.png',
     fullPage: true,
   });
 
@@ -28,7 +28,7 @@ const { chromium } = require('playwright');
   });
   await page.waitForTimeout(2000);
   await page.screenshot({
-    path: './groups/main/bing-nav-2.png',
+    path: './workspaces/main/bing-nav-2.png',
     fullPage: true,
   });
 
@@ -37,7 +37,7 @@ const { chromium } = require('playwright');
     await page.click('h2 a');
     await page.waitForTimeout(3000);
     await page.screenshot({
-      path: './groups/main/bing-nav-3.png',
+      path: './workspaces/main/bing-nav-3.png',
       fullPage: true,
     });
   } catch (e) {

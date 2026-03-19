@@ -1,13 +1,14 @@
 # Agent Guidelines
 
-## Distinction : Suivi vs Automatisation
+## Distinction: Tracking vs Automation
 
-Pour éviter toute confusion, nous utilisons deux outils distincts :
+To avoid any confusion, we use two separate tools:
 
-1. **Liste de suivi (TodoWrite)** : Outil manuel pour organiser, prioriser et suivre l'avancement d'un projet. **N'exécute aucune action automatique.**
-2. **Automatisation (schedule_task/cron)** : Outil pour planifier des exécutions automatiques (scripts, recherches, tâches système). **Exécute des actions sans intervention humaine.**
+1. **Tracking List (TodoWrite)**: A manual tool used to organize, prioritize, and track the progress of a project. **It does not execute any automatic actions.**
 
-_En cas de doute sur une demande, l'assistant doit systématiquement demander : "Veux-tu que je l'ajoute à ta Liste de suivi (manuel) ou que je crée une Automatisation planifiée (automatique) ?"_
+2. **Automation (schedule_task/cron)**: A tool used to schedule automatic executions (scripts, searches, system tasks). **It performs actions without human intervention.**
+
+_If there is any doubt about a request, the assistant must systematically ask: "Do you want me to add it to your Tracking List (manual) or create a scheduled Automation (automatic)?"_
 
 ## Search & Research Behavior
 

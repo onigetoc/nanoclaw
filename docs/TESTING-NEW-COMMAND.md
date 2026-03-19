@@ -54,18 +54,18 @@
 - No errors or crashes
 - Each message is treated as the start of a new conversation
 
-### Test Scenario 4: /new in Different Groups
+### Test Scenario 4: /new in Different Workspaces
 
 **Steps:**
-1. In Group A: Send `/new` and start conversation
-2. In Group B: Send `/new` and start conversation
-3. In Group A: Continue conversation
-4. In Group B: Continue conversation
+1. In Workspace A: Send `/new` and start conversation
+2. In Workspace B: Send `/new` and start conversation
+3. In Workspace A: Continue conversation
+4. In Workspace B: Continue conversation
 
 **Expected Behavior:**
-- Each group has independent sessions
-- `/new` in Group A doesn't affect Group B
-- Sessions are isolated per group
+- Each workspace has independent sessions
+- `/new` in Workspace A doesn't affect Workspace B
+- Sessions are isolated per workspace
 
 ### Test Scenario 5: Error Handling
 
@@ -102,7 +102,7 @@ Expected output:
       ✓ should detect OpenCode commands in messages
     ✓ /new Command (3)
       ✓ should return success response with OpenCode data
-      ✓ should require registered group
+      ✓ should require registered workspace
       ✓ should be case-insensitive
 ```
 
@@ -133,7 +133,7 @@ tail -f logs/agent-runner.log | grep -E "(session|Creating)"
 After `/new` command:
 ```
 [2026-03-02T10:30:00.000Z] [startup] Forcing new session via /new command
-[2026-03-02T10:30:00.001Z] [state] Session cleared for group: main
+[2026-03-02T10:30:00.001Z] [state] Session cleared for workspace: main
 [2026-03-02T10:30:01.000Z] [agent-runner] Creating new OpenCode session...
 [2026-03-02T10:30:01.500Z] [agent-runner] ✓ Created new session: ses_abc123xyz
 ```
@@ -147,7 +147,7 @@ After `/new` command:
 - [ ] Conversation history is reset
 - [ ] No errors in logs
 - [ ] Works in all channels (WhatsApp, Telegram, Web UI)
-- [ ] Sessions are isolated per group
+- [ ] Sessions are isolated per workspace
 - [ ] Multiple `/new` commands work correctly
 - [ ] Error handling works when OpenCode is down
 
@@ -247,7 +247,7 @@ The `/new` command implementation is successful if:
 4. ✅ Conversation history is reset
 5. ✅ No errors or crashes
 6. ✅ Works across all channels
-7. ✅ Sessions are isolated per group
+7. ✅ Sessions are isolated per workspace
 8. ✅ Performance is acceptable (<500ms)
 9. ✅ Error handling is graceful
 10. ✅ Tests pass

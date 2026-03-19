@@ -1,7 +1,7 @@
 import {
   Activity,
-  ArrowLeft,
   Bug,
+  Clock,
   FileText,
   FileWarning,
   Key,
@@ -14,6 +14,7 @@ import {
 export type SettingsSection =
   | 'overview'
   | 'sessions'
+  | 'cron'
   | 'debug'
   | 'logs'
   | 'files'
@@ -31,6 +32,7 @@ interface NavItem {
 const NAV_ITEMS: NavItem[] = [
   { id: 'overview', label: 'Overview', icon: <Activity className="h-4 w-4" />, group: 'Control' },
   { id: 'sessions', label: 'Sessions', icon: <Radio className="h-4 w-4" />, group: 'Control' },
+  { id: 'cron', label: 'Cron Jobs', icon: <Clock className="h-4 w-4" />, group: 'Control' },
   { id: 'debug', label: 'Debug', icon: <Bug className="h-4 w-4" />, group: 'Agent' },
   { id: 'logs', label: 'Logs', icon: <FileWarning className="h-4 w-4" />, group: 'Agent' },
   { id: 'files', label: 'Files', icon: <FileText className="h-4 w-4" />, group: 'Agent' },

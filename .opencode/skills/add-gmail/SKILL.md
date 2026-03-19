@@ -209,9 +209,9 @@ if (fs.existsSync(gmailDir)) {
 }
 ```
 
-### Step 3: Update Group Memory
+### Step 3: Update Workspace Memory
 
-Append to `groups/AGENTS.md` (the global memory file):
+Append to `workspaces/AGENTS.md` (the global memory file):
 
 ```markdown
 
@@ -227,7 +227,7 @@ You have access to Gmail via MCP tools:
 Example: "Check my unread emails from today" or "Send an email to john@example.com about the meeting"
 ```
 
-Also append the same section to `groups/main/AGENTS.md`.
+Also append the same section to `workspaces/main/AGENTS.md`.
 
 ### Step 4: Rebuild and Restart
 
@@ -311,7 +311,7 @@ Also ask:
 > - Agent remembers all interactions with that person
 >
 > **Option C: Single Context**
-> - All emails share the main group context
+> - All emails share the main workspace context
 > - Like an additional input to the main channel
 
 Store their choices for implementation.
@@ -499,7 +499,7 @@ async function startEmailLoop(): Promise<void> {
         logger.info({ from: email.from, subject: email.subject }, 'Processing email');
         markEmailProcessed(email.id, email.threadId, email.from, email.subject);
 
-        // Determine which group/context to use
+        // Determine which workspace/context to use
         const contextKey = getContextKey(email);
 
         // Build prompt with email content
@@ -512,7 +512,7 @@ async function startEmailLoop(): Promise<void> {
 Respond to this email. Your response will be sent as an email reply.`;
 
         // Run agent with email context
-        // You'll need to create a registered group for email or use a special handler
+        // You'll need to create a registered workspace for email or use a special handler
         const response = await runEmailAgent(contextKey, prompt, email);
 
         if (response) {
@@ -548,21 +548,21 @@ async function runEmailAgent(
   email: EmailMessage
 ): Promise<string | null> {
   // Email uses either:
-  // 1. A dedicated "email" group folder
+  // 1. A dedicated "email" workspace folder
   // 2. Or dynamic folders per thread/sender
 
-  const groupFolder = EMAIL_CHANNEL.contextMode === 'single'
-    ? 'main'  // Use main group context
+  const workspaceFolder = EMAIL_CHANNEL.contextMode === 'single'
+    ? 'main'  // Use main workspace context
     : `email/${contextKey}`;  // Isolated email context
 
   // Ensure folder exists
-  const groupDir = path.join(GROUPS_DIR, groupFolder);
-  fs.mkdirSync(groupDir, { recursive: true });
+  const workspaceDir = path.join(WORKSPACES_DIR, workspaceFolder);
+  fs.mkdirSync(workspaceDir, { recursive: true });
 
-  // Create minimal registered group for email
-  const emailGroup: RegisteredGroup = {
+  // Create minimal registered workspace for email
+  const emailWorkspace: RegisteredWorkspace = {
     name: contextKey,
-    folder: groupFolder,
+    folder: workspaceFolder,
     trigger: '',  // No trigger for email
     added_at: new Date().toISOString()
   };
@@ -570,16 +570,16 @@ async function runEmailAgent(
   // Use existing runContainerAgent
   const output = await runContainerAgent(emailGroup, {
     prompt,
-    sessionId: sessions[groupFolder],
-    groupFolder,
+    sessionId: sessions[workspaceFolder],
+    workspaceFolder,
     chatJid: `email:${email.from}`,  // Use email: prefix for JID
     isMain: false,
     isScheduledTask: false
   });
 
   if (output.newSessionId) {
-    sessions[groupFolder] = output.newSessionId;
-    setSession(groupFolder, output.newSessionId);
+    sessions[workspaceFolder] = output.newSessionId;
+    setSession(workspaceFolder, output.newSessionId);
   }
 
   return output.status === 'success' ? output.result : null;
@@ -607,15 +607,15 @@ If you want the agent to be able to send emails proactively from within a sessio
 
 Then add handling in `src/ipc.ts` in the `processTaskIpc` function or create a new IPC handler for email actions.
 
-### Step 8: Create Email Group Memory
+### Step 8: Create Email Workspace Memory
 
-Create the email group directory and memory file:
+Create the email workspace directory and memory file:
 
 ```bash
-mkdir -p groups/email
+mkdir -p workspaces/email
 ```
 
-Write `groups/email/AGENTS.md`:
+Write `workspaces/email/AGENTS.md`:
 
 ```markdown
 # Email Channel
@@ -699,7 +699,7 @@ npx -y @gongrzhe/server-gmail-autoauth-mcp
 
 ### Container can't access Gmail
 - Verify `~/.gmail-mcp` is mounted in container
-- Check container logs: `cat groups/main/logs/container-*.log | tail -50`
+- Check container logs: `cat workspaces/main/logs/container-*.log | tail -50`
 
 ---
 
@@ -720,7 +720,7 @@ To remove Gmail entirely:
 
 4. Delete `src/email-channel.ts` (if created)
 
-5. Remove Gmail sections from `groups/*/AGENTS.md`
+5. Remove Gmail sections from `workspaces/*/AGENTS.md`
 
 6. Rebuild:
    ```bash

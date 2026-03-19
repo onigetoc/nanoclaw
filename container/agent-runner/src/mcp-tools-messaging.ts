@@ -155,7 +155,7 @@ SCHEDULE VALUE FORMAT (all times are LOCAL timezone):
       if (!isMain) {
         return { content: [{ type: 'text' as const, text: 'Only the main group can register new groups.' }], isError: true };
       }
-      writeIpcFile(tasksDir, { type: 'register_group', jid: args.jid, name: args.name, folder: args.folder, trigger: args.trigger, timestamp: new Date().toISOString() });
+      writeIpcFile(tasksDir, { type: 'register_workspace', jid: args.jid, name: args.name, folder: args.folder, trigger: args.trigger, timestamp: new Date().toISOString() });
       return { content: [{ type: 'text' as const, text: `Group "${args.name}" registered.` }] };
     },
   );
@@ -168,7 +168,7 @@ SCHEDULE VALUE FORMAT (all times are LOCAL timezone):
       caption: z.string().optional().describe('Optional caption'),
     },
     async (args) => {
-      const groupDir = process.env.EURECLAW_GROUP_DIR || '/workspace/group';
+      const groupDir = process.env.EURECLAW_WORKSPACE_DIR || '/workspace/group';
       const projectDir = process.env.PROJECT_DIR || '/workspace/project';
 
       let resolvedPath = args.filePath;

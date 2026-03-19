@@ -4,8 +4,9 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { preserveParagraphBreaks } from '../utils/message-utils';
 import { apiService, type MdFileEntry } from '../api';
+import { useTokenCount } from '../hooks/useTokenCount';
 
-interface GroupInfo { name: string; folders: string[] }
+interface WorkspaceInfo { name: string; folders: string[] }
 interface FilesSectionProps { isDark: boolean }
 interface CacheEntry<T> { data: T; timestamp: number }
 
@@ -19,8 +20,8 @@ const TREE_TTL = 60_000;   // 60s for trees
 const FILE_TTL = 30_000;   // 30s for file content
 const treeCache = new Map<string, CacheEntry<MdFileEntry[]>>();
 const fileCache = new Map<string, CacheEntry<{ content: string; modified: string; size: number }>>();
-let cachedGroups: CacheEntry<GroupInfo[]> | null = null;
-let cachedSelectedGroup = '';
+let cachedWorkspaces: CacheEntry<WorkspaceInfo[]> | null = null;
+let cachedSelectedWorkspace = '';
 let cachedSelectedFile: string | null = null;
 let cachedExpandedFolders: Set<string> = new Set(['dna']);
 
@@ -31,10 +32,10 @@ function getCached<T>(cache: Map<string, CacheEntry<T>>, key: string, ttl: numbe
 }
 
 export default function FilesSection({ isDark }: FilesSectionProps) {
-  const [groups, setGroups] = useState<GroupInfo[]>(cachedGroups?.data ?? []);
-  const [selectedGroup, setSelectedGroup] = useState(cachedSelectedGroup);
+  const [workspaces, setWorkspaces] = useState<WorkspaceInfo[]>(cachedWorkspaces?.data ?? []);
+  const [selectedWorkspace, setSelectedWorkspace] = useState(cachedSelectedWorkspace);
   const [tree, setTree] = useState<MdFileEntry[]>(() => {
-    if (cachedSelectedGroup) return getCached(treeCache, cachedSelectedGroup, TREE_TTL) ?? [];
+    if (cachedSelectedWorkspace) return getCached(treeCache, cachedSelectedWorkspace, TREE_TTL) ?? [];
     return [];
   });
   const [selectedFile, setSelectedFile] = useState<string | null>(cachedSelectedFile);
@@ -52,40 +53,44 @@ export default function FilesSection({ isDark }: FilesSectionProps) {
 
   const hasChanges = fileContent !== originalContent;
 
+  // Token count (GPT tokenizer) — lazy-loaded, debounced
+  const tokenCount = useTokenCount(fileContent);
+
   // Persist selections to module-level vars on change
-  useEffect(() => { cachedSelectedGroup = selectedGroup; }, [selectedGroup]);
+  useEffect(() => { cachedSelectedWorkspace = selectedWorkspace; }, [selectedWorkspace]);
   useEffect(() => { cachedSelectedFile = selectedFile; }, [selectedFile]);
   useEffect(() => { cachedExpandedFolders = expandedFolders; }, [expandedFolders]);
 
-  // Load groups on mount (with cache)
+  // Load workspaces on mount (with cache)
   useEffect(() => {
-    if (cachedGroups && Date.now() - cachedGroups.timestamp < TREE_TTL) {
-      setGroups(cachedGroups.data);
-      if (!selectedGroup && cachedGroups.data.length > 0) {
-        setSelectedGroup(cachedGroups.data[0].name);
+    if (cachedWorkspaces && Date.now() - cachedWorkspaces.timestamp < TREE_TTL) {
+      setWorkspaces(cachedWorkspaces.data);
+      if (!selectedWorkspace && cachedWorkspaces.data.length > 0) {
+        setSelectedWorkspace(cachedWorkspaces.data[0].name);
       }
       return;
     }
-    apiService.getMdGroups().then(data => {
-      cachedGroups = { data: data.groups, timestamp: Date.now() };
-      setGroups(data.groups);
-      if (!selectedGroup && data.groups.length > 0) {
-        setSelectedGroup(data.groups[0].name);
+    apiService.getMdWorkspaces().then(data => {
+      const wsData = data.workspaces;
+      cachedWorkspaces = { data: wsData, timestamp: Date.now() };
+      setWorkspaces(wsData);
+      if (!selectedWorkspace && wsData.length > 0) {
+        setSelectedWorkspace(wsData[0].name);
       }
-    }).catch(() => setError('Failed to load groups'));
+    }).catch(() => setError('Failed to load workspaces'));
   }, []);
 
-  // Load tree when group changes (with cache)
-  const loadTree = useCallback(async (group: string, force = false) => {
-    if (!group) return;
+  // Load tree when workspace changes (with cache)
+  const loadTree = useCallback(async (workspace: string, force = false) => {
+    if (!workspace) return;
     if (!force) {
-      const cached = getCached(treeCache, group, TREE_TTL);
+      const cached = getCached(treeCache, workspace, TREE_TTL);
       if (cached) { setTree(cached); return; }
     }
     setTreeLoading(true);
     try {
-      const data = await apiService.getMdTree(group);
-      treeCache.set(group, { data: data.tree, timestamp: Date.now() });
+      const data = await apiService.getMdTree(workspace);
+      treeCache.set(workspace, { data: data.tree, timestamp: Date.now() });
       setTree(data.tree);
       if (!cachedExpandedFolders.size) setExpandedFolders(new Set(['dna']));
     } catch {
@@ -96,17 +101,17 @@ export default function FilesSection({ isDark }: FilesSectionProps) {
   }, []);
 
   useEffect(() => {
-    if (!selectedGroup) return;
+    if (!selectedWorkspace) return;
     // On first mount, restore cached file if available
     if (!initDone.current && cachedSelectedFile) {
       initDone.current = true;
-      const cachedFile = getCached(fileCache, `${selectedGroup}:${cachedSelectedFile}`, FILE_TTL);
+      const cachedFile = getCached(fileCache, `${selectedWorkspace}:${cachedSelectedFile}`, FILE_TTL);
       if (cachedFile) {
         setFileContent(cachedFile.content);
         setOriginalContent(cachedFile.content);
         setFileModified(cachedFile.modified);
       }
-      void loadTree(selectedGroup);
+      void loadTree(selectedWorkspace);
       return;
     }
     initDone.current = true;
@@ -114,14 +119,14 @@ export default function FilesSection({ isDark }: FilesSectionProps) {
     setFileContent('');
     setOriginalContent('');
     setIsEditing(false);
-    void loadTree(selectedGroup);
-  }, [selectedGroup, loadTree]);
+    void loadTree(selectedWorkspace);
+  }, [selectedWorkspace, loadTree]);
 
   const openFile = async (filePath: string) => {
     if (hasChanges && !confirm('You have unsaved changes. Discard?')) return;
     setError(null);
     // Check file cache first
-    const cacheKey = `${selectedGroup}:${filePath}`;
+    const cacheKey = `${selectedWorkspace}:${filePath}`;
     const cached = getCached(fileCache, cacheKey, FILE_TTL);
     if (cached) {
       setSelectedFile(filePath);
@@ -137,7 +142,7 @@ export default function FilesSection({ isDark }: FilesSectionProps) {
     setIsEditing(false);
     setLoading(true);
     try {
-      const data = await apiService.getMdFile(selectedGroup, filePath);
+      const data = await apiService.getMdFile(selectedWorkspace, filePath);
       fileCache.set(cacheKey, { data: { content: data.content, modified: data.modified, size: data.size }, timestamp: Date.now() });
       setFileContent(data.content);
       setOriginalContent(data.content);
@@ -154,14 +159,14 @@ export default function FilesSection({ isDark }: FilesSectionProps) {
     setSaving(true);
     setError(null);
     try {
-      const result = await apiService.saveMdFile(selectedGroup, selectedFile, fileContent);
+      const result = await apiService.saveMdFile(selectedWorkspace, selectedFile, fileContent);
       setOriginalContent(fileContent);
       setFileModified(result.modified);
       setIsEditing(false);
       // Update file cache + invalidate tree cache (size may have changed)
-      const cacheKey = `${selectedGroup}:${selectedFile}`;
+      const cacheKey = `${selectedWorkspace}:${selectedFile}`;
       fileCache.set(cacheKey, { data: { content: fileContent, modified: result.modified, size: result.size }, timestamp: Date.now() });
-      treeCache.delete(selectedGroup);
+      treeCache.delete(selectedWorkspace);
     } catch {
       setError('Failed to save file');
     } finally {
@@ -206,14 +211,14 @@ export default function FilesSection({ isDark }: FilesSectionProps) {
     <div className="flex h-[calc(100vh-8rem)] gap-4">
       {/* Left panel: file tree */}
       <div className={`w-64 shrink-0 rounded-lg border ${border} ${bg} flex flex-col`}>
-        {/* Group selector */}
+        {/* Workspace selector */}
         <div className={`border-b ${border} p-3`}>
           <select
-            value={selectedGroup}
-            onChange={e => setSelectedGroup(e.target.value)}
+            value={selectedWorkspace}
+            onChange={e => setSelectedWorkspace(e.target.value)}
             className={`w-full rounded-md border px-2 py-1.5 text-sm ${border} ${isDark ? 'bg-zinc-800 text-zinc-100' : 'bg-white text-zinc-900'}`}
           >
-            {groups.map(g => (
+            {workspaces.map(g => (
               <option key={g.name} value={g.name}>{g.name}</option>
             ))}
           </select>
@@ -256,7 +261,7 @@ export default function FilesSection({ isDark }: FilesSectionProps) {
         {/* Refresh (force bypass cache) */}
         <div className={`border-t ${border} p-2`}>
           <button
-            onClick={() => loadTree(selectedGroup, true)}
+            onClick={() => loadTree(selectedWorkspace, true)}
             className={`flex w-full items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-xs ${textMuted} ${hoverBg}`}
           >
             <RefreshCw className="h-3 w-3" /> Refresh
@@ -320,8 +325,9 @@ export default function FilesSection({ isDark }: FilesSectionProps) {
 
             {/* Footer */}
             {fileModified && (
-              <div className={`border-t ${border} px-4 py-1.5 text-[11px] ${textMuted}`}>
-                Last modified: {new Date(fileModified).toLocaleString()}
+              <div className={`flex items-center justify-between border-t ${border} px-4 py-1.5 text-[11px] ${textMuted}`}>
+                <span>Last modified: {new Date(fileModified).toLocaleString()}</span>
+                {tokenCount > 0 && <span>Tokens: {tokenCount.toLocaleString()} (GPT)</span>}
               </div>
             )}
           </>

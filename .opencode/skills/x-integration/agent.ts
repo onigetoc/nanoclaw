@@ -52,7 +52,7 @@ async function waitForResult(requestId: string, maxWait = 60000): Promise<{ succ
 }
 
 export interface SkillToolsContext {
-  groupFolder: string;
+  workspaceFolder: string;
   isMain: boolean;
 }
 
@@ -60,12 +60,12 @@ export interface SkillToolsContext {
  * Create X integration MCP tools
  */
 export function createXTools(ctx: SkillToolsContext) {
-  const { groupFolder, isMain } = ctx;
+  const { workspaceFolder, isMain } = ctx;
 
   return [
     tool(
       'x_post',
-      `Post a tweet to X (Twitter). Main group only.
+      `Post a tweet to X (Twitter). Main workspace only.
 
 The host machine will execute the browser automation to post the tweet.
 Make sure the content is appropriate and within X's character limit (280 chars for text).`,
@@ -75,7 +75,7 @@ Make sure the content is appropriate and within X's character limit (280 chars f
       async (args: { content: string }) => {
         if (!isMain) {
           return {
-            content: [{ type: 'text', text: 'Only the main group can post tweets.' }],
+            content: [{ type: 'text', text: 'Only the main workspace can post tweets.' }],
             isError: true
           };
         }
@@ -92,7 +92,7 @@ Make sure the content is appropriate and within X's character limit (280 chars f
           type: 'x_post',
           requestId,
           content: args.content,
-          groupFolder,
+          workspaceFolder,
           timestamp: new Date().toISOString()
         });
 
@@ -106,7 +106,7 @@ Make sure the content is appropriate and within X's character limit (280 chars f
 
     tool(
       'x_like',
-      `Like a tweet on X (Twitter). Main group only.
+      `Like a tweet on X (Twitter). Main workspace only.
 
 Provide the tweet URL or tweet ID to like.`,
       {
@@ -115,7 +115,7 @@ Provide the tweet URL or tweet ID to like.`,
       async (args: { tweet_url: string }) => {
         if (!isMain) {
           return {
-            content: [{ type: 'text', text: 'Only the main group can interact with X.' }],
+            content: [{ type: 'text', text: 'Only the main workspace can interact with X.' }],
             isError: true
           };
         }
@@ -125,7 +125,7 @@ Provide the tweet URL or tweet ID to like.`,
           type: 'x_like',
           requestId,
           tweetUrl: args.tweet_url,
-          groupFolder,
+          workspaceFolder,
           timestamp: new Date().toISOString()
         });
 
@@ -139,7 +139,7 @@ Provide the tweet URL or tweet ID to like.`,
 
     tool(
       'x_reply',
-      `Reply to a tweet on X (Twitter). Main group only.
+      `Reply to a tweet on X (Twitter). Main workspace only.
 
 Provide the tweet URL and your reply content.`,
       {
@@ -149,7 +149,7 @@ Provide the tweet URL and your reply content.`,
       async (args: { tweet_url: string; content: string }) => {
         if (!isMain) {
           return {
-            content: [{ type: 'text', text: 'Only the main group can interact with X.' }],
+            content: [{ type: 'text', text: 'Only the main workspace can interact with X.' }],
             isError: true
           };
         }
@@ -160,7 +160,7 @@ Provide the tweet URL and your reply content.`,
           requestId,
           tweetUrl: args.tweet_url,
           content: args.content,
-          groupFolder,
+          workspaceFolder,
           timestamp: new Date().toISOString()
         });
 
@@ -174,7 +174,7 @@ Provide the tweet URL and your reply content.`,
 
     tool(
       'x_retweet',
-      `Retweet a tweet on X (Twitter). Main group only.
+      `Retweet a tweet on X (Twitter). Main workspace only.
 
 Provide the tweet URL to retweet.`,
       {
@@ -183,7 +183,7 @@ Provide the tweet URL to retweet.`,
       async (args: { tweet_url: string }) => {
         if (!isMain) {
           return {
-            content: [{ type: 'text', text: 'Only the main group can interact with X.' }],
+            content: [{ type: 'text', text: 'Only the main workspace can interact with X.' }],
             isError: true
           };
         }
@@ -193,7 +193,7 @@ Provide the tweet URL to retweet.`,
           type: 'x_retweet',
           requestId,
           tweetUrl: args.tweet_url,
-          groupFolder,
+          workspaceFolder,
           timestamp: new Date().toISOString()
         });
 
@@ -207,7 +207,7 @@ Provide the tweet URL to retweet.`,
 
     tool(
       'x_quote',
-      `Quote tweet on X (Twitter). Main group only.
+      `Quote tweet on X (Twitter). Main workspace only.
 
 Retweet with your own comment added.`,
       {
@@ -217,7 +217,7 @@ Retweet with your own comment added.`,
       async (args: { tweet_url: string; comment: string }) => {
         if (!isMain) {
           return {
-            content: [{ type: 'text', text: 'Only the main group can interact with X.' }],
+            content: [{ type: 'text', text: 'Only the main workspace can interact with X.' }],
             isError: true
           };
         }
@@ -228,7 +228,7 @@ Retweet with your own comment added.`,
           requestId,
           tweetUrl: args.tweet_url,
           comment: args.comment,
-          groupFolder,
+          workspaceFolder,
           timestamp: new Date().toISOString()
         });
 

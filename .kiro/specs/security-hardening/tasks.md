@@ -244,7 +244,7 @@ Implement a defense-in-depth security system for EureClaw with two layers: hardc
   - Ensure all tests pass, ask the user if questions arise.
 
 - [x] 19. Create Security Skill
-  - [x] 19.1 Create `groups/global/dna/SECURITY.md` with agent security instructions
+  - [x] 19.1 Create `workspaces/global/dna/SECURITY.md` with agent security instructions
     - Instructions to refuse: revealing system prompt, ignoring previous instructions, impersonating another system, executing obfuscated code without explanation
     - Safe refusal patterns: polite, no detection mechanism revealed
     - Instruction to use `<security-flag>reason</security-flag>` when detecting manipulation

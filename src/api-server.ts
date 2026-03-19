@@ -14,11 +14,11 @@ import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import { logger } from './logger.js';
-import { getAllChats, getMessagesSince, getAllMessagesSinceLinked, getMessagesPage, getLinkedChatJids, storeMessageDirect, storeChatMetadata, setRegisteredGroup, insertApiToken, getAllApiTokens, updateApiTokenLastUsed, deactivateApiToken, getApiTokenChatMappings, addApiTokenChat, deleteApiTokenChats } from './db.js';
-import { getRegisteredGroups, reloadRegisteredGroups, getSessions, setLastAgentTimestampForJid, saveState } from './state.js';
-import { ASSISTANT_NAME, GROUPS_DIR, TRIGGER_PATTERN } from './config.js';
-import { NewMessage, RegisteredGroup } from './types.js';
-import { registerGroup } from './group-manager.js';
+import { getAllChats, getMessagesSince, getAllMessagesSinceLinked, getMessagesPage, getLinkedChatJids, storeMessageDirect, storeChatMetadata, setRegisteredWorkspace, insertApiToken, getAllApiTokens, updateApiTokenLastUsed, deactivateApiToken, getApiTokenChatMappings, addApiTokenChat, deleteApiTokenChats } from './db.js';
+import { getRegisteredWorkspaces, reloadRegisteredWorkspaces, getSessions, setLastAgentTimestampForJid, saveState } from './state.js';
+import { ASSISTANT_NAME, WORKSPACES_DIR, TRIGGER_PATTERN } from './config.js';
+import { NewMessage, RegisteredWorkspace } from './types.js';
+import { registerWorkspace } from './workspace-manager.js';
 import { executeCommand } from './commands/index.js';
 import { handleCommandSideEffects } from './commands/command-effects.js';
 import { getTranscriptionManager, isAudioTranscriptionAvailable } from './media/audio-manager.js';
@@ -29,6 +29,7 @@ import { isSleeping } from './commands/sleep-manager.js';
 import { registerAuthRoutes } from './api-auth-routes.js';
 import { registerEnvVarRoutes } from './api-envvar-routes.js';
 import { registerMarkdownRoutes } from './api-markdown-routes.js';
+import { registerTaskRoutes } from './api-tasks-routes.js';
 import { getProviders, getPopularProviders, clearCache as clearModelsCache } from './models-cache.js';
 import { restartServer as restartOpenCodeServer } from './opencode-server.js';
 
@@ -246,36 +247,36 @@ fastify.get(
     const id = params.id;
     const chatJids = getApiTokenChatMappings(id);
     const allChats = getAllChats();
-    const groups = getRegisteredGroups();
+    const workspaces = getRegisteredWorkspaces();
 
-    const chatsWithGroups = chatJids.map((chatJid) => {
+    const chatsWithWorkspaces = chatJids.map((chatJid) => {
       const chat = allChats.find((c) => c.jid === chatJid);
       return {
         jid: chatJid,
         name: chat?.name || chatJid,
         last_message_time: chat?.last_message_time || '',
-        isRegistered: !!groups[chatJid],
-        groupInfo: groups[chatJid] || null,
+        isRegistered: !!workspaces[chatJid],
+        workspaceInfo: workspaces[chatJid] || null,
       };
     });
 
-    return { chats: chatsWithGroups };
+    return { chats: chatsWithWorkspaces };
   },
 );
 
 fastify.get('/chats', { preHandler: authenticate }, async () => {
-  // Auto-discover and register web groups for existing group folders
-  ensureWebGroupsRegistered();
+  // Auto-discover and register web workspaces for existing workspace folders
+  ensureWebWorkspacesRegistered();
 
-  const groups = getRegisteredGroups();
+  const workspaces = getRegisteredWorkspaces();
   const knownChats = getAllChats();
 
-  // Return web: groups, but with last activity derived from all JIDs sharing the same folder
-  const webChats = Object.entries(groups)
+  // Return web: workspaces, but with last activity derived from all JIDs sharing the same folder
+  const webChats = Object.entries(workspaces)
     .filter(([jid]) => jid.startsWith('web:'))
-    .map(([jid, group]) => {
-      const linkedJids = Object.entries(groups)
-        .filter(([, g]) => g.folder === group.folder)
+    .map(([jid, workspace]) => {
+      const linkedJids = Object.entries(workspaces)
+        .filter(([, g]) => g.folder === workspace.folder)
         .map(([linkedJid]) => linkedJid);
 
       const linkedActivity = knownChats
@@ -287,10 +288,10 @@ fastify.get('/chats', { preHandler: authenticate }, async () => {
 
       return {
         jid,
-        name: group.name,
+        name: workspace.name,
         last_message_time: linkedActivity || new Date(0).toISOString(),
         isRegistered: true,
-        groupInfo: group,
+        workspaceInfo: workspace,
       };
     })
     .sort((a, b) => b.last_message_time.localeCompare(a.last_message_time));
@@ -347,13 +348,13 @@ fastify.post(
     }
 
     // Check for slash commands before storing/processing the message
-    const registeredGroups = getRegisteredGroups();
-    const group = registeredGroups[jid];
+    const registeredWorkspaces = getRegisteredWorkspaces();
+    const workspace = registeredWorkspaces[jid];
     const commandResult = await executeCommand(content, {
       chatJid: jid,
       senderName: 'Web User',
       senderId: request.tokenId || 'web',
-      group,
+      group: workspace,
     });
 
     if (commandResult) {
@@ -462,7 +463,7 @@ fastify.post(
       
       // Regular command (not agent-switching): handle normally
       // Handle side effects (e.g. /new session creation) — shared across all channels
-      await handleCommandSideEffects(commandResult, jid, group);
+      await handleCommandSideEffects(commandResult, jid, workspace, queueRef ?? undefined);
 
       // Store the command message itself so it appears in chat history
       const cmdMsgId = `web_${Date.now()}_${Math.random().toString(36).substring(7)}`;
@@ -635,7 +636,7 @@ fastify.post(
 );
 
 /**
- * File transfer endpoint — saves files to groups/{folder}/uploads/
+ * File transfer endpoint — saves files to workspaces/{folder}/uploads/
  * Returns relative paths. Does NOT analyze content.
  */
 fastify.post(
@@ -647,10 +648,10 @@ fastify.post(
     const useWebChannel = rawJid.startsWith('web:');
     const jid = useWebChannel ? rawJid : `web:${rawJid}`;
 
-    const registeredGroups = getRegisteredGroups();
-    const group = registeredGroups[jid];
-    if (!group?.folder) {
-      reply.code(404).send({ error: 'Group not found for this chat' });
+    const registeredWorkspaces = getRegisteredWorkspaces();
+    const workspace = registeredWorkspaces[jid];
+    if (!workspace?.folder) {
+      reply.code(404).send({ error: 'Workspace not found for this chat' });
       return;
     }
 
@@ -660,7 +661,7 @@ fastify.post(
 
       for await (const part of parts) {
         if (part.type !== 'file') continue;
-        const uploadsDir = path.join(GROUPS_DIR, group.folder, 'uploads');
+        const uploadsDir = path.join(WORKSPACES_DIR, workspace.folder, 'uploads');
         fs.mkdirSync(uploadsDir, { recursive: true });
         const safeName = `${Date.now()}-${part.filename.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
         const filePath = path.join(uploadsDir, safeName);
@@ -668,7 +669,7 @@ fastify.post(
         fs.writeFileSync(filePath, fileBuffer);
         const relativePath = path.relative(process.cwd(), filePath).replace(/\\/g, '/');
         savedFiles.push({ name: part.filename, path: relativePath });
-        logger.info({ filePath: relativePath, originalName: part.filename, size: fileBuffer.length }, 'File transferred to group');
+        logger.info({ filePath: relativePath, originalName: part.filename, size: fileBuffer.length }, 'File transferred to workspace');
       }
 
       if (savedFiles.length === 0) {
@@ -777,23 +778,30 @@ fastify.post(
   },
 );
 
+import { WorkspaceQueue } from './workspace-queue.js';
+
 let processApiMessage: ((jid: string, model?: string, agent?: string) => void) | null = null;
+let queueRef: WorkspaceQueue | null = null;
 
 export function setProcessApiMessageFn(fn: (jid: string, model?: string, agent?: string) => void): void {
   processApiMessage = fn;
 }
 
+export function setQueueRef(queue: WorkspaceQueue): void {
+  queueRef = queue;
+}
+
 /**
- * Scan the groups/ directory and auto-register web: JIDs for existing group folders.
+ * Scan the workspaces/ directory and auto-register web: JIDs for existing workspace folders.
  * This ensures the web UI works standalone without any other channel.
- * Safe: uses ON CONFLICT(jid) in setRegisteredGroup, never deletes other channel JIDs.
+ * Safe: uses ON CONFLICT(jid) in setRegisteredWorkspace, never deletes other channel JIDs.
  */
-function ensureWebGroupsRegistered(): void {
-  const registeredGroups = getRegisteredGroups();
+function ensureWebWorkspacesRegistered(): void {
+  const registeredWorkspaces = getRegisteredWorkspaces();
   const SKIP_FOLDERS = new Set(['templates', 'global']);
 
   try {
-    const entries = fs.readdirSync(GROUPS_DIR, { withFileTypes: true });
+    const entries = fs.readdirSync(WORKSPACES_DIR, { withFileTypes: true });
     for (const entry of entries) {
       if (!entry.isDirectory()) continue;
       if (SKIP_FOLDERS.has(entry.name)) continue;
@@ -801,50 +809,50 @@ function ensureWebGroupsRegistered(): void {
 
       const webJid = `web:${entry.name}`;
 
-      // Skip if already registered as a web group
-      if (registeredGroups[webJid]) continue;
+      // Skip if already registered as a web workspace
+      if (registeredWorkspaces[webJid]) continue;
 
-      // Find existing group config for this folder (from any channel)
-      const existingGroup = Object.values(registeredGroups).find(
+      // Find existing workspace config for this folder (from any channel)
+      const existingWorkspace = Object.values(registeredWorkspaces).find(
         (g) => g.folder === entry.name,
       );
 
-      const groupConfig: RegisteredGroup = {
-        name: existingGroup?.name || entry.name.charAt(0).toUpperCase() + entry.name.slice(1),
+      const workspaceConfig: RegisteredWorkspace = {
+        name: existingWorkspace?.name || entry.name.charAt(0).toUpperCase() + entry.name.slice(1),
         folder: entry.name,
-        trigger: existingGroup?.trigger || `@${ASSISTANT_NAME}`,
+        trigger: existingWorkspace?.trigger || `@${ASSISTANT_NAME}`,
         added_at: new Date().toISOString(),
         requiresTrigger: false, // Web UI messages don't need trigger prefix
       };
 
       try {
-        setRegisteredGroup(webJid, groupConfig);
-        storeChatMetadata(webJid, new Date().toISOString(), groupConfig.name);
-        logger.info({ webJid, folder: entry.name }, 'Auto-registered web group');
+        setRegisteredWorkspace(webJid, workspaceConfig);
+        storeChatMetadata(webJid, new Date().toISOString(), workspaceConfig.name);
+        logger.info({ webJid, folder: entry.name }, 'Auto-registered web workspace');
       } catch (err) {
         // If folder UNIQUE constraint still exists, log and skip gracefully
-        logger.warn({ webJid, folder: entry.name, err }, 'Could not register web group (folder may conflict)');
+        logger.warn({ webJid, folder: entry.name, err }, 'Could not register web workspace (folder may conflict)');
       }
     }
 
-    // Reload the in-memory cache so the message loop and processor see the new groups
-    reloadRegisteredGroups();
+    // Reload the in-memory cache so the message loop and processor see the new workspaces
+    reloadRegisteredWorkspaces();
   } catch (err) {
-    logger.error({ err }, 'Failed to scan groups directory for web registration');
+    logger.error({ err }, 'Failed to scan workspaces directory for web registration');
   }
 }
 
-fastify.get('/groups', { preHandler: authenticate }, async () => {
-  ensureWebGroupsRegistered();
-  const groups = getRegisteredGroups();
-  return { groups };
+fastify.get('/workspaces', { preHandler: authenticate }, async () => {
+  ensureWebWorkspacesRegistered();
+  const workspaces = getRegisteredWorkspaces();
+  return { workspaces };
 });
 
 /**
- * Create a new group from the web UI.
+ * Create a new workspace from the web UI.
  */
 fastify.post(
-  '/groups',
+  '/workspaces',
   { preHandler: authenticate },
   async (request: FastifyRequest, reply: FastifyReply) => {
     const body = request.body as Record<string, unknown> | undefined;
@@ -863,15 +871,15 @@ fastify.post(
     }
 
     const webJid = `web:${folder}`;
-    const registeredGroups = getRegisteredGroups();
+    const registeredWorkspaces = getRegisteredWorkspaces();
 
     // Check if already exists
-    if (registeredGroups[webJid]) {
-      reply.code(409).send({ error: 'Group already exists' });
+    if (registeredWorkspaces[webJid]) {
+      reply.code(409).send({ error: 'Workspace already exists' });
       return;
     }
 
-    const groupConfig: RegisteredGroup = {
+    const workspaceConfig: RegisteredWorkspace = {
       name,
       folder,
       trigger: `@${ASSISTANT_NAME}`,
@@ -880,11 +888,11 @@ fastify.post(
     };
 
     // Register and create folder structure
-    registerGroup(webJid, groupConfig);
+    registerWorkspace(webJid, workspaceConfig);
     storeChatMetadata(webJid, new Date().toISOString(), name);
-    reloadRegisteredGroups(); // Sync in-memory cache
+    reloadRegisteredWorkspaces(); // Sync in-memory cache
 
-    logger.info({ webJid, name, folder }, 'Created new web group');
+    logger.info({ webJid, name, folder }, 'Created new web workspace');
 
     reply.code(201).send({
       success: true,
@@ -999,15 +1007,22 @@ fastify.get('/monitoring', { preHandler: authenticate }, async () => {
     const recent = monitoring.getRecentExecutions(50);
     const active = monitoring.getActiveExecutions();
     const stats = monitoring.getStats();
-    const groups = getRegisteredGroups();
+    const workspaces = getRegisteredWorkspaces();
     const sessions = getSessions();
 
     const systemState = monitoring.getSystemState({
       openCodeServerStatus: 'running',
       openCodeServerPort: getOpenCodePort(),
-      registeredGroups: Object.keys(groups).length,
+      registeredGroups: Object.keys(workspaces).length,
       isSleeping: isSleeping(),
     });
+
+    // Include system info directly — avoids a second round-trip from the frontend
+    let systemInfo = undefined;
+    try {
+      const { getSystemInfo } = await import('./system-info.js');
+      systemInfo = await getSystemInfo();
+    } catch { /* system info endpoint might not be available */ }
 
     return {
       system: systemState,
@@ -1015,6 +1030,7 @@ fastify.get('/monitoring', { preHandler: authenticate }, async () => {
       active,
       recent,
       sessions,
+      systemInfo,
     };
   } catch {
     return {
@@ -1079,7 +1095,7 @@ fastify.get('/opencode/providers', { preHandler: authenticate }, async (request:
 fastify.get('/system/info', { preHandler: authenticate }, async (request: FastifyRequest, reply: FastifyReply) => {
   try {
     const { getSystemInfo } = await import('./system-info.js');
-    const systemInfo = getSystemInfo();
+    const systemInfo = await getSystemInfo();
     reply.code(200).send(systemInfo);
   } catch (err) {
     logger.error({ err }, 'Failed to get system info');
@@ -1110,19 +1126,19 @@ fastify.get('/system/restart-opencode', { preHandler: authenticate }, async (req
 // === File Download Routes ===
 
 /**
- * List downloadable files for a group.
- * Files are stored in groups/{groupFolder}/workspace/downloads/ with format: {fileId}_{filename}
+ * List downloadable files for a workspace.
+ * Files are stored in workspaces/{workspaceFolder}/workspace/downloads/ with format: {fileId}_{filename}
  */
 fastify.get(
-  '/files/:groupFolder',
+  '/files/:workspaceFolder',
   { preHandler: authenticate },
   async (request: FastifyRequest, reply: FastifyReply) => {
     const params = request.params as Record<string, string>;
-    const groupFolder = params.groupFolder;
+    const workspaceFolder = params.workspaceFolder;
     const query = request.query as Record<string, string>;
     const limit = query.limit ? parseInt(query.limit, 10) : 50;
 
-    const downloadsDir = path.join(GROUPS_DIR, groupFolder, 'workspace', 'downloads');
+    const downloadsDir = path.join(WORKSPACES_DIR, workspaceFolder, 'workspace', 'downloads');
 
     if (!fs.existsSync(downloadsDir)) {
       return { files: [] };
@@ -1144,7 +1160,7 @@ fastify.get(
             filename: originalName,
             size: stat.size,
             created: stat.mtime.toISOString(),
-            downloadUrl: `/files/${groupFolder}/${fileId}`,
+            downloadUrl: `/files/${workspaceFolder}/${fileId}`,
           };
         })
         .sort((a, b) => b.created.localeCompare(a.created))
@@ -1152,7 +1168,7 @@ fastify.get(
 
       return { files };
     } catch (err) {
-      logger.error({ err, groupFolder }, 'Failed to list downloadable files');
+      logger.error({ err, workspaceFolder }, 'Failed to list downloadable files');
       reply.code(500).send({ error: 'Failed to list files' });
     }
   },
@@ -1163,15 +1179,15 @@ fastify.get(
  * Supports both inline viewing and attachment download via ?download=true
  */
 fastify.get(
-  '/files/:groupFolder/:fileId',
+  '/files/:workspaceFolder/:fileId',
   { preHandler: authenticate },
   async (request: FastifyRequest, reply: FastifyReply) => {
     const params = request.params as Record<string, string>;
-    const { groupFolder, fileId } = params;
+    const { workspaceFolder, fileId } = params;
     const query = request.query as Record<string, string>;
     const forceDownload = query.download === 'true';
 
-    const downloadsDir = path.join(GROUPS_DIR, groupFolder, 'workspace', 'downloads');
+    const downloadsDir = path.join(WORKSPACES_DIR, workspaceFolder, 'workspace', 'downloads');
 
     if (!fs.existsSync(downloadsDir)) {
       reply.code(404).send({ error: 'File not found' });
@@ -1222,21 +1238,21 @@ fastify.get(
  * POST body: { fileIds: string[] }
  */
 fastify.post(
-  '/files/:groupFolder/zip',
+  '/files/:workspaceFolder/zip',
   { preHandler: authenticate },
   async (request: FastifyRequest, reply: FastifyReply) => {
     const params = request.params as Record<string, string>;
-    const { groupFolder } = params;
+    const { workspaceFolder } = params;
     const body = request.body as { fileIds?: string[]; filename?: string } | undefined;
     const fileIds = body?.fileIds || [];
-    const zipFilename = body?.filename || `${groupFolder}-files.zip`;
+    const zipFilename = body?.filename || `${workspaceFolder}-files.zip`;
 
     if (fileIds.length === 0) {
       reply.code(400).send({ error: 'No file IDs provided' });
       return;
     }
 
-    const downloadsDir = path.join(GROUPS_DIR, groupFolder, 'workspace', 'downloads');
+    const downloadsDir = path.join(WORKSPACES_DIR, workspaceFolder, 'workspace', 'downloads');
 
     if (!fs.existsSync(downloadsDir)) {
       reply.code(404).send({ error: 'No files found' });
@@ -1264,7 +1280,7 @@ fastify.post(
 
       await archive.finalize();
     } catch (err) {
-      logger.error({ err, groupFolder, fileIds }, 'Failed to create ZIP archive');
+      logger.error({ err, workspaceFolder, fileIds }, 'Failed to create ZIP archive');
       reply.code(500).send({ error: 'Failed to create ZIP' });
     }
   },
@@ -1278,6 +1294,9 @@ registerEnvVarRoutes(fastify, authenticate);
 
 // Register markdown file browser routes
 registerMarkdownRoutes(fastify, authenticate);
+
+// Register task/cron routes
+registerTaskRoutes(fastify, authenticate);
 
 let sendMessageFn: ((jid: string, text: string) => Promise<void>) | null = null;
 
@@ -1372,6 +1391,10 @@ export async function startApiServer(
   try {
     await fastify.listen({ port: API_PORT, host: '127.0.0.1' });
     logger.info({ port: API_PORT }, 'API server started');
+
+    // Pre-warm system info cache in background so first Overview load is instant
+    import('./system-info.js').then(({ getSystemInfo }) => getSystemInfo()).catch(() => {});
+
     return API_PORT;
   } catch (err) {
     logger.error({ err }, 'Failed to start API server');

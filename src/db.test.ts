@@ -10,7 +10,7 @@ import {
   getMessagesSinceLinked,
   getNewMessages,
   getTaskById,
-  setRegisteredGroup,
+  setRegisteredWorkspace,
   storeChatMetadata,
   storeMessage,
   updateTask,
@@ -184,14 +184,14 @@ describe('getMessagesSince', () => {
 
 describe('linked web chat message reads', () => {
   beforeEach(() => {
-    setRegisteredGroup('web:main', {
+    setRegisteredWorkspace('web:main', {
       name: 'Main',
       folder: 'main',
       trigger: '@TestBot',
       added_at: '2024-01-01T00:00:00.000Z',
       requiresTrigger: false,
     });
-    setRegisteredGroup('tg:123', {
+    setRegisteredWorkspace('tg:123', {
       name: 'Main Telegram',
       folder: 'main',
       trigger: '@TestBot',
@@ -343,7 +343,7 @@ describe('task CRUD', () => {
   it('creates and retrieves a task', () => {
     createTask({
       id: 'task-1',
-      group_folder: 'main',
+      workspace_folder: 'main',
       chat_jid: 'group@g.us',
       prompt: 'do something',
       schedule_type: 'once',
@@ -363,7 +363,7 @@ describe('task CRUD', () => {
   it('updates task status', () => {
     createTask({
       id: 'task-2',
-      group_folder: 'main',
+      workspace_folder: 'main',
       chat_jid: 'group@g.us',
       prompt: 'test',
       schedule_type: 'once',
@@ -381,7 +381,7 @@ describe('task CRUD', () => {
   it('deletes a task and its run logs', () => {
     createTask({
       id: 'task-3',
-      group_folder: 'main',
+      workspace_folder: 'main',
       chat_jid: 'group@g.us',
       prompt: 'delete me',
       schedule_type: 'once',

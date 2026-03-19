@@ -4,71 +4,70 @@ import {
   _initTestDatabase,
   createTask,
   getAllTasks,
-  getRegisteredGroup,
+  getRegisteredWorkspace,
   getTaskById,
-  setRegisteredGroup,
+  setRegisteredWorkspace,
 } from './db.js';
 import { processTaskIpc, IpcDeps } from './ipc.js';
-import { RegisteredGroup } from './types.js';
+import { RegisteredWorkspace } from './types.js';
 
-// Set up registered groups used across tests
-const MAIN_GROUP: RegisteredGroup = {
+// Set up registered workspaces used across tests
+const MAIN_WORKSPACE: RegisteredWorkspace = {
   name: 'Main',
   folder: 'main',
   trigger: 'always',
   added_at: '2024-01-01T00:00:00.000Z',
 };
 
-const OTHER_GROUP: RegisteredGroup = {
+const OTHER_WORKSPACE: RegisteredWorkspace = {
   name: 'Other',
   folder: 'other-group',
   trigger: '@Bot',
   added_at: '2024-01-01T00:00:00.000Z',
 };
 
-const THIRD_GROUP: RegisteredGroup = {
+const THIRD_WORKSPACE: RegisteredWorkspace = {
   name: 'Third',
   folder: 'third-group',
   trigger: '@Bot',
   added_at: '2024-01-01T00:00:00.000Z',
 };
 
-let groups: Record<string, RegisteredGroup>;
+let workspaces: Record<string, RegisteredWorkspace>;
 let deps: IpcDeps;
 
 beforeEach(() => {
   _initTestDatabase();
 
-  groups = {
-    'main@g.us': MAIN_GROUP,
-    'other@g.us': OTHER_GROUP,
-    'third@g.us': THIRD_GROUP,
+  workspaces = {
+    'main@g.us': MAIN_WORKSPACE,
+    'other@g.us': OTHER_WORKSPACE,
+    'third@g.us': THIRD_WORKSPACE,
   };
 
   // Populate DB as well
-  setRegisteredGroup('main@g.us', MAIN_GROUP);
-  setRegisteredGroup('other@g.us', OTHER_GROUP);
-  setRegisteredGroup('third@g.us', THIRD_GROUP);
+  setRegisteredWorkspace('main@g.us', MAIN_WORKSPACE);
+  setRegisteredWorkspace('other@g.us', OTHER_WORKSPACE);
+  setRegisteredWorkspace('third@g.us', THIRD_WORKSPACE);
 
   deps = {
     sendMessage: async () => {},
     sendImage: async () => {},
-    registeredGroups: () => groups,
-    registerGroup: (jid, group) => {
-      groups[jid] = group;
-      setRegisteredGroup(jid, group);
-      // Mock the fs.mkdirSync that registerGroup does
+    registeredWorkspaces: () => workspaces,
+    registerWorkspace: (jid: string, workspace: RegisteredWorkspace) => {
+      workspaces[jid] = workspace;
+      setRegisteredWorkspace(jid, workspace);
     },
-    syncGroupMetadata: async () => {},
-    getAvailableGroups: () => [],
-    writeGroupsSnapshot: () => {},
+    syncWorkspaceMetadata: async () => {},
+    getAvailableWorkspaces: () => [],
+    writeWorkspacesSnapshot: () => {},
   };
 });
 
 // --- schedule_task authorization ---
 
 describe('schedule_task authorization', () => {
-  it('main group can schedule for another group', async () => {
+  it('main workspace can schedule for another workspace', async () => {
     await processTaskIpc(
       {
         type: 'schedule_task',
@@ -82,13 +81,13 @@ describe('schedule_task authorization', () => {
       deps,
     );
 
-    // Verify task was created in DB for the other group
+    // Verify task was created in DB for the other workspace
     const allTasks = getAllTasks();
     expect(allTasks.length).toBe(1);
-    expect(allTasks[0].group_folder).toBe('other-group');
+    expect(allTasks[0].workspace_folder).toBe('other-group');
   });
 
-  it('non-main group can schedule for itself', async () => {
+  it('non-main workspace can schedule for itself', async () => {
     await processTaskIpc(
       {
         type: 'schedule_task',
@@ -104,10 +103,10 @@ describe('schedule_task authorization', () => {
 
     const allTasks = getAllTasks();
     expect(allTasks.length).toBe(1);
-    expect(allTasks[0].group_folder).toBe('other-group');
+    expect(allTasks[0].workspace_folder).toBe('other-group');
   });
 
-  it('non-main group cannot schedule for another group', async () => {
+  it('non-main workspace cannot schedule for another workspace', async () => {
     await processTaskIpc(
       {
         type: 'schedule_task',
@@ -150,7 +149,7 @@ describe('pause_task authorization', () => {
   beforeEach(() => {
     createTask({
       id: 'task-main',
-      group_folder: 'main',
+      workspace_folder: 'main',
       chat_jid: 'main@g.us',
       prompt: 'main task',
       schedule_type: 'once',
@@ -162,7 +161,7 @@ describe('pause_task authorization', () => {
     });
     createTask({
       id: 'task-other',
-      group_folder: 'other-group',
+      workspace_folder: 'other-group',
       chat_jid: 'other@g.us',
       prompt: 'other task',
       schedule_type: 'once',
@@ -174,17 +173,17 @@ describe('pause_task authorization', () => {
     });
   });
 
-  it('main group can pause any task', async () => {
+  it('main workspace can pause any task', async () => {
     await processTaskIpc({ type: 'pause_task', taskId: 'task-other' }, 'main', true, deps);
     expect(getTaskById('task-other')!.status).toBe('paused');
   });
 
-  it('non-main group can pause its own task', async () => {
+  it('non-main workspace can pause its own task', async () => {
     await processTaskIpc({ type: 'pause_task', taskId: 'task-other' }, 'other-group', false, deps);
     expect(getTaskById('task-other')!.status).toBe('paused');
   });
 
-  it('non-main group cannot pause another groups task', async () => {
+  it('non-main workspace cannot pause another workspaces task', async () => {
     await processTaskIpc({ type: 'pause_task', taskId: 'task-main' }, 'other-group', false, deps);
     expect(getTaskById('task-main')!.status).toBe('active');
   });
@@ -196,7 +195,7 @@ describe('resume_task authorization', () => {
   beforeEach(() => {
     createTask({
       id: 'task-paused',
-      group_folder: 'other-group',
+      workspace_folder: 'other-group',
       chat_jid: 'other@g.us',
       prompt: 'paused task',
       schedule_type: 'once',
@@ -208,17 +207,17 @@ describe('resume_task authorization', () => {
     });
   });
 
-  it('main group can resume any task', async () => {
+  it('main workspace can resume any task', async () => {
     await processTaskIpc({ type: 'resume_task', taskId: 'task-paused' }, 'main', true, deps);
     expect(getTaskById('task-paused')!.status).toBe('active');
   });
 
-  it('non-main group can resume its own task', async () => {
+  it('non-main workspace can resume its own task', async () => {
     await processTaskIpc({ type: 'resume_task', taskId: 'task-paused' }, 'other-group', false, deps);
     expect(getTaskById('task-paused')!.status).toBe('active');
   });
 
-  it('non-main group cannot resume another groups task', async () => {
+  it('non-main workspace cannot resume another workspaces task', async () => {
     await processTaskIpc({ type: 'resume_task', taskId: 'task-paused' }, 'third-group', false, deps);
     expect(getTaskById('task-paused')!.status).toBe('paused');
   });
@@ -227,10 +226,10 @@ describe('resume_task authorization', () => {
 // --- cancel_task authorization ---
 
 describe('cancel_task authorization', () => {
-  it('main group can cancel any task', async () => {
+  it('main workspace can cancel any task', async () => {
     createTask({
       id: 'task-to-cancel',
-      group_folder: 'other-group',
+      workspace_folder: 'other-group',
       chat_jid: 'other@g.us',
       prompt: 'cancel me',
       schedule_type: 'once',
@@ -245,10 +244,10 @@ describe('cancel_task authorization', () => {
     expect(getTaskById('task-to-cancel')).toBeUndefined();
   });
 
-  it('non-main group can cancel its own task', async () => {
+  it('non-main workspace can cancel its own task', async () => {
     createTask({
       id: 'task-own',
-      group_folder: 'other-group',
+      workspace_folder: 'other-group',
       chat_jid: 'other@g.us',
       prompt: 'my task',
       schedule_type: 'once',
@@ -263,10 +262,10 @@ describe('cancel_task authorization', () => {
     expect(getTaskById('task-own')).toBeUndefined();
   });
 
-  it('non-main group cannot cancel another groups task', async () => {
+  it('non-main workspace cannot cancel another workspaces task', async () => {
     createTask({
       id: 'task-foreign',
-      group_folder: 'main',
+      workspace_folder: 'main',
       chat_jid: 'main@g.us',
       prompt: 'not yours',
       schedule_type: 'once',
@@ -282,13 +281,13 @@ describe('cancel_task authorization', () => {
   });
 });
 
-// --- register_group authorization ---
+// --- register_workspace authorization ---
 
-describe('register_group authorization', () => {
-  it('non-main group cannot register a group', async () => {
+describe('register_workspace authorization', () => {
+  it('non-main workspace cannot register a workspace', async () => {
     await processTaskIpc(
       {
-        type: 'register_group',
+        type: 'register_workspace',
         jid: 'new@g.us',
         name: 'New Group',
         folder: 'new-group',
@@ -299,58 +298,58 @@ describe('register_group authorization', () => {
       deps,
     );
 
-    // registeredGroups should not have changed
-    expect(groups['new@g.us']).toBeUndefined();
+    // registeredWorkspaces should not have changed
+    expect(workspaces['new@g.us']).toBeUndefined();
   });
 });
 
-// --- refresh_groups authorization ---
+// --- refresh_workspaces authorization ---
 
-describe('refresh_groups authorization', () => {
-  it('non-main group cannot trigger refresh', async () => {
+describe('refresh_workspaces authorization', () => {
+  it('non-main workspace cannot trigger refresh', async () => {
     // This should be silently blocked (no crash, no effect)
-    await processTaskIpc({ type: 'refresh_groups' }, 'other-group', false, deps);
+    await processTaskIpc({ type: 'refresh_workspaces' }, 'other-group', false, deps);
     // If we got here without error, the auth gate worked
   });
 });
 
 // --- IPC message authorization ---
 // Tests the authorization pattern from startIpcWatcher (ipc.ts).
-// The logic: isMain || (targetGroup && targetGroup.folder === sourceGroup)
+// The logic: isMain || (targetWorkspace && targetWorkspace.folder === sourceWorkspace)
 
 describe('IPC message authorization', () => {
   // Replicate the exact check from the IPC watcher
   function isMessageAuthorized(
-    sourceGroup: string,
+    sourceWorkspace: string,
     isMain: boolean,
     targetChatJid: string,
-    registeredGroups: Record<string, RegisteredGroup>,
+    registeredWorkspaces: Record<string, RegisteredWorkspace>,
   ): boolean {
-    const targetGroup = registeredGroups[targetChatJid];
-    return isMain || (!!targetGroup && targetGroup.folder === sourceGroup);
+    const targetWorkspace = registeredWorkspaces[targetChatJid];
+    return isMain || (!!targetWorkspace && targetWorkspace.folder === sourceWorkspace);
   }
 
-  it('main group can send to any group', () => {
-    expect(isMessageAuthorized('main', true, 'other@g.us', groups)).toBe(true);
-    expect(isMessageAuthorized('main', true, 'third@g.us', groups)).toBe(true);
+  it('main workspace can send to any workspace', () => {
+    expect(isMessageAuthorized('main', true, 'other@g.us', workspaces)).toBe(true);
+    expect(isMessageAuthorized('main', true, 'third@g.us', workspaces)).toBe(true);
   });
 
-  it('non-main group can send to its own chat', () => {
-    expect(isMessageAuthorized('other-group', false, 'other@g.us', groups)).toBe(true);
+  it('non-main workspace can send to its own chat', () => {
+    expect(isMessageAuthorized('other-group', false, 'other@g.us', workspaces)).toBe(true);
   });
 
-  it('non-main group cannot send to another groups chat', () => {
-    expect(isMessageAuthorized('other-group', false, 'main@g.us', groups)).toBe(false);
-    expect(isMessageAuthorized('other-group', false, 'third@g.us', groups)).toBe(false);
+  it('non-main workspace cannot send to another workspace chat', () => {
+    expect(isMessageAuthorized('other-group', false, 'main@g.us', workspaces)).toBe(false);
+    expect(isMessageAuthorized('other-group', false, 'third@g.us', workspaces)).toBe(false);
   });
 
-  it('non-main group cannot send to unregistered JID', () => {
-    expect(isMessageAuthorized('other-group', false, 'unknown@g.us', groups)).toBe(false);
+  it('non-main workspace cannot send to unregistered JID', () => {
+    expect(isMessageAuthorized('other-group', false, 'unknown@g.us', workspaces)).toBe(false);
   });
 
-  it('main group can send to unregistered JID', () => {
+  it('main workspace can send to unregistered JID', () => {
     // Main is always authorized regardless of target
-    expect(isMessageAuthorized('main', true, 'unknown@g.us', groups)).toBe(true);
+    expect(isMessageAuthorized('main', true, 'unknown@g.us', workspaces)).toBe(true);
   });
 });
 
@@ -476,14 +475,14 @@ describe('schedule_task schedule types', () => {
 // --- context_mode defaulting ---
 
 describe('schedule_task context_mode', () => {
-  it('accepts context_mode=group', async () => {
+  it('accepts context_mode=workspace', async () => {
     await processTaskIpc(
       {
         type: 'schedule_task',
-        prompt: 'group context',
+        prompt: 'workspace context',
         schedule_type: 'once',
         schedule_value: '2025-06-01T00:00:00.000Z',
-        context_mode: 'group',
+        context_mode: 'workspace',
         targetJid: 'other@g.us',
       },
       'main',
@@ -492,7 +491,7 @@ describe('schedule_task context_mode', () => {
     );
 
     const tasks = getAllTasks();
-    expect(tasks[0].context_mode).toBe('group');
+    expect(tasks[0].context_mode).toBe('workspace');
   });
 
   it('accepts context_mode=isolated', async () => {
@@ -552,13 +551,13 @@ describe('schedule_task context_mode', () => {
   });
 });
 
-// --- register_group success path ---
+// --- register_workspace success path ---
 
-describe('register_group success', () => {
-  it('main group can register a new group', async () => {
+describe('register_workspace success', () => {
+  it('main workspace can register a new workspace', async () => {
     await processTaskIpc(
       {
-        type: 'register_group',
+        type: 'register_workspace',
         jid: 'new@g.us',
         name: 'New Group',
         folder: 'new-group',
@@ -569,18 +568,18 @@ describe('register_group success', () => {
       deps,
     );
 
-    // Verify group was registered in DB
-    const group = getRegisteredGroup('new@g.us');
-    expect(group).toBeDefined();
-    expect(group!.name).toBe('New Group');
-    expect(group!.folder).toBe('new-group');
-    expect(group!.trigger).toBe('@Bot');
+    // Verify workspace was registered in DB
+    const workspace = getRegisteredWorkspace('new@g.us');
+    expect(workspace).toBeDefined();
+    expect(workspace!.name).toBe('New Group');
+    expect(workspace!.folder).toBe('new-group');
+    expect(workspace!.trigger).toBe('@Bot');
   });
 
-  it('register_group rejects request with missing fields', async () => {
+  it('register_workspace rejects request with missing fields', async () => {
     await processTaskIpc(
       {
-        type: 'register_group',
+        type: 'register_workspace',
         jid: 'partial@g.us',
         name: 'Partial',
         // missing folder and trigger
@@ -590,6 +589,6 @@ describe('register_group success', () => {
       deps,
     );
 
-    expect(getRegisteredGroup('partial@g.us')).toBeUndefined();
+    expect(getRegisteredWorkspace('partial@g.us')).toBeUndefined();
   });
 });

@@ -4,6 +4,7 @@ import type { Settings } from '../useSettings';
 import SettingsNav, { type SettingsSection } from './SettingsNav';
 import OverviewSection from './OverviewSection';
 import SessionsSection from './SessionsSection';
+import CronJobsSection from './CronJobsSection';
 import DebugSection from './DebugSection';
 import LogsSection from './LogsSection';
 import ApiKeysSection from './ApiKeysSection';
@@ -34,13 +35,7 @@ export default function AdminPage({
   const fetchMonitoring = useCallback(async () => {
     try {
       const data = await apiService.getMonitoring();
-      // Fetch system info and merge it into monitoring data
-      try {
-        const systemInfo = await apiService.getSystemInfo();
-        data.systemInfo = systemInfo;
-      } catch {
-        // System info endpoint might not be available
-      }
+      // systemInfo is now included in the /monitoring response
       setMonitoringData(data);
     } catch {
       // Server might be offline
@@ -53,11 +48,6 @@ export default function AdminPage({
     const interval = setInterval(fetchMonitoring, 10_000);
     return () => clearInterval(interval);
   }, [fetchMonitoring]);
-
-  // Also refresh when switching sections
-  useEffect(() => {
-    void fetchMonitoring();
-  }, [section, fetchMonitoring]);
 
   return (
     <div className={`flex h-screen ${isDark ? 'bg-zinc-950 text-zinc-100' : 'bg-zinc-100 text-zinc-900'}`}>
@@ -93,6 +83,9 @@ export default function AdminPage({
             )}
             {section === 'sessions' && (
               <SessionsSection sessions={monitoringData?.sessions} isDark={isDark} />
+            )}
+            {section === 'cron' && (
+              <CronJobsSection isDark={isDark} />
             )}
             {section === 'debug' && (
               <DebugSection

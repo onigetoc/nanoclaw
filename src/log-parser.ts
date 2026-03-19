@@ -26,7 +26,7 @@ export interface ParsedLogInfo {
  */
 export function parseLatestLog(groupFolder: string): ParsedLogInfo | null {
   try {
-    const logsDir = path.join(process.cwd(), 'groups', groupFolder, 'logs');
+    const logsDir = path.join(process.cwd(), 'workspaces', groupFolder, 'logs');
     
     if (!fs.existsSync(logsDir)) {
       return null;

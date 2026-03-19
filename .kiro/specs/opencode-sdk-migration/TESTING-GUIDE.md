@@ -168,7 +168,7 @@ systemctl --user restart eureclaw
 2. Wait for acknowledgment
 3. Check the file exists:
    ```bash
-   cat groups/main/test-migration.txt
+   cat workspaces/main/test-migration.txt
    ```
 
 **Expected Result:**
@@ -182,7 +182,7 @@ systemctl --user restart eureclaw
 2. Wait for acknowledgment
 3. Check the file:
    ```bash
-   cat groups/main/test-migration.txt
+   cat workspaces/main/test-migration.txt
    ```
 
 **Expected Result:**
@@ -290,8 +290,8 @@ systemctl --user restart eureclaw
 2. Run a test message
 3. Check container logs:
    ```bash
-   ls -la groups/main/logs/
-   cat groups/main/logs/container-*.log | tail -50
+   ls -la workspaces/main/logs/
+   cat workspaces/main/logs/container-*.log | tail -50
    ```
 
 **Expected Result:**
@@ -336,9 +336,9 @@ systemctl --user restart eureclaw
 
 **Test Case 10.2: Existing AGENTS.md Files**
 
-1. Check your group AGENTS.md files:
+1. Check your workspace AGENTS.md files:
    ```bash
-   cat groups/main/AGENTS.md
+   cat workspaces/main/AGENTS.md
    ```
 2. Send: `@Andy what do you know about yourself from your memory?`
 3. Wait for response
@@ -362,7 +362,7 @@ tail -f ~/Library/Logs/eureclaw.log
 journalctl --user -u eureclaw -f
 
 # Watch container logs
-tail -f groups/main/logs/container-*.log
+tail -f workspaces/main/logs/container-*.log
 ```
 
 **Look for:**
@@ -418,7 +418,7 @@ journalctl --user -u eureclaw -n 50
 
 **Check:**
 1. Service is running: `launchctl list | grep eureclaw`
-2. Container logs: `cat groups/main/logs/container-*.log | tail -100`
+2. Container logs: `cat workspaces/main/logs/container-*.log | tail -100`
 3. Database connection: `sqlite3 store/messages.db "SELECT COUNT(*) FROM messages;"`
 
 **Common causes:**
@@ -461,7 +461,7 @@ If you encounter issues during testing:
    cat ~/Library/Logs/eureclaw.log > migration-test-service.log
    
    # Container logs
-   cat groups/main/logs/container-*.log > migration-test-container.log
+   cat workspaces/main/logs/container-*.log > migration-test-container.log
    
    # Database state
    sqlite3 store/messages.db ".dump" > migration-test-db.sql

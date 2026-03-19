@@ -81,7 +81,7 @@ A personal opencode assistant accessible via WhatsApp, with minimal custom code.
 **Implementation approach:**
 - Use existing tools (WhatsApp connector, OpenCode SDK, MCP servers)
 - Minimal glue code
-- File-based systems where possible (AGENTS.md for memory, folders for groups)
+- File-based systems where possible (AGENTS.md for memory, folders for workspaces)
 
 ---
 
@@ -89,18 +89,18 @@ A personal opencode assistant accessible via WhatsApp, with minimal custom code.
 
 ### Message Routing
 - A router listens to WhatsApp and routes messages based on configuration
-- Only messages from registered groups are processed
+- Only messages from registered workspaces are processed
 - Trigger: `@Andy` prefix (case insensitive), configurable via `ASSISTANT_NAME` env var
-- Unregistered groups are ignored completely
+- Unregistered workspaces are ignored completely
 
 ### Memory System
-- **Per-group memory**: Each group has a folder with its own `AGENTS.md`
-- **Global memory**: Root `AGENTS.md` is read by all groups, but only writable from "main" (self-chat)
-- **Files**: Groups can create/read files in their folder and reference them
-- Agent runs in the group's folder, automatically inherits both AGENTS.md files
+- **Per-workspace memory**: Each workspace has a folder with its own `AGENTS.md`
+- **Global memory**: Root `AGENTS.md` is read by all workspaces, but only writable from "main" (self-chat)
+- **Files**: Workspaces can create/read files in their folder and reference them
+- Agent runs in the workspace's folder, automatically inherits both AGENTS.md files
 
 ### Session Management
-- Each group maintains a conversation session (via OpenCode SDK)
+- Each workspace maintains a conversation session (via OpenCode SDK)
 - Sessions auto-compact when context gets too long, preserving critical information
 
 ### Container Isolation
@@ -111,27 +111,27 @@ A personal opencode assistant accessible via WhatsApp, with minimal custom code.
 - Browser automation via agent-browser with Chromium in the container
 
 ### Scheduled Tasks
-- Users can ask opencode to schedule recurring or one-time tasks from any group
-- Tasks run as full agents in the context of the group that created them
+- Users can ask opencode to schedule recurring or one-time tasks from any workspace
+- Tasks run as full agents in the context of the workspace that created them
 - Tasks have access to all tools including Bash (safe in container)
-- Tasks can optionally send messages to their group via `send_message` tool, or complete silently
+- Tasks can optionally send messages to their workspace via `send_message` tool, or complete silently
 - Task runs are logged to the database with duration and result
 - Schedule types: cron expressions, intervals (ms), or one-time (ISO timestamp)
-- From main: can schedule tasks for any group, view/manage all tasks
-- From other groups: can only manage that group's tasks
+- From main: can schedule tasks for any workspace, view/manage all tasks
+- From other workspaces: can only manage that workspace's tasks
 
 ### Group Management
-- New groups are added explicitly via the main channel
-- Groups are registered in SQLite (via the main channel or IPC `register_group` command)
-- Each group gets a dedicated folder under `groups/`
-- Groups can have additional directories mounted via `containerConfig`
+- New workspaces are added explicitly via the main channel
+- Workspaces are registered in SQLite (via the main channel or IPC `register_workspace` command)
+- Each workspace gets a dedicated folder under `workspaces/`
+- Workspaces can have additional directories mounted via `containerConfig`
 
 ### Main Channel Privileges
-- Main channel is the admin/control group (typically self-chat)
-- Can write to global memory (`groups/AGENTS.md`)
-- Can schedule tasks for any group
-- Can view and manage tasks from all groups
-- Can configure additional directory mounts for any group
+- Main channel is the admin/control workspace (typically self-chat)
+- Can write to global memory (`workspaces/AGENTS.md`)
+- Can schedule tasks for any workspace
+- Can view and manage tasks from all workspaces
+- Can configure additional directory mounts for any workspace
 
 ---
 
@@ -148,7 +148,7 @@ A personal opencode assistant accessible via WhatsApp, with minimal custom code.
 - Tools: `schedule_task`, `list_tasks`, `pause_task`, `resume_task`, `cancel_task`, `send_message`
 - Tasks stored in SQLite with run history
 - Scheduler loop checks for due tasks every minute
-- Tasks execute OpenCode SDK in containerized group context
+- Tasks execute OpenCode SDK in containerized workspace context
 
 ### Web Access
 - Built-in WebSearch and WebFetch tools

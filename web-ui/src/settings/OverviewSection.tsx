@@ -156,8 +156,8 @@ export default function OverviewSection({ data, serverOnline, isDark }: Overview
         />
         <StatCard
           icon={<Users className="h-4 w-4" />}
-          label="Groups"
-          value={sys?.registeredGroups ?? '—'}
+          label="Workspaces"
+          value={sys?.registeredWorkspaces ?? '—'}
           isDark={isDark}
         />
         <StatCard

@@ -8,7 +8,7 @@ import {
   Channel,
   OnInboundMessage,
   OnChatMetadata,
-  RegisteredGroup,
+  RegisteredWorkspace,
 } from '../types.js';
 import { getTranscriptionManager, isAudioTranscriptionAvailable } from '../media/audio-manager.js';
 import { analyzeImage, isVisionEnabled } from '../vision.js';
@@ -26,7 +26,7 @@ registerChannel('telegram', (opts) => {
 export interface TelegramChannelOpts {
   onMessage: OnInboundMessage;
   onChatMetadata: OnChatMetadata;
-  registeredGroups: () => Record<string, RegisteredGroup>;
+  registeredWorkspaces: () => Record<string, RegisteredWorkspace>;
 }
 
 export class TelegramChannel implements Channel {
@@ -109,17 +109,17 @@ export class TelegramChannel implements Channel {
       // Store chat metadata for discovery
       this.opts.onChatMetadata(chatJid, timestamp, chatName);
 
-      // Only deliver full message for registered groups
-      const group = this.opts.registeredGroups()[chatJid];
-      if (!group) {
-        // Check if this is the first private chat and no main group exists
+      // Only deliver full message for registered workspaces
+      const workspace = this.opts.registeredWorkspaces()[chatJid];
+      if (!workspace) {
+        // Check if this is the first private chat and no main workspace exists
         if (ctx.chat.type === 'private') {
-          const allGroups = this.opts.registeredGroups();
-          const hasMainGroup = Object.values(allGroups).some(
+          const allWorkspaces = this.opts.registeredWorkspaces();
+          const hasMainWorkspace = Object.values(allWorkspaces).some(
             (g) => g.folder === 'main',
           );
 
-          if (!hasMainGroup) {
+          if (!hasMainWorkspace) {
             // First private chat - send instructions for auto-setup
             await ctx.reply(
               `👋 Welcome! I'm ${ASSISTANT_NAME}.\n\n` +
@@ -157,8 +157,8 @@ export class TelegramChannel implements Channel {
     // Handle non-text messages with placeholders so the agent knows something was sent
     const storeNonText = (ctx: any, placeholder: string) => {
       const chatJid = `tg:${ctx.chat.id}`;
-      const group = this.opts.registeredGroups()[chatJid];
-      if (!group) return;
+      const workspace = this.opts.registeredWorkspaces()[chatJid];
+      if (!workspace) return;
 
       const timestamp = new Date(ctx.message.date * 1000).toISOString();
       const senderName =
@@ -183,8 +183,8 @@ export class TelegramChannel implements Channel {
 
     this.bot.on('message:photo', async (ctx) => {
       const chatJid = `tg:${ctx.chat.id}`;
-      const group = this.opts.registeredGroups()[chatJid];
-      if (!group) return;
+      const workspace = this.opts.registeredWorkspaces()[chatJid];
+      if (!workspace) return;
 
       const timestamp = new Date(ctx.message.date * 1000).toISOString();
       const senderName =
@@ -248,8 +248,8 @@ export class TelegramChannel implements Channel {
     this.bot.on('message:video', (ctx) => storeNonText(ctx, '[Video]'));
     this.bot.on('message:voice', async (ctx) => {
       const chatJid = `tg:${ctx.chat.id}`;
-      const group = this.opts.registeredGroups()[chatJid];
-      if (!group) return;
+      const workspace = this.opts.registeredWorkspaces()[chatJid];
+      if (!workspace) return;
 
       const timestamp = new Date(ctx.message.date * 1000).toISOString();
       const senderName =
@@ -326,8 +326,8 @@ export class TelegramChannel implements Channel {
     });
     this.bot.on('message:audio', async (ctx) => {
       const chatJid = `tg:${ctx.chat.id}`;
-      const group = this.opts.registeredGroups()[chatJid];
-      if (!group) return;
+      const workspace = this.opts.registeredWorkspaces()[chatJid];
+      if (!workspace) return;
 
       const timestamp = new Date(ctx.message.date * 1000).toISOString();
       const senderName =

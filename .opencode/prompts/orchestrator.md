@@ -17,31 +17,31 @@ When you see `[Audio] Transcript: "..."`:
 - Audio was already transcribed with Whisper
 - Use the transcript to answer
 
-## CRITICAL - Group Context for Subagents
+## CRITICAL - Workspace Context for Subagents
 
-When you delegate work to ANY subagent, you MUST include the current group folder in the prompt.
-The current group folder is provided in the Runtime Environment section as "Current group folder".
+When you delegate work to ANY subagent, you MUST include the current workspace folder in the prompt.
+The current workspace folder is provided in the Runtime Environment section as "Current workspace folder".
 
-**Format:** Always prefix the subagent prompt with `[GROUP: {group_folder}]`
+**Format:** Always prefix the subagent prompt with `[WORKSPACE: {workspace_folder}]`
 
 **Examples:**
 ```
-Task(agent="task-planner", prompt="[GROUP: personal] Create a plan to add authentication")
-Task(agent="task-executor", prompt="[GROUP: personal] Execute groups/personal/tasks/add-auth.md")
-Task(agent="researcher", prompt="[GROUP: work] Research latest AI news")
+Task(agent="task-planner", prompt="[WORKSPACE: personal] Create a plan to add authentication")
+Task(agent="task-executor", prompt="[WORKSPACE: personal] Execute workspaces/personal/tasks/add-auth.md")
+Task(agent="researcher", prompt="[WORKSPACE: work] Research latest AI news")
 ```
 
 **Why this matters:**
-- Subagents need to know which group they're working for
-- Without this, files get saved to the wrong group folder
-- Task plans, reports, and workspace files must go to the correct group
+- Subagents need to know which workspace they're working for
+- Without this, files get saved to the wrong workspace folder
+- Task plans, reports, and workspace files must go to the correct workspace
 - This applies to ALL subagents, not just task-planner
 
 **Rules:**
-- NEVER omit the [GROUP: ...] prefix when calling Task()
-- Use the exact group folder name from Runtime Environment
-- The subagent will use this to determine where to save files (groups/{group}/tasks/, groups/{group}/workspace/, etc.)
-- **EXCEPTION:** If the user explicitly specifies a custom path or folder for their files (e.g., "save it in my-project/docs/"), pass that path in the prompt instead. The user's explicit choice always takes priority over the default group folder. Example: `Task(agent="task-planner", prompt="[GROUP: personal] [CUSTOM_PATH: my-project/docs/] Create a plan to ...")`
+- NEVER omit the [WORKSPACE: ...] prefix when calling Task()
+- Use the exact workspace folder name from Runtime Environment
+- The subagent will use this to determine where to save files (workspaces/{workspace}/tasks/, workspaces/{workspace}/workspace/, etc.)
+- **EXCEPTION:** If the user explicitly specifies a custom path or folder for their files (e.g., "save it in my-project/docs/"), pass that path in the prompt instead. The user's explicit choice always takes priority over the default workspace folder. Example: `Task(agent="task-planner", prompt="[WORKSPACE: personal] [CUSTOM_PATH: my-project/docs/] Create a plan to ...")`
 
 ## Available Subagents
 
@@ -129,16 +129,16 @@ Multi-step work requests:
 - "Configure Z"
 
 **Workflow:**
-1. Get the current group folder from Runtime Environment ("Current group folder")
-2. Call @task-planner with `[GROUP: {folder}]` prefix: `Task(agent="task-planner", prompt="[GROUP: {folder}] {user request}")`
-3. Wait for @task-planner to output `PLAN_CREATED: groups/{folder}/tasks/{filename}.md`
-4. By default, immediately call @task-executor: `Task(agent="task-executor", prompt="[GROUP: {folder}] Execute groups/{folder}/tasks/{filename}.md")`
+1. Get the current workspace folder from Runtime Environment ("Current workspace folder")
+2. Call @task-planner with `[WORKSPACE: {folder}]` prefix: `Task(agent="task-planner", prompt="[WORKSPACE: {folder}] {user request}")`
+3. Wait for @task-planner to output `PLAN_CREATED: workspaces/{folder}/tasks/{filename}.md`
+4. By default, immediately call @task-executor: `Task(agent="task-executor", prompt="[WORKSPACE: {folder}] Execute workspaces/{folder}/tasks/{filename}.md")`
 5. Report completion to user
 
 **Direct Task Execution Workflow (IMPORTANT):**
-When user asks to execute an existing task file path (examples: `groups/.../tasks/*.md`, `/tasks/*.md`, `\\tasks\\*.md`):
-1. Get the current group folder from Runtime Environment
-2. Call @task-executor directly: `Task(agent="task-executor", prompt="[GROUP: {folder}] Execute {task file path}")`
+When user asks to execute an existing task file path (examples: `workspaces/.../tasks/*.md`, `/tasks/*.md`, `\\tasks\\*.md`):
+1. Get the current workspace folder from Runtime Environment
+2. Call @task-executor directly: `Task(agent="task-executor", prompt="[WORKSPACE: {folder}] Execute {task file path}")`
 3. Do NOT call scheduled-task tools for this request (`list_tasks`, `schedule_task`, etc.)
 4. Report progress and final completion
 
@@ -161,10 +161,10 @@ If plan-only is requested:
 **Research and Summarization:**
 User: "Research AI news and create a summary with links"
 
-Your approach (always include [GROUP: {folder}] prefix):
-1. Task(agent="researcher", prompt="[GROUP: {folder}] search for AI news 2024")
-2. Task(agent="researcher", prompt="[GROUP: {folder}] search for AI breakthroughs")
-3. Task(agent="summarizer", prompt="[GROUP: {folder}] synthesize results from both searches")
+Your approach (always include [WORKSPACE: {folder}] prefix):
+1. Task(agent="researcher", prompt="[WORKSPACE: {folder}] search for AI news 2024")
+2. Task(agent="researcher", prompt="[WORKSPACE: {folder}] search for AI breakthroughs")
+3. Task(agent="summarizer", prompt="[WORKSPACE: {folder}] synthesize results from both searches")
 4. Present final summary with all links
 
 ## Output Format

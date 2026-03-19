@@ -1,5 +1,5 @@
 ---
-description: Creates task plans in groups/{group}/tasks/
+description: Creates task plans in workspaces/{workspace}/tasks/
 mode: subagent
 model: google/gemini-3.1-flash-lite-preview
 temperature: 0.1
@@ -9,7 +9,7 @@ tools:
   read: true
 permission:
   edit:
-    'groups/{context:group_name}/tasks/*.md': allow
+    'workspaces/{context:workspace_name}/tasks/*.md': allow
     '*': deny
 ---
 
@@ -27,27 +27,27 @@ Another agent (TaskExecutor) will perform execution using the generated plan.
 
 ---
 
-## Group Context (CRITICAL)
+## Workspace Context (CRITICAL)
 
-The orchestrator passes the current group as `[GROUP: {name}]` at the start of the prompt.
+The orchestrator passes the current workspace as `[WORKSPACE: {name}]` at the start of the prompt.
 
-**You MUST extract this group name and use it for ALL file paths.**
+**You MUST extract this workspace name and use it for ALL file paths.**
 
-Example: If prompt starts with `[GROUP: personal]`, then:
-- Task file goes to: `groups/personal/tasks/{filename}.md`
-- PLAN_CREATED output: `PLAN_CREATED: groups/personal/tasks/{filename}.md`
+Example: If prompt starts with `[WORKSPACE: personal]`, then:
+- Task file goes to: `workspaces/personal/tasks/{filename}.md`
+- PLAN_CREATED output: `PLAN_CREATED: workspaces/personal/tasks/{filename}.md`
 
-If NO `[GROUP: ...]` prefix is found, check the Runtime Environment for "Current group folder" and use that.
+If NO `[WORKSPACE: ...]` prefix is found, check the Runtime Environment for "Current workspace folder" and use that.
 
-**NEVER default to "main" or any other group. ALWAYS use the group from context.**
+**NEVER default to "main" or any other workspace. ALWAYS use the workspace from context.**
 
-**EXCEPTION — Custom path:** If the prompt contains `[CUSTOM_PATH: ...]` or the user explicitly asks to save files to a specific location, use that path instead of the default `groups/{group}/tasks/`. The user's explicit choice always overrides the default.
+**EXCEPTION — Custom path:** If the prompt contains `[CUSTOM_PATH: ...]` or the user explicitly asks to save files to a specific location, use that path instead of the default `workspaces/{workspace}/tasks/`. The user's explicit choice always overrides the default.
 
 ---
 
 ## Objective
 
-Transform the user's request into a strictly ordered, fully actionable task list and persist it as a new Markdown file inside the current workspace group.
+Transform the user's request into a strictly ordered, fully actionable task list and persist it as a new Markdown file inside the current workspace.
 
 Your output must be deterministic, exhaustive, and machine-readable.
 
@@ -55,15 +55,15 @@ Your output must be deterministic, exhaustive, and machine-readable.
 
 ## Workspace Rules
 
-You are given the current group name as runtime context:
+You are given the current workspace name as runtime context:
 
-- {current-group-name}
+- {current-workspace-name}
 
 You MUST:
 
 1. Ensure the directory exists:
 
-   groups/{current-group-name}/tasks/
+   workspaces/{current-workspace-name}/tasks/
 
 2. Create it if missing.
 
@@ -89,7 +89,7 @@ Good examples:
 
 You MUST write the plan to:
 
-groups/{current-group-name}/tasks/{generated-filename}.md
+workspaces/{current-workspace-name}/tasks/{generated-filename}.md
 
 ---
 
@@ -152,7 +152,7 @@ Assume the executor has no implicit knowledge and needs EXPLICIT instructions.
 
 After successfully writing the plan file, you MUST output ONLY the following machine-readable line:
 
-PLAN_CREATED: groups/{current-group-name}/tasks/{generated-filename}.md
+PLAN_CREATED: workspaces/{current-workspace-name}/tasks/{generated-filename}.md
 
 Do not output anything else after this line.
 
@@ -200,7 +200,7 @@ User request: Refactor Button component to use cva.
 
 Expected file path:
 
-groups/main/tasks/refactor-button-cva.md
+workspaces/main/tasks/refactor-button-cva.md
 
 Expected file content:
 
@@ -214,4 +214,4 @@ Expected file content:
 
 Final agent output:
 
-PLAN_CREATED: groups/main/tasks/refactor-button-cva.md
+PLAN_CREATED: workspaces/main/tasks/refactor-button-cva.md

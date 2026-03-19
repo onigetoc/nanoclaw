@@ -10,14 +10,14 @@ import { DATA_DIR } from '../config.js';
 import { logger } from '../logger.js';
 import { getOpenCodeHost, getOpenCodePort } from '../opencode-server.js';
 import {
-  getSessions,
-  setGroupSession,
+  setWorkspaceSession,
   setLastAgentTimestampForJid,
   saveState,
 } from '../state.js';
 import { CommandResponse } from './index.js';
-import { RegisteredGroup } from '../types.js';
+import { RegisteredWorkspace } from '../types.js';
 import { clearUndoState } from './undo-manager.js';
+import { WorkspaceQueue } from '../workspace-queue.js';
 
 /**
  * Process side effects for a command result.
@@ -27,7 +27,8 @@ import { clearUndoState } from './undo-manager.js';
 export async function handleCommandSideEffects(
   commandResult: CommandResponse,
   chatJid: string,
-  group?: RegisteredGroup,
+  group?: RegisteredWorkspace,
+  queue?: WorkspaceQueue,
 ): Promise<boolean> {
   // /new — create fresh OpenCode session
   if (
@@ -48,6 +49,12 @@ export async function handleCommandSideEffects(
       // Agent-runner may not be running — that's fine
     }
 
+    // 1b. Reset the workspace queue state so it's no longer stuck as "active"
+    if (queue) {
+      queue.resetWorkspace(chatJid);
+      logger.info({ chatJid, groupFolder: group.folder }, '/new: Reset workspace queue state');
+    }
+
     // 2. Create a new session directly via the OpenCode SDK
     try {
       const baseUrl = `http://${getOpenCodeHost()}:${getOpenCodePort()}`;
@@ -56,17 +63,17 @@ export async function handleCommandSideEffects(
       const newSessionId = (sessionResult as any).data?.id ?? (sessionResult as any).id;
 
       if (newSessionId && typeof newSessionId === 'string') {
-        setGroupSession(group.folder, newSessionId);
+        setWorkspaceSession(group.folder, newSessionId);
         clearUndoState(newSessionId); // Clear undo/redo history for new session
         const shortId = newSessionId.slice(0, 12) + '...';
         commandResult.reply = `🆕 New session created (${shortId}).`;
         logger.info({ chatJid, groupFolder: group.folder, newSessionId }, '/new: Session created');
       } else {
-        setGroupSession(group.folder, '');
+        setWorkspaceSession(group.folder, '');
         logger.warn({ chatJid }, '/new: SDK returned no session ID, cleared session');
       }
     } catch (err) {
-      setGroupSession(group.folder, '');
+      setWorkspaceSession(group.folder, '');
       logger.warn(
         { chatJid, err: err instanceof Error ? err.message : String(err) },
         '/new: SDK session.create failed, cleared session as fallback',

@@ -12,13 +12,13 @@ import {
   CONTAINER_MAX_OUTPUT_SIZE,
   CONTAINER_TIMEOUT,
   DATA_DIR,
-  GROUPS_DIR,
+  WORKSPACES_DIR,
   IDLE_TIMEOUT,
 } from './config.js';
 import { logger } from './logger.js';
 import { validateAdditionalMounts } from './mount-security.js';
 import { filterEnv } from './security/env-filter.js';
-import { RegisteredGroup } from './types.js';
+import { RegisteredWorkspace } from './types.js';
 
 // Sentinel markers for robust output parsing (must match agent-runner)
 const OUTPUT_START_MARKER = '---EURECLAW_OUTPUT_START---';
@@ -37,7 +37,7 @@ function getHomeDir(): string {
 export interface ContainerInput {
   prompt: string;
   sessionId?: string;
-  groupFolder: string;
+  workspaceFolder: string;
   chatJid: string;
   isMain: boolean;
   isScheduledTask?: boolean;
@@ -48,7 +48,7 @@ export interface ContainerInput {
   // Direct mode (Windows/Linux): real paths instead of container mount points
   directMode?: {
     ipcDir: string;
-    groupDir: string;
+    workspaceDir: string;
     globalDir?: string;
     projectDir?: string;
   };
@@ -111,7 +111,7 @@ interface VolumeMount {
 }
 
 function buildVolumeMounts(
-  group: RegisteredGroup,
+  workspace: RegisteredWorkspace,
   isMain: boolean,
 ): VolumeMount[] {
   const mounts: VolumeMount[] = [];
@@ -126,23 +126,23 @@ function buildVolumeMounts(
       readonly: false,
     });
 
-    // Main also gets its group folder as the working directory
+    // Main also gets its workspace folder as the working directory
     mounts.push({
-      hostPath: path.join(GROUPS_DIR, group.folder),
+      hostPath: path.join(WORKSPACES_DIR, workspace.folder),
       containerPath: '/workspace/group',
       readonly: false,
     });
   } else {
-    // Other groups only get their own folder
+    // Other workspaces only get their own folder
     mounts.push({
-      hostPath: path.join(GROUPS_DIR, group.folder),
+      hostPath: path.join(WORKSPACES_DIR, workspace.folder),
       containerPath: '/workspace/group',
       readonly: false,
     });
 
     // Global memory directory (read-only for non-main)
     // Apple Container only supports directory mounts, not file mounts
-    const globalDir = path.join(GROUPS_DIR, 'global');
+    const globalDir = path.join(WORKSPACES_DIR, 'global');
     if (fs.existsSync(globalDir)) {
       mounts.push({
         hostPath: globalDir,
@@ -152,17 +152,17 @@ function buildVolumeMounts(
     }
   }
 
-  // Per-group sessions directory (isolated from other groups)
-  const groupSessionsDir = path.join(
+  // Per-workspace sessions directory (isolated from other workspaces)
+  const workspaceSessionsDir = path.join(
     DATA_DIR,
     'sessions',
-    group.folder,
+    workspace.folder,
   );
-  fs.mkdirSync(groupSessionsDir, { recursive: true });
+  fs.mkdirSync(workspaceSessionsDir, { recursive: true });
 
-  // Sync skills from container/skills/ into each group's sessions directory
+  // Sync skills from container/skills/ into each workspace's sessions directory
   const skillsSrc = path.join(process.cwd(), 'container', 'skills');
-  const skillsDst = path.join(groupSessionsDir, 'skills');
+  const skillsDst = path.join(workspaceSessionsDir, 'skills');
   if (fs.existsSync(skillsSrc)) {
     for (const skillDir of fs.readdirSync(skillsSrc)) {
       const srcDir = path.join(skillsSrc, skillDir);
@@ -177,19 +177,19 @@ function buildVolumeMounts(
     }
   }
   mounts.push({
-    hostPath: groupSessionsDir,
+    hostPath: workspaceSessionsDir,
     containerPath: '/workspace/sessions',
     readonly: false,
   });
 
-  // Per-group IPC namespace: each group gets its own IPC directory
-  // This prevents cross-group privilege escalation via IPC
-  const groupIpcDir = path.join(DATA_DIR, 'ipc', group.folder);
-  fs.mkdirSync(path.join(groupIpcDir, 'messages'), { recursive: true });
-  fs.mkdirSync(path.join(groupIpcDir, 'tasks'), { recursive: true });
-  fs.mkdirSync(path.join(groupIpcDir, 'input'), { recursive: true });
+  // Per-workspace IPC namespace: each workspace gets its own IPC directory
+  // This prevents cross-workspace privilege escalation via IPC
+  const workspaceIpcDir = path.join(DATA_DIR, 'ipc', workspace.folder);
+  fs.mkdirSync(path.join(workspaceIpcDir, 'messages'), { recursive: true });
+  fs.mkdirSync(path.join(workspaceIpcDir, 'tasks'), { recursive: true });
+  fs.mkdirSync(path.join(workspaceIpcDir, 'input'), { recursive: true });
   mounts.push({
-    hostPath: groupIpcDir,
+    hostPath: workspaceIpcDir,
     containerPath: '/workspace/ipc',
     readonly: false,
   });
@@ -204,10 +204,10 @@ function buildVolumeMounts(
   });
 
   // Additional mounts validated against external allowlist (tamper-proof from containers)
-  if (group.containerConfig?.additionalMounts) {
+  if (workspace.containerConfig?.additionalMounts) {
     const validatedMounts = validateAdditionalMounts(
-      group.containerConfig.additionalMounts,
-      group.name,
+      workspace.containerConfig.additionalMounts,
+      workspace.name,
       isMain,
     );
     mounts.push(...validatedMounts);
@@ -261,24 +261,24 @@ function buildContainerArgs(mounts: VolumeMount[], containerName: string): strin
 }
 
 export async function runContainerAgent(
-  group: RegisteredGroup,
+  workspace: RegisteredWorkspace,
   input: ContainerInput,
   onProcess: (proc: ChildProcess, containerName: string) => void,
   onOutput?: (output: ContainerOutput) => Promise<void>,
 ): Promise<ContainerOutput> {
   const startTime = Date.now();
 
-  const groupDir = path.join(GROUPS_DIR, group.folder);
-  fs.mkdirSync(groupDir, { recursive: true });
+  const workspaceDir = path.join(WORKSPACES_DIR, workspace.folder);
+  fs.mkdirSync(workspaceDir, { recursive: true });
 
-  const mounts = buildVolumeMounts(group, input.isMain);
-  const safeName = group.folder.replace(/[^a-zA-Z0-9-]/g, '-');
+  const mounts = buildVolumeMounts(workspace, input.isMain);
+  const safeName = workspace.folder.replace(/[^a-zA-Z0-9-]/g, '-');
   const containerName = `eureclaw-${safeName}-${Date.now()}`;
   const containerArgs = buildContainerArgs(mounts, containerName);
 
   logger.debug(
     {
-      group: group.name,
+      workspace: workspace.name,
       containerName,
       mounts: mounts.map(
         (m) =>
@@ -291,7 +291,7 @@ export async function runContainerAgent(
 
   logger.info(
     {
-      group: group.name,
+      workspace: workspace.name,
       containerName,
       mountCount: mounts.length,
       isMain: input.isMain,
@@ -299,7 +299,7 @@ export async function runContainerAgent(
     'Spawning container agent',
   );
 
-  const logsDir = path.join(GROUPS_DIR, group.folder, 'logs');
+  const logsDir = path.join(WORKSPACES_DIR, workspace.folder, 'logs');
   fs.mkdirSync(logsDir, { recursive: true });
 
   return new Promise((resolve) => {
@@ -339,7 +339,7 @@ export async function runContainerAgent(
           stdout += chunk.slice(0, remaining);
           stdoutTruncated = true;
           logger.warn(
-            { group: group.name, size: stdout.length },
+            { workspace: workspace.name, size: stdout.length },
             'Container stdout truncated due to size limit',
           );
         } else {
@@ -373,7 +373,7 @@ export async function runContainerAgent(
             outputChain = outputChain.then(() => onOutput(parsed));
           } catch (err) {
             logger.warn(
-              { group: group.name, error: err },
+              { workspace: workspace.name, error: err },
               'Failed to parse streamed output chunk',
             );
           }
@@ -385,7 +385,7 @@ export async function runContainerAgent(
       const chunk = data.toString();
       const lines = chunk.trim().split('\n');
       for (const line of lines) {
-        if (line) logger.debug({ container: group.folder }, line);
+        if (line) logger.debug({ container: workspace.folder }, line);
       }
       // Don't reset timeout on stderr — SDK writes debug logs continuously.
       // Timeout only resets on actual output (OUTPUT_MARKER in stdout).
@@ -395,7 +395,7 @@ export async function runContainerAgent(
         stderr += chunk.slice(0, remaining);
         stderrTruncated = true;
         logger.warn(
-          { group: group.name, size: stderr.length },
+          { workspace: workspace.name, size: stderr.length },
           'Container stderr truncated due to size limit',
         );
       } else {
@@ -405,18 +405,18 @@ export async function runContainerAgent(
 
     let timedOut = false;
     let hadStreamingOutput = false;
-    const configTimeout = group.containerConfig?.timeout || CONTAINER_TIMEOUT;
+    const configTimeout = workspace.containerConfig?.timeout || CONTAINER_TIMEOUT;
     // Grace period: hard timeout must be at least IDLE_TIMEOUT + 30s so the
     // graceful _close sentinel has time to trigger before the hard kill fires.
     const timeoutMs = Math.max(configTimeout, IDLE_TIMEOUT + 30_000);
 
     const killOnTimeout = () => {
       timedOut = true;
-      logger.error({ group: group.name, containerName }, 'Container timeout, stopping gracefully');
+      logger.error({ workspace: workspace.name, containerName }, 'Container timeout, stopping gracefully');
       const containerCmd = os.platform() === 'darwin' ? 'container' : 'docker';
       exec(`${containerCmd} stop ${containerName}`, { timeout: 15000 }, (err) => {
         if (err) {
-          logger.warn({ group: group.name, containerName, err }, 'Graceful stop failed, force killing');
+          logger.warn({ workspace: workspace.name, containerName, err }, 'Graceful stop failed, force killing');
           container.kill('SIGKILL');
         }
       });
@@ -440,7 +440,7 @@ export async function runContainerAgent(
         fs.writeFileSync(timeoutLog, [
           `=== Container Run Log (TIMEOUT) ===`,
           `Timestamp: ${new Date().toISOString()}`,
-          `Group: ${group.name}`,
+          `Workspace: ${workspace.name}`,
           `Container: ${containerName}`,
           `Duration: ${duration}ms`,
           `Exit Code: ${code}`,
@@ -452,7 +452,7 @@ export async function runContainerAgent(
         // container being reaped after the idle period expired.
         if (hadStreamingOutput) {
           logger.info(
-            { group: group.name, containerName, duration, code },
+            { workspace: workspace.name, containerName, duration, code },
             'Container timed out after output (idle cleanup)',
           );
           outputChain.then(() => {
@@ -466,7 +466,7 @@ export async function runContainerAgent(
         }
 
         logger.error(
-          { group: group.name, containerName, duration, code },
+          { workspace: workspace.name, containerName, duration, code },
           'Container timed out with no output',
         );
 
@@ -485,7 +485,7 @@ export async function runContainerAgent(
       const logLines = [
         `=== Container Run Log ===`,
         `Timestamp: ${new Date().toISOString()}`,
-        `Group: ${group.name}`,
+        `Workspace: ${workspace.name}`,
         `IsMain: ${input.isMain}`,
         `Duration: ${duration}ms`,
         `Exit Code: ${code}`,
@@ -538,7 +538,7 @@ export async function runContainerAgent(
       if (code !== 0) {
         logger.error(
           {
-            group: group.name,
+            workspace: workspace.name,
             code,
             duration,
             stderr,
@@ -560,7 +560,7 @@ export async function runContainerAgent(
       if (onOutput) {
         outputChain.then(() => {
           logger.info(
-            { group: group.name, duration, newSessionId },
+            { workspace: workspace.name, duration, newSessionId },
             'Container completed (streaming mode)',
           );
           resolve({
@@ -593,7 +593,7 @@ export async function runContainerAgent(
 
         logger.info(
           {
-            group: group.name,
+            workspace: workspace.name,
             duration,
             status: output.status,
             hasResult: !!output.result,
@@ -605,7 +605,7 @@ export async function runContainerAgent(
       } catch (err) {
         logger.error(
           {
-            group: group.name,
+            workspace: workspace.name,
             stdout,
             stderr,
             error: err,
@@ -623,7 +623,7 @@ export async function runContainerAgent(
 
     container.on('error', (err) => {
       clearTimeout(timeout);
-      logger.error({ group: group.name, containerName, error: err }, 'Container spawn error');
+      logger.error({ workspace: workspace.name, containerName, error: err }, 'Container spawn error');
       resolve({
         status: 'error',
         result: null,
@@ -634,11 +634,11 @@ export async function runContainerAgent(
 }
 
 export function writeTasksSnapshot(
-  groupFolder: string,
+  workspaceFolder: string,
   isMain: boolean,
   tasks: Array<{
     id: string;
-    groupFolder: string;
+    workspaceFolder: string;
     prompt: string;
     schedule_type: string;
     schedule_value: string;
@@ -646,20 +646,20 @@ export function writeTasksSnapshot(
     next_run: string | null;
   }>,
 ): void {
-  // Write filtered tasks to the group's IPC directory
-  const groupIpcDir = path.join(DATA_DIR, 'ipc', groupFolder);
-  fs.mkdirSync(groupIpcDir, { recursive: true });
+  // Write filtered tasks to the workspace's IPC directory
+  const workspaceIpcDir = path.join(DATA_DIR, 'ipc', workspaceFolder);
+  fs.mkdirSync(workspaceIpcDir, { recursive: true });
 
   // Main sees all tasks, others only see their own
   const filteredTasks = isMain
     ? tasks
-    : tasks.filter((t) => t.groupFolder === groupFolder);
+    : tasks.filter((t) => t.workspaceFolder === workspaceFolder);
 
-  const tasksFile = path.join(groupIpcDir, 'current_tasks.json');
+  const tasksFile = path.join(workspaceIpcDir, 'current_tasks.json');
   fs.writeFileSync(tasksFile, JSON.stringify(filteredTasks, null, 2));
 }
 
-export interface AvailableGroup {
+export interface AvailableWorkspace {
   jid: string;
   name: string;
   lastActivity: string;
@@ -667,28 +667,28 @@ export interface AvailableGroup {
 }
 
 /**
- * Write available groups snapshot for the container to read.
- * Only main group can see all available groups (for activation).
- * Non-main groups only see their own registration status.
+ * Write available workspaces snapshot for the container to read.
+ * Only main workspace can see all available workspaces (for activation).
+ * Non-main workspaces only see their own registration status.
  */
-export function writeGroupsSnapshot(
-  groupFolder: string,
+export function writeWorkspacesSnapshot(
+  workspaceFolder: string,
   isMain: boolean,
-  groups: AvailableGroup[],
+  workspaces: AvailableWorkspace[],
   registeredJids: Set<string>,
 ): void {
-  const groupIpcDir = path.join(DATA_DIR, 'ipc', groupFolder);
-  fs.mkdirSync(groupIpcDir, { recursive: true });
+  const workspaceIpcDir = path.join(DATA_DIR, 'ipc', workspaceFolder);
+  fs.mkdirSync(workspaceIpcDir, { recursive: true });
 
-  // Main sees all groups; others see nothing (they can't activate groups)
-  const visibleGroups = isMain ? groups : [];
+  // Main sees all workspaces; others see nothing (they can't activate workspaces)
+  const visibleWorkspaces = isMain ? workspaces : [];
 
-  const groupsFile = path.join(groupIpcDir, 'available_groups.json');
+  const workspacesFile = path.join(workspaceIpcDir, 'available_groups.json');
   fs.writeFileSync(
-    groupsFile,
+    workspacesFile,
     JSON.stringify(
       {
-        groups: visibleGroups,
+        groups: visibleWorkspaces,
         lastSync: new Date().toISOString(),
       },
       null,

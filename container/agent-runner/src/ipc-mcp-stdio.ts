@@ -23,7 +23,7 @@ const IPC_DIR = process.env.EURECLAW_IPC_DIR || '/workspace/ipc';
 
 const ctx: McpToolContext = {
   chatJid: process.env.EURECLAW_CHAT_JID!,
-  groupFolder: process.env.EURECLAW_GROUP_FOLDER!,
+  groupFolder: process.env.EURECLAW_WORKSPACE_FOLDER!,
   isMain: process.env.EURECLAW_IS_MAIN === '1',
   ipcDir: IPC_DIR,
   messagesDir: path.join(IPC_DIR, 'messages'),

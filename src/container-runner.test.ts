@@ -12,7 +12,7 @@ vi.mock('./config.js', () => ({
   CONTAINER_MAX_OUTPUT_SIZE: 10485760,
   CONTAINER_TIMEOUT: 1800000, // 30min
   DATA_DIR: '/tmp/eureclaw-test-data',
-  GROUPS_DIR: '/tmp/eureclaw-test-groups',
+  WORKSPACES_DIR: '/tmp/eureclaw-test-workspaces',
   IDLE_TIMEOUT: 1800000, // 30min
 }));
 
@@ -82,9 +82,9 @@ vi.mock('child_process', async () => {
 });
 
 import { runContainerAgent, ContainerOutput } from './container-runner.js';
-import type { RegisteredGroup } from './types.js';
+import type { RegisteredWorkspace } from './types.js';
 
-const testGroup: RegisteredGroup = {
+const testGroup: RegisteredWorkspace = {
   name: 'Test Group',
   folder: 'test-group',
   trigger: '@Bot',
@@ -93,7 +93,7 @@ const testGroup: RegisteredGroup = {
 
 const testInput = {
   prompt: 'Hello',
-  groupFolder: 'test-group',
+  workspaceFolder: 'test-group',
   chatJid: 'test@g.us',
   isMain: false,
 };

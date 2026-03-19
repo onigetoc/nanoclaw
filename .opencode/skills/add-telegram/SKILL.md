@@ -121,12 +121,12 @@ import {
   TRIGGER_PATTERN,
 } from "../config.js";
 import { logger } from "../logger.js";
-import { Channel, OnInboundMessage, OnChatMetadata, RegisteredGroup } from "../types.js";
+import { Channel, OnInboundMessage, OnChatMetadata, RegisteredWorkspace } from "../types.js";
 
 export interface TelegramChannelOpts {
   onMessage: OnInboundMessage;
   onChatMetadata: OnChatMetadata;
-  registeredGroups: () => Record<string, RegisteredGroup>;
+  registeredWorkspaces: () => Record<string, RegisteredWorkspace>;
 }
 
 export class TelegramChannel implements Channel {
@@ -209,9 +209,9 @@ export class TelegramChannel implements Channel {
       // Store chat metadata for discovery
       this.opts.onChatMetadata(chatJid, timestamp, chatName);
 
-      // Only deliver full message for registered groups
-      const group = this.opts.registeredGroups()[chatJid];
-      if (!group) {
+      // Only deliver full message for registered workspaces
+      const workspace = this.opts.registeredWorkspaces()[chatJid];
+      if (!workspace) {
         logger.debug(
           { chatJid, chatName },
           "Message from unregistered Telegram chat",
@@ -239,8 +239,8 @@ export class TelegramChannel implements Channel {
     // Handle non-text messages with placeholders so the agent knows something was sent
     const storeNonText = (ctx: any, placeholder: string) => {
       const chatJid = `tg:${ctx.chat.id}`;
-      const group = this.opts.registeredGroups()[chatJid];
-      if (!group) return;
+      const workspace = this.opts.registeredWorkspaces()[chatJid];
+      if (!workspace) return;
 
       const timestamp = new Date(ctx.message.date * 1000).toISOString();
       const senderName =
@@ -352,7 +352,7 @@ export class TelegramChannel implements Channel {
 Key differences from the old standalone `src/telegram.ts`:
 - Implements `Channel` interface — same pattern as `WhatsAppChannel`
 - Uses `onMessage` / `onChatMetadata` callbacks instead of importing DB functions directly
-- Registration check via `registeredGroups()` callback, not `getAllRegisteredGroups()`
+- Registration check via `registeredWorkspaces()` callback, not `getAllRegisteredWorkspaces()`
 - `prefixAssistantName = false` — Telegram bots already show their name, so `formatOutbound()` skips the prefix
 - No `storeMessageDirect` needed — `storeMessage()` in db.ts already accepts `NewMessage` directly
 
@@ -377,7 +377,7 @@ const channels: Channel[] = [];
 
 Import `Channel` from `./types.js` if not already imported.
 
-3. **Update `processGroupMessages`** to find the correct channel for the JID instead of using `whatsapp` directly. Replace the direct `whatsapp.setTyping()` and `whatsapp.sendMessage()` calls:
+3. **Update `processWorkspaceMessages`** to find the correct channel for the JID instead of using `whatsapp` directly. Replace the direct `whatsapp.setTyping()` and `whatsapp.sendMessage()` calls:
 
 ```typescript
 // Find the channel that owns this JID
@@ -391,7 +391,7 @@ await channel.setTyping?.(chatJid, true);
 await channel.setTyping?.(chatJid, false);
 ```
 
-In the `onOutput` callback inside `processGroupMessages`, replace:
+In the `onOutput` callback inside `processWorkspaceMessages`, replace:
 ```typescript
 await whatsapp.sendMessage(chatJid, `${ASSISTANT_NAME}: ${text}`);
 ```
@@ -425,7 +425,7 @@ async function main(): Promise<void> {
     onMessage: (chatJid: string, msg: NewMessage) => storeMessage(msg),
     onChatMetadata: (chatJid: string, timestamp: string, name?: string) =>
       storeChatMetadata(chatJid, timestamp, name),
-    registeredGroups: () => registeredGroups,
+    registeredWorkspaces: () => registeredWorkspaces,
   };
 
   // Create and connect channels
@@ -443,11 +443,11 @@ async function main(): Promise<void> {
 
   // Start subsystems
   startSchedulerLoop({
-    registeredGroups: () => registeredGroups,
+    registeredWorkspaces: () => registeredWorkspaces,
     getSessions: () => sessions,
     queue,
-    onProcess: (groupJid, proc, containerName, groupFolder) =>
-      queue.registerProcess(groupJid, proc, containerName, groupFolder),
+    onProcess: (workspaceJid, proc, containerName, workspaceFolder) =>
+      queue.registerProcess(workspaceJid, proc, containerName, workspaceFolder),
     sendMessage: async (jid, rawText) => {
       const channel = findChannel(channels, jid);
       if (!channel) return;
@@ -461,27 +461,27 @@ async function main(): Promise<void> {
       if (!channel) throw new Error(`No channel for JID: ${jid}`);
       return channel.sendMessage(jid, text);
     },
-    registeredGroups: () => registeredGroups,
-    registerGroup,
-    syncGroupMetadata: (force) => whatsapp?.syncGroupMetadata(force) ?? Promise.resolve(),
-    getAvailableGroups,
-    writeGroupsSnapshot: (gf, im, ag, rj) => writeGroupsSnapshot(gf, im, ag, rj),
+    registeredWorkspaces: () => registeredWorkspaces,
+    registerWorkspace,
+    syncWorkspaceMetadata: (force) => whatsapp?.syncWorkspaceMetadata(force) ?? Promise.resolve(),
+    getAvailableWorkspaces,
+    writeWorkspacesSnapshot: (gf, im, ag, rj) => writeWorkspacesSnapshot(gf, im, ag, rj),
   });
-  queue.setProcessMessagesFn(processGroupMessages);
+  queue.setProcessMessagesFn(processWorkspaceMessages);
   recoverPendingMessages();
   startMessageLoop();
 }
 ```
 
-5. **Update `getAvailableGroups`** to include Telegram chats:
+5. **Update `getAvailableWorkspaces`** to include Telegram chats:
 
 ```typescript
-export function getAvailableGroups(): AvailableGroup[] {
+export function getAvailableWorkspaces(): AvailableWorkspace[] {
   const chats = getAllChats();
-  const registeredJids = new Set(Object.keys(registeredGroups));
+  const registeredJids = new Set(Object.keys(registeredWorkspaces));
 
   return chats
-    .filter((c) => c.jid !== '__group_sync__' && (c.jid.endsWith('@g.us') || c.jid.startsWith('tg:')))
+    .filter((c) => c.jid !== '__workspace_sync__' && (c.jid.endsWith('@g.us') || c.jid.startsWith('tg:')))
     .map((c) => ({
       jid: c.jid,
       name: c.name,
@@ -518,20 +518,20 @@ After installing and starting the bot, tell the user:
 > 2. Copy the chat ID (e.g., `tg:123456789` or `tg:-1001234567890`)
 > 3. I'll register it for you
 
-Registration uses the `registerGroup()` function in `src/index.ts`, which writes to SQLite and creates the group folder structure. Call it like this (or add a one-time script):
+Registration uses the `registerWorkspace()` function in `src/index.ts`, which writes to SQLite and creates the workspace folder structure. Call it like this (or add a one-time script):
 
 ```typescript
-// For private chat (main group):
-registerGroup("tg:123456789", {
+// For private chat (main workspace):
+registerWorkspace("tg:123456789", {
   name: "Personal",
   folder: "main",
   trigger: `@${ASSISTANT_NAME}`,
   added_at: new Date().toISOString(),
-  requiresTrigger: false, // main group responds to all messages
+  requiresTrigger: false, // main workspace responds to all messages
 });
 
 // For group chat (note negative ID for Telegram groups):
-registerGroup("tg:-1001234567890", {
+registerWorkspace("tg:-1001234567890", {
   name: "My Telegram Group",
   folder: "telegram-group",
   trigger: `@${ASSISTANT_NAME}`,
@@ -540,9 +540,9 @@ registerGroup("tg:-1001234567890", {
 });
 ```
 
-The `RegisteredGroup` type requires a `trigger` string field and has an optional `requiresTrigger` boolean (defaults to `true`). Set `requiresTrigger: false` for chats that should respond to all messages.
+The `RegisteredWorkspace` type requires a `trigger` string field and has an optional `requiresTrigger` boolean (defaults to `true`). Set `requiresTrigger: false` for chats that should respond to all messages.
 
-Alternatively, if the agent is already running in the main group, it can register new groups via IPC using the `register_group` task type.
+Alternatively, if the agent is already running in the main workspace, it can register new workspaces via IPC using the `register_workspace` task type.
 
 ### Step 6: Build and Restart
 
@@ -588,7 +588,7 @@ If user wants Telegram-only:
 ### Trigger Options
 
 The bot responds when:
-1. Chat has `requiresTrigger: false` in its registration (e.g., main group)
+1. Chat has `requiresTrigger: false` in its registration (e.g., main workspace)
 2. Bot is @mentioned in Telegram (translated to TRIGGER_PATTERN automatically)
 3. Message matches TRIGGER_PATTERN directly (e.g., starts with @Andy)
 
@@ -607,7 +607,7 @@ Telegram @mentions (e.g., `@andy_ai_bot`) are automatically translated: if the b
 
 Check:
 1. `TELEGRAM_BOT_TOKEN` is set in `.env` AND synced to `data/env/env`
-2. Chat is registered in SQLite (check with: `sqlite3 store/messages.db "SELECT * FROM registered_groups WHERE jid LIKE 'tg:%'"`)
+2. Chat is registered in SQLite (check with: `sqlite3 store/messages.db "SELECT * FROM registered_workspaces WHERE jid LIKE 'tg:%'"`)
 3. For non-main chats: message includes trigger pattern
 4. Service is running: `launchctl list | grep eureclaw`
 
@@ -648,9 +648,9 @@ To remove Telegram integration:
 
 1. Delete `src/channels/telegram.ts`
 2. Remove `TelegramChannel` import and creation from `src/index.ts`
-3. Remove `channels` array and revert to using `whatsapp` directly in `processGroupMessages`, scheduler deps, and IPC deps
-4. Revert `getAvailableGroups()` filter to only include `@g.us` chats
+3. Remove `channels` array and revert to using `whatsapp` directly in `processWorkspaceMessages`, scheduler deps, and IPC deps
+4. Revert `getAvailableWorkspaces()` filter to only include `@g.us` chats
 5. Remove Telegram config (`TELEGRAM_BOT_TOKEN`, `TELEGRAM_ONLY`) from `src/config.ts`
-6. Remove Telegram registrations from SQLite: `sqlite3 store/messages.db "DELETE FROM registered_groups WHERE jid LIKE 'tg:%'"`
+6. Remove Telegram registrations from SQLite: `sqlite3 store/messages.db "DELETE FROM registered_workspaces WHERE jid LIKE 'tg:%'"`
 7. Uninstall: `npm uninstall grammy`
 8. Rebuild: `npm run build && launchctl kickstart -k gui/$(id -u)/com.eureclaw`

@@ -97,8 +97,14 @@ function migrateModelIdsSync(modelIds: string[]): string[] | null {
 
 function extractModelName(id: string): string {
   const parts = id.split('/');
-  if (parts.length > 1) {
-    return parts[1].split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+  
+  // OpenRouter format: "openrouter/{org}/{model}" — use the model part (last segment)
+  // Standard format: "provider/{model}" — use the model part
+  if (parts.length >= 2) {
+    const modelPart = parts[parts.length - 1]; // Always use last segment as model name
+    // Remove :free, :extended suffixes for display
+    const cleanModel = modelPart.replace(/:(free|extended|beta|preview)$/i, '');
+    return cleanModel.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
   }
   return id;
 }

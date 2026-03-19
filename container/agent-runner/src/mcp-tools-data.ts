@@ -23,7 +23,7 @@ function getMimeType(ext: string): string {
 
 export function registerDataTools(server: McpServer, ctx: McpToolContext): void {
   const { chatJid, groupFolder, isMain, ipcDir } = ctx;
-  const groupDir = process.env.EURECLAW_GROUP_DIR || '/workspace/group';
+  const groupDir = process.env.EURECLAW_WORKSPACE_DIR || '/workspace/group';
   const projectDir = process.env.PROJECT_DIR || '/workspace/project';
   const DOWNLOADS_DIR = path.join(groupDir, 'workspace', 'downloads');
 
@@ -95,30 +95,56 @@ export function registerDataTools(server: McpServer, ctx: McpToolContext): void 
     }
   });
 
-  server.tool('list_agents', 'List all available agents.', {}, async () => {
+  server.tool('list_agents', 'List all available agents and which agent is currently responding.', {}, async () => {
     try {
-      const agentsDir = '/workspace/project/.opencode/agents';
-      if (!fs.existsSync(agentsDir)) {
-        return { content: [{ type: 'text' as const, text: 'No agents directory found.' }] };
-      }
-      const agentFiles = fs.readdirSync(agentsDir).filter(f => f.endsWith('.md'));
-      const agents = [];
-      for (const file of agentFiles) {
-        const content = fs.readFileSync(path.join(agentsDir, file), 'utf-8');
-        const fm = content.match(/^---\n([\s\S]*?)\n---/);
-        let desc = 'No description';
-        if (fm) {
-          const dm = fm[1].match(/description:\s*(.+)/);
-          if (dm) desc = dm[1].trim().replace(/^["']|["']$/g, '');
-        }
-        if (desc === 'No description') {
-          const lines = content.replace(/^---\n[\s\S]*?\n---\n/, '').split('\n');
-          for (const line of lines) {
-            const t = line.trim();
-            if (t && !t.startsWith('#')) { desc = t.slice(0, 150); break; }
+      const agents: Array<{ name: string; description: string; type: string }> = [];
+
+      // 1. Load primary agents from opencode.json
+      const configPath = path.join(projectDir, 'opencode.json');
+      if (fs.existsSync(configPath)) {
+        try {
+          const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+          if (config.agent) {
+            for (const [name, agentCfg] of Object.entries(config.agent)) {
+              const cfg = agentCfg as Record<string, any>;
+              agents.push({
+                name,
+                description: cfg.description || 'No description',
+                type: cfg.mode === 'primary' ? 'primary' : 'subagent',
+              });
+            }
           }
+        } catch { /* ignore parse errors */ }
+      }
+
+      // 2. Load subagents from .opencode/agents/ (skip duplicates already in opencode.json)
+      const agentsDir = path.join(projectDir, '.opencode', 'agents');
+      if (fs.existsSync(agentsDir)) {
+        const agentFiles = fs.readdirSync(agentsDir).filter(f => f.endsWith('.md'));
+        const existingNames = new Set(agents.map(a => a.name));
+        for (const file of agentFiles) {
+          const name = path.basename(file, '.md');
+          if (existingNames.has(name)) continue;
+          const content = fs.readFileSync(path.join(agentsDir, file), 'utf-8');
+          const fm = content.match(/^---\n([\s\S]*?)\n---/);
+          let desc = 'No description';
+          if (fm) {
+            const dm = fm[1].match(/description:\s*(.+)/);
+            if (dm) desc = dm[1].trim().replace(/^["']|["']$/g, '');
+          }
+          if (desc === 'No description') {
+            const lines = content.replace(/^---\n[\s\S]*?\n---\n/, '').split('\n');
+            for (const line of lines) {
+              const t = line.trim();
+              if (t && !t.startsWith('#')) { desc = t.slice(0, 150); break; }
+            }
+          }
+          agents.push({ name, description: desc, type: 'subagent' });
         }
-        agents.push({ name: path.basename(file, '.md'), description: desc, file });
+      }
+
+      if (agents.length === 0) {
+        return { content: [{ type: 'text' as const, text: 'No agents found.' }] };
       }
       return { content: [{ type: 'text' as const, text: JSON.stringify(agents, null, 2) }] };
     } catch (err) {
@@ -133,17 +159,17 @@ export function registerDataTools(server: McpServer, ctx: McpToolContext): void 
     'List agent execution logs for debugging.',
     {
       limit: z.number().optional().default(20).describe('Max log files to return'),
-      all_groups: z.boolean().optional().default(false).describe('(Main only) Show logs from all groups'),
+      all_workspaces: z.boolean().optional().default(false).describe('(Main only) Show logs from all workspaces'),
     },
     async (args) => {
       try {
         const logs: Array<{ file: string; group: string; timestamp: string; size: number }> = [];
-        if (args.all_groups && isMain) {
-          const groupsDir = path.join(projectDir, 'groups');
-          const groups = fs.readdirSync(groupsDir, { withFileTypes: true })
+        if (args.all_workspaces && isMain) {
+          const workspacesDir = path.join(projectDir, 'workspaces');
+          const workspaces = fs.readdirSync(workspacesDir, { withFileTypes: true })
             .filter(d => d.isDirectory() && !['templates', 'global'].includes(d.name));
-          for (const g of groups) {
-            const logsDir = path.join(groupsDir, g.name, 'logs');
+          for (const g of workspaces) {
+            const logsDir = path.join(workspacesDir, g.name, 'logs');
             if (fs.existsSync(logsDir)) {
               logs.push(...fs.readdirSync(logsDir).filter(f => f.endsWith('.log')).map(f => {
                 const stat = fs.statSync(path.join(logsDir, f));
@@ -177,12 +203,12 @@ export function registerDataTools(server: McpServer, ctx: McpToolContext): void 
     {
       filename: z.string().describe('Log filename'),
       lines: z.number().optional().describe('Lines from end'),
-      group: z.string().optional().describe('(Main only) Group folder name'),
+      group: z.string().optional().describe('(Main only) Workspace folder name'),
     },
     async (args) => {
       try {
         const logsDir = (args.group && isMain)
-          ? path.join(projectDir, 'groups', args.group, 'logs')
+          ? path.join(projectDir, 'workspaces', args.group, 'logs')
           : path.join(groupDir, 'logs');
         const logPath = path.join(logsDir, args.filename);
         if (!fs.existsSync(logPath)) {

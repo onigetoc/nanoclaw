@@ -14,7 +14,7 @@ export interface MountAllowlist {
   allowedRoots: AllowedRoot[];
   // Glob patterns for paths that should never be mounted (e.g., ".ssh", ".gnupg")
   blockedPatterns: string[];
-  // If true, non-main groups can only mount read-only regardless of config
+  // If true, non-main workspaces can only mount read-only regardless of config
   nonMainReadOnly: boolean;
 }
 
@@ -32,13 +32,13 @@ export interface ContainerConfig {
   timeout?: number; // Default: 300000 (5 minutes)
 }
 
-export interface RegisteredGroup {
+export interface RegisteredWorkspace {
   name: string;
   folder: string;
   trigger: string;
   added_at: string;
   containerConfig?: ContainerConfig;
-  requiresTrigger?: boolean; // Default: true for groups, false for solo chats
+  requiresTrigger?: boolean; // Default: true for workspaces, false for solo chats
 }
 
 export interface NewMessage {
@@ -63,12 +63,12 @@ export interface NewMessage {
 
 export interface ScheduledTask {
   id: string;
-  group_folder: string;
+  workspace_folder: string;
   chat_jid: string;
   prompt: string;
   schedule_type: 'cron' | 'interval' | 'once';
   schedule_value: string;
-  context_mode: 'group' | 'isolated';
+  context_mode: 'workspace' | 'isolated';
   next_run: string | null;
   last_run: string | null;
   last_result: string | null;
@@ -98,7 +98,7 @@ export interface Channel {
   // Optional: typing indicator. Channels that support it implement it.
   setTyping?(jid: string, isTyping: boolean): Promise<void>;
   // Optional: sync group/chat names from the platform.
-  syncGroups?(force: boolean): Promise<void>;
+  syncWorkspaces?(force: boolean): Promise<void>;
 }
 
 // Callback type that channels use to deliver inbound messages

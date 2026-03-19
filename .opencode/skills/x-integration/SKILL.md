@@ -172,7 +172,7 @@ logger.warn({ type: data.type }, 'Unknown IPC task type');
 
 // Replace with:
 default:
-const handled = await handleXIpc(data, sourceGroup, isMain, DATA_DIR);
+const handled = await handleXIpc(data, sourceWorkspace, isMain, DATA_DIR);
 if (!handled) {
     logger.warn({ type: data.type }, 'Unknown IPC task type');
 }
@@ -190,7 +190,7 @@ import { createXTools } from './skills/x-integration/agent.js';
 
 Add to the end of tools array (before the closing `]`):
 ```typescript
-    ...createXTools({ groupFolder, isMain })
+    ...createXTools({ workspaceFolder, isMain })
 ```
 
 ---
@@ -295,7 +295,7 @@ Replace `@Assistant` with your configured trigger name (`ASSISTANT_NAME` in `.en
 @Assistant quote https://x.com/user/status/123 with comment: Interesting
 ```
 
-**Note:** Only the main group can use X tools. Other groups will receive an error.
+**Note:** Only the main workspace can use X tools. Other workspaces will receive an error.
 
 ## Testing
 
@@ -409,5 +409,5 @@ container run eureclaw-agent ls -la /app/src/skills/
 
 - `data/x-browser-profile/` - Contains X session cookies (in `.gitignore`)
 - `data/x-auth.json` - Auth state marker (in `.gitignore`)
-- Only main group can use X tools (enforced in `agent.ts` and `host.ts`)
+- Only main workspace can use X tools (enforced in `agent.ts` and `host.ts`)
 - Scripts run as subprocesses with limited environment

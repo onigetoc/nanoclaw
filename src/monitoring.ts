@@ -133,6 +133,7 @@ class MonitoringService {
           executionId: id,
           group: execution.groupName,
           agent: execution.agentType,
+          model: execution.model,
           duration: execution.duration,
           outputSent: execution.outputSent,
         }, '✅ Agent execution completed');

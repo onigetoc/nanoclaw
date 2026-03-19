@@ -43,7 +43,7 @@ const { chromium } = require('playwright');
 
   await page.waitForTimeout(3000);
 
-  const outputPath = './groups/main/yahoo-search.png';
+  const outputPath = './workspaces/main/yahoo-search.png';
   await page.screenshot({ path: outputPath, fullPage: true });
   console.log('Screenshot saved');
 

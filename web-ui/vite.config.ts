@@ -12,6 +12,15 @@ export default defineConfig({
     port: 8174,
     strictPort: false,
   },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          tiktoken: ['js-tiktoken'],
+        },
+      },
+    },
+  },
   plugins: [
     react({
       babel: {
@@ -56,6 +65,7 @@ export default defineConfig({
       manifestFilename: 'manifest.webmanifest',
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff,woff2}'],
+        maximumFileSizeToCacheInBytes: 8 * 1024 * 1024, // 8 MB — bundle includes tiktoken data
         // Never cache API calls — always go to network
         navigateFallbackDenylist: [/^\/api/, /^\/chats/, /^\/agents/, /^\/config/, /^\/monitoring/, /^\/sessions/, /^\/sse/],
         runtimeCaching: [],

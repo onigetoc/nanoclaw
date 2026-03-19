@@ -18,9 +18,9 @@ src/container-runner.ts               container/agent-runner/
     │ with volume mounts                   │ with MCP servers
     │                                      │
     ├── data/env/env ──────────────> /workspace/env-dir/env
-    ├── groups/{folder} ───────────> /workspace/group
+    ├── workspaces/{folder} ───────────> /workspace/group
     ├── data/ipc/{folder} ────────> /workspace/ipc
-    ├── data/sessions/{folder}/.opencode/ ──> /home/node/.opencode/ (isolated per-group)
+    ├── data/sessions/{folder}/.opencode/ ──> /home/node/.opencode/ (isolated per-workspace)
     └── (main only) project root ──> /workspace/project
 ```
 
@@ -32,7 +32,7 @@ src/container-runner.ts               container/agent-runner/
 |-----|----------|---------|
 | **Main app logs** | `logs/eureclaw.log` | Host-side WhatsApp, routing, container spawning |
 | **Main app errors** | `logs/eureclaw.error.log` | Host-side errors |
-| **Container run logs** | `groups/{folder}/logs/container-*.log` | Per-run: input, mounts, stderr, stdout |
+| **Container run logs** | `workspaces/{folder}/logs/container-*.log` | Per-run: input, mounts, stderr, stdout |
 | **opencode sessions** | `~/.opencode/projects/` | OpenCode session history |
 
 ## Enabling Debug Logging
@@ -57,7 +57,7 @@ Debug level shows:
 
 ### 1. "OpenCode process exited with code 1"
 
-**Check the container log file** in `groups/{folder}/logs/container-*.log`
+**Check the container log file** in `workspaces/{folder}/logs/container-*.log`
 
 Common causes:
 
@@ -114,14 +114,14 @@ Expected structure:
 ```
 /workspace/
 ├── env-dir/env           # Environment file (opencode_CODE_OAUTH_TOKEN or ANTHROPIC_API_KEY)
-├── group/                # Current group folder (cwd)
+├── group/                # Current workspace folder (cwd)
 ├── project/              # Project root (main channel only)
 ├── global/               # Global AGENTS.md (non-main only)
 ├── ipc/                  # Inter-process communication
 │   ├── messages/         # Outgoing WhatsApp messages
 │   ├── tasks/            # Scheduled task commands
-│   ├── current_tasks.json    # Read-only: scheduled tasks visible to this group
-│   └── available_groups.json # Read-only: WhatsApp groups for activation (main only)
+│   ├── current_tasks.json    # Read-only: scheduled tasks visible to this workspace
+│   └── available_workspaces.json # Read-only: WhatsApp groups for activation (main only)
 └── extra/                # Additional custom mounts
 ```
 
@@ -178,14 +178,14 @@ If an MCP server fails to start, the agent may exit. Check the container logs fo
 ### Test the full agent flow:
 ```bash
 # Set up env file
-mkdir -p data/env groups/test
+mkdir -p data/env workspaces/test
 cp .env data/env/env
 
 # Run test query
-echo '{"prompt":"What is 2+2?","groupFolder":"test","chatJid":"test@g.us","isMain":false}' | \
+echo '{"prompt":"What is 2+2?","workspaceFolder":"test","chatJid":"test@g.us","isMain":false}' | \
   container run -i \
   --mount "type=bind,source=$(pwd)/data/env,target=/workspace/env-dir,readonly" \
-  -v $(pwd)/groups/test:/workspace/group \
+  -v $(pwd)/workspaces/test:/workspace/group \
   -v $(pwd)/data/ipc:/workspace/ipc \
   eureclaw-agent:latest
 ```
@@ -260,7 +260,7 @@ container run --rm --entrypoint /bin/bash eureclaw-agent:latest -c '
 
 ## Session Persistence
 
-opencode sessions are stored per-group in `data/sessions/{group}/.opencode/` for security isolation. Each group has its own session directory, preventing cross-group access to conversation history.
+opencode sessions are stored per-workspace in `data/sessions/{workspace}/.opencode/` for security isolation. Each workspace has its own session directory, preventing cross-workspace access to conversation history.
 
 **Critical:** The mount path must match the container user's HOME directory:
 - Container user: `node`
@@ -270,20 +270,20 @@ opencode sessions are stored per-group in `data/sessions/{group}/.opencode/` for
 To clear sessions:
 
 ```bash
-# Clear all sessions for all groups
+# Clear all sessions for all workspaces
 rm -rf data/sessions/
 
-# Clear sessions for a specific group
-rm -rf data/sessions/{groupFolder}/.opencode/
+# Clear sessions for a specific workspace
+rm -rf data/sessions/{workspaceFolder}/.opencode/
 
 # Also clear the session ID from EureClaw's tracking (stored in SQLite)
-sqlite3 store/messages.db "DELETE FROM sessions WHERE group_folder = '{groupFolder}'"
+sqlite3 store/messages.db "DELETE FROM sessions WHERE workspace_folder = '{workspaceFolder}'"
 ```
 
 To verify session resumption is working, check the logs for the same session ID across messages:
 ```bash
 grep "Session initialized" logs/eureclaw.log | tail -5
-# Should show the SAME session ID for consecutive messages in the same group
+# Should show the SAME session ID for consecutive messages in the same workspace
 ```
 
 ## IPC Debugging
@@ -300,18 +300,18 @@ ls -la data/ipc/tasks/
 # Read a specific IPC file
 cat data/ipc/messages/*.json
 
-# Check available groups (main channel only)
-cat data/ipc/main/available_groups.json
+# Check available workspaces (main channel only)
+cat data/ipc/main/available_workspaces.json
 
 # Check current tasks snapshot
-cat data/ipc/{groupFolder}/current_tasks.json
+cat data/ipc/{workspaceFolder}/current_tasks.json
 ```
 
 **IPC file types:**
 - `messages/*.json` - Agent writes: outgoing WhatsApp messages
-- `tasks/*.json` - Agent writes: task operations (schedule, pause, resume, cancel, refresh_groups)
+- `tasks/*.json` - Agent writes: task operations (schedule, pause, resume, cancel, refresh_workspaces)
 - `current_tasks.json` - Host writes: read-only snapshot of scheduled tasks
-- `available_groups.json` - Host writes: read-only list of WhatsApp groups (main only)
+- `available_workspaces.json` - Host writes: read-only list of WhatsApp groups (main only)
 
 ## Quick Diagnostic Script
 
@@ -335,11 +335,11 @@ echo '{}' | container run -i --entrypoint /bin/echo eureclaw-agent:latest "OK" 2
 echo -e "\n5. Session mount path correct?"
 grep -q "/home/node/.opencode" src/container-runner.ts 2>/dev/null && echo "OK" || echo "WRONG - should mount to /home/node/.opencode/, not /root/.opencode/"
 
-echo -e "\n6. Groups directory?"
-ls -la groups/ 2>/dev/null || echo "MISSING - run setup"
+echo -e "\n6. Workspaces directory?"
+ls -la workspaces/ 2>/dev/null || echo "MISSING - run setup"
 
 echo -e "\n7. Recent container logs?"
-ls -t groups/*/logs/container-*.log 2>/dev/null | head -3 || echo "No container logs yet"
+ls -t workspaces/*/logs/container-*.log 2>/dev/null | head -3 || echo "No container logs yet"
 
 echo -e "\n8. Session continuity working?"
 SESSIONS=$(grep "Session initialized" logs/eureclaw.log 2>/dev/null | tail -5 | awk '{print $NF}' | sort -u | wc -l)

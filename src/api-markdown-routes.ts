@@ -2,16 +2,17 @@
  * API Markdown Routes — browse, read, and edit .md files from the web UI.
  *
  * Endpoints:
- *   GET  /md/groups                          — list groups with their browsable folders
- *   GET  /md/groups/:group/tree              — file tree for a group (dna + workspace .md files)
- *   GET  /md/groups/:group/file?path=...     — read a markdown file
- *   PUT  /md/groups/:group/file?path=...     — save a markdown file
+ *   GET  /md/workspaces                              — list workspaces with their browsable folders
+ *   GET  /md/workspaces/:workspace/tree              — file tree for a workspace (dna + workspace .md files)
+ *   GET  /md/workspaces/:workspace/file?path=...     — read a markdown file
+ *   PUT  /md/workspaces/:workspace/file?path=...     — save a markdown file
  */
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
-import fs from 'fs';
+import fs from 'fs/promises';
+import fsSync from 'fs';
 import path from 'path';
 import { logger } from './logger.js';
-import { GROUPS_DIR } from './config.js';
+import { WORKSPACES_DIR } from './config.js';
 
 interface MdFileEntry {
   name: string;
@@ -22,47 +23,68 @@ interface MdFileEntry {
   modified?: string;
 }
 
-/** Folders we expose inside each group */
+/** Folders we expose inside each workspace */
 const BROWSABLE_FOLDERS = ['dna', 'workspace', 'docs'];
 
 /** Allowed file extensions for reading/writing */
-const ALLOWED_EXTENSIONS = ['.md', '.txt', '.json', '.yaml', '.yml', '.csv'];
+const ALLOWED_EXTENSIONS = new Set(['.md', '.txt', '.json', '.yaml', '.yml', '.csv']);
 
 function isAllowedFile(filePath: string): boolean {
-  const ext = path.extname(filePath).toLowerCase();
-  return ALLOWED_EXTENSIONS.includes(ext);
+  return ALLOWED_EXTENSIONS.has(path.extname(filePath).toLowerCase());
 }
 
-/** Recursively scan a directory for browsable files. */
-function scanDirectory(dirPath: string, relativeTo: string): MdFileEntry[] {
-  if (!fs.existsSync(dirPath)) return [];
+// ── Server-side tree cache (invalidated on write) ──
+const TREE_CACHE_TTL = 30_000; // 30s
+const treeCache = new Map<string, { data: MdFileEntry[]; timestamp: number }>();
+
+function getCachedTree(workspace: string): MdFileEntry[] | null {
+  const entry = treeCache.get(workspace);
+  if (entry && Date.now() - entry.timestamp < TREE_CACHE_TTL) return entry.data;
+  return null;
+}
+
+/** Recursively scan a directory for browsable files (async). */
+async function scanDirectory(dirPath: string, relativeTo: string): Promise<MdFileEntry[]> {
+  try {
+    await fs.access(dirPath);
+  } catch {
+    return [];
+  }
+
   const entries: MdFileEntry[] = [];
-  const items = fs.readdirSync(dirPath, { withFileTypes: true });
+  const items = await fs.readdir(dirPath, { withFileTypes: true });
+
+  // Gather stat promises for files in parallel
+  const filePromises: Promise<MdFileEntry | null>[] = [];
 
   for (const item of items) {
     const fullPath = path.join(dirPath, item.name);
     const relPath = path.relative(relativeTo, fullPath).replace(/\\/g, '/');
 
     if (item.isDirectory()) {
-      // Skip hidden folders, node_modules, downloads (already has its own endpoint)
       if (item.name.startsWith('.') || item.name === 'node_modules' || item.name === 'downloads') continue;
-      const children = scanDirectory(fullPath, relativeTo);
+      const children = await scanDirectory(fullPath, relativeTo);
       if (children.length > 0) {
         entries.push({ name: item.name, path: relPath, type: 'folder', children });
       }
     } else if (item.isFile() && isAllowedFile(item.name)) {
-      const stat = fs.statSync(fullPath);
-      entries.push({
-        name: item.name,
-        path: relPath,
-        type: 'file',
-        size: stat.size,
-        modified: stat.mtime.toISOString(),
-      });
+      filePromises.push(
+        fs.stat(fullPath).then(stat => ({
+          name: item.name,
+          path: relPath,
+          type: 'file' as const,
+          size: stat.size,
+          modified: stat.mtime.toISOString(),
+        })).catch(() => null),
+      );
     }
   }
 
-  // Sort: folders first, then files alphabetically
+  const fileResults = await Promise.all(filePromises);
+  for (const f of fileResults) {
+    if (f) entries.push(f);
+  }
+
   entries.sort((a, b) => {
     if (a.type !== b.type) return a.type === 'folder' ? -1 : 1;
     return a.name.localeCompare(b.name);
@@ -70,7 +92,7 @@ function scanDirectory(dirPath: string, relativeTo: string): MdFileEntry[] {
   return entries;
 }
 
-/** Validate that a relative path doesn't escape the group directory */
+/** Validate that a relative path doesn't escape the workspace directory */
 function isPathSafe(relativePath: string): boolean {
   const normalized = path.normalize(relativePath);
   return !normalized.startsWith('..') && !path.isAbsolute(normalized);
@@ -84,77 +106,98 @@ function isInBrowsableFolder(relativePath: string): boolean {
 
 export function registerMarkdownRoutes(fastify: FastifyInstance, authenticate: any): void {
 
-  /** List all groups with their available browsable folders */
-  fastify.get('/md/groups', { preHandler: authenticate }, async () => {
-    if (!fs.existsSync(GROUPS_DIR)) return { groups: [] };
+  /** List all workspaces with their available browsable folders */
+  fastify.get('/md/workspaces', { preHandler: authenticate }, async () => {
+    try {
+      await fs.access(WORKSPACES_DIR);
+    } catch {
+      return { workspaces: [] };
+    }
 
-    const groupDirs = fs.readdirSync(GROUPS_DIR, { withFileTypes: true })
-      .filter(d => d.isDirectory() && !d.name.startsWith('.') && d.name !== 'templates');
+    const items = await fs.readdir(WORKSPACES_DIR, { withFileTypes: true });
+    const workspaceDirs = items.filter(d => d.isDirectory() && !d.name.startsWith('.') && d.name !== 'templates');
 
-    const groups = groupDirs.map(d => {
-      const groupPath = path.join(GROUPS_DIR, d.name);
-      const folders = BROWSABLE_FOLDERS.filter(f => fs.existsSync(path.join(groupPath, f)));
-      return { name: d.name, folders };
-    });
+    const workspaces = await Promise.all(workspaceDirs.map(async d => {
+      const workspacePath = path.join(WORKSPACES_DIR, d.name);
+      const folderChecks = await Promise.all(
+        BROWSABLE_FOLDERS.map(async f => {
+          try { await fs.access(path.join(workspacePath, f)); return f; } catch { return null; }
+        }),
+      );
+      return { name: d.name, folders: folderChecks.filter(Boolean) as string[] };
+    }));
 
-    return { groups };
+    return { workspaces };
   });
 
-  /** Get file tree for a specific group */
-  fastify.get('/md/groups/:group/tree', { preHandler: authenticate },
+  /** Get file tree for a specific workspace */
+  fastify.get('/md/workspaces/:workspace/tree', { preHandler: authenticate },
     async (request: FastifyRequest, reply: FastifyReply) => {
-      const { group } = request.params as { group: string };
-      const groupPath = path.join(GROUPS_DIR, group);
+      const { workspace } = request.params as { workspace: string };
+      const workspacePath = path.join(WORKSPACES_DIR, workspace);
 
-      if (!fs.existsSync(groupPath)) {
-        return reply.code(404).send({ error: 'Group not found' });
+      try {
+        await fs.access(workspacePath);
+      } catch {
+        return reply.code(404).send({ error: 'Workspace not found' });
       }
+
+      // Check server-side cache first
+      const cached = getCachedTree(workspace);
+      if (cached) return { workspace, tree: cached };
 
       const tree: MdFileEntry[] = [];
-      for (const folder of BROWSABLE_FOLDERS) {
-        const folderPath = path.join(groupPath, folder);
-        if (!fs.existsSync(folderPath)) continue;
-        const children = scanDirectory(folderPath, groupPath);
-        tree.push({ name: folder, path: folder, type: 'folder', children });
+      const folderScans = BROWSABLE_FOLDERS.map(async folder => {
+        const folderPath = path.join(workspacePath, folder);
+        try {
+          await fs.access(folderPath);
+          const children = await scanDirectory(folderPath, workspacePath);
+          return { name: folder, path: folder, type: 'folder' as const, children };
+        } catch {
+          return null;
+        }
+      });
+
+      const results = await Promise.all(folderScans);
+      for (const r of results) {
+        if (r) tree.push(r);
       }
 
-      return { group, tree };
+      treeCache.set(workspace, { data: tree, timestamp: Date.now() });
+      return { workspace, tree };
     },
   );
 
   /** Read a file's content */
-  fastify.get('/md/groups/:group/file', { preHandler: authenticate },
+  fastify.get('/md/workspaces/:workspace/file', { preHandler: authenticate },
     async (request: FastifyRequest, reply: FastifyReply) => {
-      const { group } = request.params as { group: string };
+      const { workspace } = request.params as { workspace: string };
       const { path: filePath } = request.query as { path?: string };
 
       if (!filePath) return reply.code(400).send({ error: 'Missing path query parameter' });
       if (!isPathSafe(filePath)) return reply.code(400).send({ error: 'Invalid path' });
       if (!isInBrowsableFolder(filePath)) return reply.code(403).send({ error: 'Access denied' });
 
-      const fullPath = path.join(GROUPS_DIR, group, filePath);
-      if (!fs.existsSync(fullPath)) return reply.code(404).send({ error: 'File not found' });
+      const fullPath = path.join(WORKSPACES_DIR, workspace, filePath);
 
       try {
-        const content = fs.readFileSync(fullPath, 'utf-8');
-        const stat = fs.statSync(fullPath);
-        return {
-          path: filePath,
-          content,
-          size: stat.size,
-          modified: stat.mtime.toISOString(),
-        };
-      } catch (err) {
-        logger.error({ err, group, filePath }, 'Failed to read markdown file');
+        const [content, stat] = await Promise.all([
+          fs.readFile(fullPath, 'utf-8'),
+          fs.stat(fullPath),
+        ]);
+        return { path: filePath, content, size: stat.size, modified: stat.mtime.toISOString() };
+      } catch (err: any) {
+        if (err.code === 'ENOENT') return reply.code(404).send({ error: 'File not found' });
+        logger.error({ err, workspace, filePath }, 'Failed to read markdown file');
         return reply.code(500).send({ error: 'Failed to read file' });
       }
     },
   );
 
   /** Save (overwrite) a file's content */
-  fastify.put('/md/groups/:group/file', { preHandler: authenticate },
+  fastify.put('/md/workspaces/:workspace/file', { preHandler: authenticate },
     async (request: FastifyRequest, reply: FastifyReply) => {
-      const { group } = request.params as { group: string };
+      const { workspace } = request.params as { workspace: string };
       const { path: filePath } = request.query as { path?: string };
       const body = request.body as { content?: string } | undefined;
 
@@ -163,18 +206,23 @@ export function registerMarkdownRoutes(fastify: FastifyInstance, authenticate: a
       if (!isInBrowsableFolder(filePath)) return reply.code(403).send({ error: 'Access denied' });
       if (body?.content === undefined) return reply.code(400).send({ error: 'Missing content in body' });
 
-      const fullPath = path.join(GROUPS_DIR, group, filePath);
-
-      // Only allow saving to existing files (no arbitrary file creation for security)
-      if (!fs.existsSync(fullPath)) return reply.code(404).send({ error: 'File not found' });
+      const fullPath = path.join(WORKSPACES_DIR, workspace, filePath);
 
       try {
-        fs.writeFileSync(fullPath, body.content, 'utf-8');
-        const stat = fs.statSync(fullPath);
-        logger.info({ group, filePath }, 'Markdown file saved via web UI');
+        await fs.access(fullPath);
+      } catch {
+        return reply.code(404).send({ error: 'File not found' });
+      }
+
+      try {
+        await fs.writeFile(fullPath, body.content, 'utf-8');
+        const stat = await fs.stat(fullPath);
+        // Invalidate tree cache for this workspace
+        treeCache.delete(workspace);
+        logger.info({ workspace, filePath }, 'Markdown file saved via web UI');
         return { success: true, size: stat.size, modified: stat.mtime.toISOString() };
       } catch (err) {
-        logger.error({ err, group, filePath }, 'Failed to save markdown file');
+        logger.error({ err, workspace, filePath }, 'Failed to save markdown file');
         return reply.code(500).send({ error: 'Failed to save file' });
       }
     },

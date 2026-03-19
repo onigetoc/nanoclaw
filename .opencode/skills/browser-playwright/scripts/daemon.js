@@ -48,10 +48,10 @@ function findBrowser() {
 }
 
 function resolveOutputPath(filename) {
-  const groupFolder = process.env.GROUP_FOLDER || 'main';
-  const groupDir = path.join(PROJECT_ROOT, 'groups', groupFolder);
-  fs.mkdirSync(groupDir, { recursive: true });
-  return path.join(groupDir, filename);
+  const workspaceFolder = process.env.WORKSPACE_FOLDER || 'main';
+  const workspaceDir = path.join(PROJECT_ROOT, 'workspaces', workspaceFolder);
+  fs.mkdirSync(workspaceDir, { recursive: true });
+  return path.join(workspaceDir, filename);
 }
 
 // --- Command handlers ---

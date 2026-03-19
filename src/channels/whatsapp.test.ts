@@ -104,7 +104,7 @@ function createTestOpts(overrides?: Partial<WhatsAppChannelOpts>): WhatsAppChann
   return {
     onMessage: vi.fn(),
     onChatMetadata: vi.fn(),
-    registeredGroups: vi.fn(() => ({
+    registeredWorkspaces: vi.fn(() => ({
       'registered@g.us': {
         name: 'Test Group',
         folder: 'test-group',
@@ -548,7 +548,7 @@ describe('WhatsAppChannel', () => {
   describe('LID to JID translation', () => {
     it('translates known LID to phone JID', async () => {
       const opts = createTestOpts({
-        registeredGroups: vi.fn(() => ({
+        registeredWorkspaces: vi.fn(() => ({
           '1234567890@s.whatsapp.net': {
             name: 'Self Chat',
             folder: 'self-chat',
@@ -761,7 +761,7 @@ describe('WhatsAppChannel', () => {
 
       await connectChannel(channel);
 
-      await channel.syncGroupMetadata(true);
+      await channel.syncWorkspaceMetadata(true);
 
       expect(fakeSocket.groupFetchAllParticipating).toHaveBeenCalled();
       expect(updateChatName).toHaveBeenCalledWith('group@g.us', 'Forced Group');
@@ -778,7 +778,7 @@ describe('WhatsAppChannel', () => {
       await connectChannel(channel);
 
       // Should not throw
-      await expect(channel.syncGroupMetadata(true)).resolves.toBeUndefined();
+      await expect(channel.syncWorkspaceMetadata(true)).resolves.toBeUndefined();
     });
 
     it('skips groups with no subject', async () => {
@@ -796,7 +796,7 @@ describe('WhatsAppChannel', () => {
       // Clear any calls from the automatic sync on connect
       vi.mocked(updateChatName).mockClear();
 
-      await channel.syncGroupMetadata(true);
+      await channel.syncWorkspaceMetadata(true);
 
       expect(updateChatName).toHaveBeenCalledTimes(1);
       expect(updateChatName).toHaveBeenCalledWith('group1@g.us', 'Has Subject');

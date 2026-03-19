@@ -31,7 +31,7 @@ agents:
       - summary
   - name: task-executor
     file: task-executor.md
-    description: Executes task plans from groups/{group}/tasks/
+    description: Executes task plans from workspaces/{workspace}/tasks/
     mode: subagent
     trigger_keywords:
       - task-executor
@@ -45,7 +45,7 @@ agents:
       - do
   - name: task-planner
     file: task-planner.md
-    description: Creates task plans in groups/{group}/tasks/
+    description: Creates task plans in workspaces/{workspace}/tasks/
     mode: subagent
     trigger_keywords:
       - task-planner

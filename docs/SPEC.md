@@ -52,12 +52,12 @@ A personal opencode assistant accessible via WhatsApp, with persistent memory pe
 │  │                                                                │   │
 │  │  Working directory: /workspace/group (mounted from host)       │   │
 │  │  Volume mounts:                                                │   │
-│  │    • groups/{name}/ → /workspace/group (includes dna/, workspace/)│   │
-│  │    • groups/global/ → /workspace/global/ (non-main only)        │   │
-│  │    • data/sessions/{group}/.opencode/ → /home/node/.opencode/      │   │
+│  │    • workspaces/{name}/ → /workspace/group (includes dna/, workspace/)│   │
+│  │    • workspaces/global/ → /workspace/global/ (non-main only)        │   │
+│  │    • data/sessions/{workspace}/.opencode/ → /home/node/.opencode/      │   │
 │  │    • Additional dirs → /workspace/extra/*                      │   │
 │  │                                                                │   │
-│  │  Tools (all groups):                                           │   │
+│  │  Tools (all workspaces):                                           │   │
 │  │    • Bash (safe - sandboxed in container!)                     │   │
 │  │    • Read, Write, Edit, Glob, Grep (file operations)           │   │
 │  │    • WebSearch, WebFetch (internet access)                     │   │
@@ -107,7 +107,7 @@ eureclaw/
 │   ├── types.ts                   # TypeScript interfaces (includes Channel)
 │   ├── logger.ts                  # Pino logger setup
 │   ├── db.ts                      # SQLite database initialization and queries
-│   ├── group-queue.ts             # Per-group queue with global concurrency limit
+│   ├── workspace-queue.ts             # Per-workspace queue with global concurrency limit
 │   ├── mount-security.ts          # Mount allowlist validation for containers
 │   ├── whatsapp-auth.ts           # Standalone WhatsApp authentication
 │   ├── task-scheduler.ts          # Runs scheduled tasks when due
@@ -139,11 +139,11 @@ eureclaw/
 │       ├── convert-to-docker/SKILL.md  # /convert-to-docker - Docker runtime
 │       └── add-parallel/SKILL.md       # /add-parallel - Parallel agents
 │
-├── groups/
-│   ├── global/                    # Global memory (all groups read this)
+├── workspaces/
+│   ├── global/                    # Global memory (all workspaces read this)
 │   │   └── dna/                   # Global DNA files
 │   │       └── AGENTS.md          # Global instructions
-│   ├── templates/                 # Templates for new groups
+│   ├── templates/                 # Templates for new workspaces
 │   │   └── *.tpl.md               # Template files
 │   ├── main/                      # Self-chat (main control channel)
 │   │   ├── dna/                   # DNA files (AGENTS.md, SOUL.md, etc.)
@@ -155,26 +155,26 @@ eureclaw/
 │   │   ├── uploads/               # User-uploaded files
 │   │   ├── logs/                  # Task execution logs
 │   │   └── conversations/         # Archived conversations
-│   └── {Group Name}/              # Per-group folders (created on registration)
-│       ├── dna/                   # Group-specific DNA files
+│   └── {Workspace Name}/              # Per-workspace folders (created on registration)
+│       ├── dna/                   # Workspace-specific DNA files
 │       ├── workspace/             # Agent-generated content
 │       ├── uploads/               # User uploads
-│       ├── logs/                  # Task logs for this group
+│       ├── logs/                  # Task logs for this workspace
 │       └── conversations/         # Archived conversations
 │
 ├── store/                         # Local data (gitignored)
 │   ├── auth/                      # WhatsApp authentication state
-│   └── messages.db                # SQLite database (messages, chats, scheduled_tasks, task_run_logs, registered_groups, sessions, router_state)
+│   └── messages.db                # SQLite database (messages, chats, scheduled_tasks, task_run_logs, registered_workspaces, sessions, router_state)
 │
 ├── data/                          # Application state (gitignored)
-│   ├── sessions/                  # Per-group session data (.opencode/ dirs with JSONL transcripts)
+│   ├── sessions/                  # Per-workspace session data (.opencode/ dirs with JSONL transcripts)
 │   ├── env/env                    # Copy of .env for container mounting
 │   └── ipc/                       # Container IPC (messages/, tasks/)
 │
 ├── logs/                          # Runtime logs (gitignored)
 │   ├── eureclaw.log               # Host stdout
 │   └── eureclaw.error.log         # Host stderr
-│   # Note: Per-container logs are in groups/{folder}/logs/container-*.log
+│   # Note: Per-container logs are in workspaces/{folder}/logs/container-*.log
 │
 └── launchd/
     └── com.eureclaw.plist         # macOS service configuration
@@ -196,7 +196,7 @@ export const SCHEDULER_POLL_INTERVAL = 60000;
 // Paths are absolute (required for container mounts)
 const PROJECT_ROOT = process.cwd();
 export const STORE_DIR = path.resolve(PROJECT_ROOT, 'store');
-export const GROUPS_DIR = path.resolve(PROJECT_ROOT, 'groups');
+export const WORKSPACES_DIR = path.resolve(PROJECT_ROOT, 'workspaces');
 export const DATA_DIR = path.resolve(PROJECT_ROOT, 'data');
 
 // Container configuration
@@ -213,10 +213,10 @@ export const TRIGGER_PATTERN = new RegExp(`^@${ASSISTANT_NAME}\\b`, 'i');
 
 ### Container Configuration
 
-Groups can have additional directories mounted via `containerConfig` in the SQLite `registered_groups` table (stored as JSON in the `container_config` column). Example registration:
+Workspaces can have additional directories mounted via `containerConfig` in the SQLite `registered_workspaces` table (stored as JSON in the `container_config` column). Example registration:
 
 ```typescript
-registerGroup("1234567890@g.us", {
+registerWorkspace("1234567890@g.us", {
   name: "Dev Team",
   folder: "dev-team",
   trigger: "@Andy",
@@ -284,16 +284,16 @@ EureClaw uses a hierarchical memory system based on AGENTS.md files.
 
 | Level | Location | Read By | Written By | Purpose |
 |-------|----------|---------|------------|---------|
-| **Global** | `groups/global/dna/AGENTS.md` | All groups | Main only | Preferences, facts, context shared across all conversations |
-| **Group DNA** | `groups/{name}/dna/AGENTS.md` | That group | That group | Group-specific context, conversation memory |
-| **Group Workspace** | `groups/{name}/workspace/*.md` | That group | That group | Notes, research, documents created during conversation |
+| **Global** | `workspaces/global/dna/AGENTS.md` | All workspaces | Main only | Preferences, facts, context shared across all conversations |
+| **Workspace DNA** | `workspaces/{name}/dna/AGENTS.md` | That workspace | That workspace | Workspace-specific context, conversation memory |
+| **Workspace Content** | `workspaces/{name}/workspace/*.md` | That workspace | That workspace | Notes, research, documents created during conversation |
 
 ### How Memory Works
 
 1. **Agent Context Loading**
-   - Agent runs with `cwd` set to `groups/{group-name}/`
+   - Agent runs with `cwd` set to `workspaces/{workspace-name}/`
    - DNA files are loaded from `dna/` subfolder (AGENTS.md, IDENTITY.md, SOUL.md, etc.)
-   - Global memory is loaded from `groups/global/dna/AGENTS.md`
+   - Global memory is loaded from `workspaces/global/dna/AGENTS.md`
 
 2. **Writing Memory**
    - When user says "remember this", agent writes to `dna/MEMORY.md`
@@ -301,10 +301,10 @@ EureClaw uses a hierarchical memory system based on AGENTS.md files.
    - Agent creates files in `workspace/` folder (reports, tasks, downloads, etc.)
 
 3. **Main Channel Privileges**
-   - Only the "main" group (self-chat) can write to global memory
-   - Main can manage registered groups and schedule tasks for any group
-   - Main can configure additional directory mounts for any group
-   - All groups have Bash access (safe because it runs inside container)
+   - Only the "main" workspace (self-chat) can write to global memory
+   - Main can manage registered workspaces and schedule tasks for any workspace
+   - Main can configure additional directory mounts for any workspace
+   - All workspaces have Bash access (safe because it runs inside container)
 
 ---
 
@@ -314,10 +314,10 @@ Sessions enable conversation continuity - opencode remembers what you talked abo
 
 ### How Sessions Work
 
-1. Each group has a session ID stored in SQLite (`sessions` table, keyed by `group_folder`)
+1. Each workspace has a session ID stored in SQLite (`sessions` table, keyed by `workspace_folder`)
 2. Session ID is passed to OpenCode SDK's `resume` option
 3. opencode continues the conversation with full context
-4. Session transcripts are stored as JSONL files in `data/sessions/{group}/.opencode/`
+4. Session transcripts are stored as JSONL files in `data/sessions/{workspace}/.opencode/`
 
 ---
 
@@ -339,7 +339,7 @@ Sessions enable conversation continuity - opencode remembers what you talked abo
    │
    ▼
 5. Router checks:
-   ├── Is chat_jid in registered groups (SQLite)? → No: ignore
+   ├── Is chat_jid in registered workspaces (SQLite)? → No: ignore
    └── Does message match trigger pattern? → No: store but don't process
    │
    ▼
@@ -350,7 +350,7 @@ Sessions enable conversation continuity - opencode remembers what you talked abo
    │
    ▼
 7. Router invokes OpenCode SDK:
-   ├── cwd: groups/{group-name}/
+   ├── cwd: workspaces/{workspace-name}/
    ├── prompt: conversation history + current message
    ├── resume: session_id (for continuity)
    └── mcpServers: eureclaw (scheduler)
@@ -391,7 +391,7 @@ This allows the agent to understand the conversation context even if it wasn't m
 
 ## Commands
 
-### Commands Available in Any Group
+### Commands Available in Any Workspace
 
 | Command | Example | Effect |
 |---------|---------|--------|
@@ -401,23 +401,23 @@ This allows the agent to understand the conversation context even if it wasn't m
 
 | Command | Example | Effect |
 |---------|---------|--------|
-| `@Assistant add group "Name"` | `@Andy add group "Family Chat"` | Register a new group |
-| `@Assistant remove group "Name"` | `@Andy remove group "Work Team"` | Unregister a group |
-| `@Assistant list groups` | `@Andy list groups` | Show registered groups |
+| `@Assistant add workspace "Name"` | `@Andy add workspace "Family Chat"` | Register a new workspace |
+| `@Assistant remove workspace "Name"` | `@Andy remove workspace "Work Team"` | Unregister a workspace |
+| `@Assistant list workspaces` | `@Andy list workspaces` | Show registered workspaces |
 | `@Assistant remember [fact]` | `@Andy remember I prefer dark mode` | Add to global memory |
 
 ---
 
 ## Scheduled Tasks
 
-EureClaw has a built-in scheduler that runs tasks as full agents in their group's context.
+EureClaw has a built-in scheduler that runs tasks as full agents in their workspace's context.
 
 ### How Scheduling Works
 
-1. **Group Context**: Tasks created in a group run with that group's working directory and memory
+1. **Workspace Context**: Tasks created in a workspace run with that workspace's working directory and memory
 2. **Full Agent Capabilities**: Scheduled tasks have access to all tools (WebSearch, file operations, etc.)
-3. **Optional Messaging**: Tasks can send messages to their group using the `send_message` tool, or complete silently
-4. **Main Channel Privileges**: The main channel can schedule tasks for any group and view all tasks
+3. **Optional Messaging**: Tasks can send messages to their workspace using the `send_message` tool, or complete silently
+4. **Main Channel Privileges**: The main channel can schedule tasks for any workspace and view all tasks
 
 ### Schedule Types
 
@@ -464,8 +464,8 @@ From any group:
 - `@Andy cancel task [id]` - Delete a task
 
 From main channel:
-- `@Andy list all tasks` - View tasks from all groups
-- `@Andy schedule task for "Family Chat": [prompt]` - Schedule for another group
+- `@Andy list all tasks` - View tasks from all workspaces
+- `@Andy schedule task for "Family Chat": [prompt]` - Schedule for another workspace
 
 ---
 
@@ -498,11 +498,11 @@ EureClaw runs as a single macOS launchd service.
 When EureClaw starts, it:
 1. **Ensures Apple Container system is running** - Automatically starts it if needed; kills orphaned EureClaw containers from previous runs
 2. Initializes the SQLite database (migrates from JSON files if they exist)
-3. Loads state from SQLite (registered groups, sessions, router state)
+3. Loads state from SQLite (registered workspaces, sessions, router state)
 4. Connects to WhatsApp (on `connection.open`):
    - Starts the scheduler loop
    - Starts the IPC watcher for container messages
-   - Sets up the per-group queue with `processGroupMessages`
+   - Sets up the per-workspace queue with `processWorkspaceMessages`
    - Recovers any unprocessed messages from before shutdown
    - Starts the message polling loop
 
@@ -582,14 +582,14 @@ WhatsApp messages could contain malicious instructions attempting to manipulate 
 
 **Mitigations:**
 - Container isolation limits blast radius
-- Only registered groups are processed
+- Only registered workspaces are processed
 - Trigger word required (reduces accidental processing)
-- Agents can only access their group's mounted directories
-- Main can configure additional directories per group
+- Agents can only access their workspace's mounted directories
+- Main can configure additional directories per workspace
 - opencode's built-in safety training
 
 **Recommendations:**
-- Only register trusted groups
+- Only register trusted workspaces
 - Review additional directory mounts carefully
 - Review scheduled tasks periodically
 - Monitor logs for unusual activity
@@ -598,14 +598,14 @@ WhatsApp messages could contain malicious instructions attempting to manipulate 
 
 | Credential | Storage Location | Notes |
 |------------|------------------|-------|
-| opencode CLI Auth | data/sessions/{group}/.opencode/ | Per-group isolation, mounted to /home/node/.opencode/ |
+| opencode CLI Auth | data/sessions/{workspace}/.opencode/ | Per-workspace isolation, mounted to /home/node/.opencode/ |
 | WhatsApp Session | store/auth/ | Auto-created, persists ~20 days |
 
 ### File Permissions
 
-The groups/ folder contains personal memory and should be protected:
+The workspaces/ folder contains personal memory and should be protected:
 ```bash
-chmod 700 groups/
+chmod 700 workspaces/
 ```
 
 ---
@@ -622,7 +622,7 @@ chmod 700 groups/
 | Session not continuing | Session ID not saved | Check SQLite: `sqlite3 store/messages.db "SELECT * FROM sessions"` |
 | Session not continuing | Mount path mismatch | Container user is `node` with HOME=/home/node; sessions must be at `/home/node/.opencode/` |
 | "QR code expired" | WhatsApp session expired | Delete store/auth/ and restart |
-| "No groups registered" | Haven't added groups | Use `@Andy add group "Name"` in main |
+| "No groups registered" | Haven't added workspaces | Use `@Andy add workspace "Name"` in main |
 
 ### Log Location
 

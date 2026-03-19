@@ -25,7 +25,7 @@ This creates friction and is error-prone. The user wants a setup experience like
 - 1.3: User sends their first message to the bot on any channel
 - 1.4: The bot automatically registers that chat as the 'main' group
 - 1.5: The bot responds to the message immediately (no manual registration needed)
-- 1.6: Group folder structure is created automatically (`groups/main/`, `AGENTS.md`, etc.)
+- 1.6: Group folder structure is created automatically (`workspaces/main/`, `AGENTS.md`, etc.)
 
 ### 2. Channel-Agnostic Registration
 **As a** EureClaw developer  
@@ -68,9 +68,9 @@ This creates friction and is error-prone. The user wants a setup experience like
 **Acceptance Criteria:**
 - 5.1: `scripts/auto-setup.js` runs before `npm start` (already implemented)
 - 5.2: Database schema is created if it doesn't exist
-- 5.3: `groups/main/` folder structure is created (dna/, workspace/, uploads/, logs/, conversations/)
-- 5.4: `groups/main/dna/AGENTS.md` is created with default content
-- 5.5: `groups/global/dna/AGENTS.md` is created with default content
+- 5.3: `workspaces/main/` folder structure is created (dna/, workspace/, uploads/, logs/, conversations/)
+- 5.4: `workspaces/main/dna/AGENTS.md` is created with default content
+- 5.5: `workspaces/global/dna/AGENTS.md` is created with default content
 
 ## Non-Functional Requirements
 

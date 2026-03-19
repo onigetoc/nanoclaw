@@ -82,7 +82,7 @@ export function registerSecurityTools(server: McpServer, ctx: McpToolContext): v
       }
 
       const { execSync } = await import('child_process');
-      const groupDirPath = process.env.EURECLAW_GROUP_DIR || '/workspace/group';
+      const groupDirPath = process.env.EURECLAW_WORKSPACE_DIR || '/workspace/group';
       try {
         const output = execSync(args.command, {
           encoding: 'utf-8', cwd: args.cwd || groupDirPath,

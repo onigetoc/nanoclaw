@@ -69,12 +69,12 @@ if [ -d "$PROJECT_ROOT/store/auth" ] && [ "$(ls -A "$PROJECT_ROOT/store/auth" 2>
 fi
 log "WhatsApp auth: $WHATSAPP_AUTH"
 
-# 5. Check registered groups (in SQLite — the JSON file gets migrated away on startup)
-REGISTERED_GROUPS=0
+# 5. Check registered workspaces (in SQLite — the JSON file gets migrated away on startup)
+REGISTERED_WORKSPACES=0
 if [ -f "$PROJECT_ROOT/store/messages.db" ]; then
-  REGISTERED_GROUPS=$(sqlite3 "$PROJECT_ROOT/store/messages.db" "SELECT COUNT(*) FROM registered_groups" 2>/dev/null || echo "0")
+  REGISTERED_WORKSPACES=$(sqlite3 "$PROJECT_ROOT/store/messages.db" "SELECT COUNT(*) FROM registered_workspaces" 2>/dev/null || echo "0")
 fi
-log "Registered groups: $REGISTERED_GROUPS"
+log "Registered workspaces: $REGISTERED_WORKSPACES"
 
 # 6. Check mount allowlist
 MOUNT_ALLOWLIST="missing"
@@ -85,7 +85,7 @@ log "Mount allowlist: $MOUNT_ALLOWLIST"
 
 # Determine overall status
 STATUS="success"
-if [ "$SERVICE" != "running" ] || [ "$CREDENTIALS" = "missing" ] || [ "$WHATSAPP_AUTH" = "not_found" ] || [ "$REGISTERED_GROUPS" -eq 0 ] 2>/dev/null; then
+if [ "$SERVICE" != "running" ] || [ "$CREDENTIALS" = "missing" ] || [ "$WHATSAPP_AUTH" = "not_found" ] || [ "$REGISTERED_WORKSPACES" -eq 0 ] 2>/dev/null; then
   STATUS="failed"
 fi
 
@@ -97,7 +97,7 @@ SERVICE: $SERVICE
 CONTAINER_RUNTIME: $CONTAINER_RUNTIME
 CREDENTIALS: $CREDENTIALS
 WHATSAPP_AUTH: $WHATSAPP_AUTH
-REGISTERED_GROUPS: $REGISTERED_GROUPS
+REGISTERED_WORKSPACES: $REGISTERED_WORKSPACES
 MOUNT_ALLOWLIST: $MOUNT_ALLOWLIST
 STATUS: $STATUS
 LOG: logs/setup.log

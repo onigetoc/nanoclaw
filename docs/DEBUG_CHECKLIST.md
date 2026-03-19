@@ -65,10 +65,10 @@ for i, line in enumerate(lines):
 grep -E 'Container timeout|timed out' logs/eureclaw.log | tail -10
 
 # Check container log files for the timed-out container
-ls -lt groups/*/logs/container-*.log | head -10
+ls -lt workspaces/*/logs/container-*.log | head -10
 
 # Read the most recent container log (replace path)
-cat groups/<group>/logs/container-<timestamp>.log
+cat workspaces/<workspace>/logs/container-<timestamp>.log
 
 # Check if retries were scheduled and what happened
 grep -E 'Scheduling retry|retry|Max retries' logs/eureclaw.log | tail -10

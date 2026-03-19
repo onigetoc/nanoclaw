@@ -7,7 +7,7 @@ This document lists all tools, skills, and capabilities available to you. When y
 ### EureClaw Tools
 - `mcp__eureclaw__send_message` - Send messages immediately while working (for quick acknowledgments)
 - `mcp__eureclaw__schedule_task` - Schedule tasks to run later or on a recurring basis
-- `mcp__eureclaw__register_group` - Register a new group/chat for the assistant
+- `mcp__eureclaw__register_workspace` - Register a new workspace/chat for the assistant
 
 ### File Operations
 - Read/write files in your workspace
@@ -188,7 +188,7 @@ This way the user knows what's happening without you asking permission for every
 
 You have access to a SQLite database with:
 - Chat history and messages
-- Registered groups and their settings
+- Registered workspaces and their settings
 - Scheduled tasks
 - User preferences
 

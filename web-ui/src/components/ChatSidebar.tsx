@@ -79,7 +79,7 @@ export default function ChatSidebar({
 
       <div className="flex-1 overflow-y-auto p-2">
         <div className={`mb-1 px-3 text-[10px] font-semibold uppercase tracking-wider ${isDark ? 'text-zinc-600' : 'text-zinc-400'}`}>
-          Workspaces / Groups
+          Workspaces
         </div>
         {chats.map((chat) => {
           const active = selectedChat?.jid === chat.jid;
@@ -113,7 +113,7 @@ export default function ChatSidebar({
                 </div>
                 <div className={`mt-0.5 flex items-center gap-1 truncate text-xs ${isDark ? 'text-zinc-400' : 'text-zinc-500'}`}>
                   <Folder className="h-3.5 w-3.5 shrink-0" />
-                  <span>{chat.groupInfo ? chat.groupInfo.folder : chat.jid}</span>
+                  <span>{chat.workspaceInfo ? chat.workspaceInfo.folder : chat.jid}</span>
                 </div>
               </div>
               {hasUnread && !chatStatus && (

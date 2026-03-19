@@ -14,7 +14,7 @@ export default function SessionsSection({ sessions, isDark }: SessionsSectionPro
           Sessions
         </h1>
         <p className={`text-sm mb-6 ${isDark ? 'text-zinc-500' : 'text-zinc-500'}`}>
-          Active OpenCode sessions per group.
+          Active OpenCode sessions per workspace.
         </p>
         <div className="flex justify-center py-12">
           <div className="h-8 w-8 animate-spin rounded-full border-2 border-zinc-400 border-t-transparent" />
@@ -31,7 +31,7 @@ export default function SessionsSection({ sessions, isDark }: SessionsSectionPro
         Sessions
       </h1>
       <p className={`text-sm mb-6 ${isDark ? 'text-zinc-500' : 'text-zinc-500'}`}>
-        Active OpenCode sessions per group.
+        Active OpenCode sessions per workspace.
       </p>
 
       {entries.length === 0 ? (

@@ -17,7 +17,7 @@
 - Personal AI assistant running 24/7
 - **Origin**: Fork of Claude Code SDK, adapted for OpenCode SDK
 - Channels: Telegram (primary), WhatsApp (available)
-- Using OpenCode SDK with google/gemini-2.5-flash model
+- Using OpenCode SDK with google/gemini-3.1-flash-lite model (more efficient, cheaper than 2.5)
 - Running in direct mode on Windows (no container isolation)
 - **Memory**: Now stores both user AND assistant messages in SQLite
 
@@ -83,4 +83,4 @@ When discovering how something works:
 
 ---
 
-_Last updated: 2026-02-18_
+_Last updated: 2026-03-19_

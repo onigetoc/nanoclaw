@@ -4,13 +4,13 @@
  */
 
 import { logger } from '../logger.js';
-import { RegisteredGroup } from '../types.js';
+import { RegisteredWorkspace } from '../types.js';
 
 export interface CommandContext {
   chatJid: string;
   senderName: string;
   senderId: string;
-  group?: RegisteredGroup;
+  group?: RegisteredWorkspace;
   args: string[];
   rawMessage: string;
 }
