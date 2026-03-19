@@ -163,12 +163,35 @@ export function convertMarkdownForChannel(text: string, jid: string): string {
 }
 
 /**
- * Strip [tool_call: ...] markers that some models (e.g. Gemini) include
- * in their text output when narrating tool usage.
- * Matches patterns like: [tool_call: agent-browser for command 'open https://...']
+ * Strip hallucinated tool-call markers that some models (Gemini, Kimi K2, etc.)
+ * include in their text output instead of using structured function calling.
+ * 
+ * Handles multiple patterns:
+ * - [tool_call: bash for 'git status' description='...']
+ * - [tool_call: agent-browser for command 'open https://...']
+ * - [Tool Call: some_tool(...)]
+ * - ```tool_call\n...\n```
+ * - Tool call: tool_name(args)
+ * - [function_call: ...]
  */
 export function stripToolCalls(text: string): string {
-  return text.replace(/\[tool_call:[^\]]*\]/g, '');
+  // 1. [tool_call: ...] — greedy match to handle nested quotes/apostrophes
+  text = text.replace(/\[tool_call\s*:[^\]]*\]/gi, '');
+  
+  // 2. [function_call: ...] — some models use this variant
+  text = text.replace(/\[function_call\s*:[^\]]*\]/gi, '');
+  
+  // 3. ```tool_call\n...\n``` — fenced code blocks with tool_call language
+  text = text.replace(/```tool_call\s*\n[\s\S]*?```/gi, '');
+  
+  // 4. Standalone lines like "Tool call: bash('git status')" or "tool_call: ..."
+  //    Only strip if it's the entire line (to avoid false positives in normal text)
+  text = text.replace(/^[ \t]*tool[ _]?call\s*:.*$/gim, '');
+  
+  // 5. Clean up leftover blank lines from stripping
+  text = text.replace(/\n{3,}/g, '\n\n');
+  
+  return text.trim();
 }
 
 export function formatOutbound(rawText: string, jid?: string): string {

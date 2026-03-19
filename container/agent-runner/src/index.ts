@@ -1021,6 +1021,18 @@ Use the Task tool to invoke agents when appropriate.
   }
 
   // Requirement 9.4: Build final system prompt with all context
+  // Anti-hallucination: prevent models from writing tool calls as plain text
+  const toolCallGuard = `## CRITICAL - Response Format Rules
+
+NEVER write tool/function calls as text in your response. Do NOT output patterns like:
+- [tool_call: ...]
+- [function_call: ...]
+- tool_call: tool_name(...)
+- \`\`\`tool_call ... \`\`\`
+
+If you need to use a tool, use the structured tool/function calling mechanism.
+Your text responses must contain ONLY the final answer for the user.`;
+
   const systemAppend = [
     globalAgentsMd,
     globalSecurityMd,
@@ -1028,7 +1040,8 @@ Use the Task tool to invoke agents when appropriate.
     memoryContext,
     conversationContext,
     envContext,
-    agentsAndSkillsContext
+    agentsAndSkillsContext,
+    toolCallGuard
   ].filter(Boolean).join('\n\n');
   
   // Helper: call noReply prompt with a 30s timeout
