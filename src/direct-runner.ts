@@ -20,6 +20,32 @@ const OUTPUT_START_MARKER = '---EURECLAW_OUTPUT_START---';
 const OUTPUT_END_MARKER = '---EURECLAW_OUTPUT_END---';
 
 /**
+ * Parse agent-runner stderr lines for status updates.
+ * Returns a user-friendly status string if the line indicates a key milestone, null otherwise.
+ */
+function parseAgentStatus(line: string): string | null {
+  // Order matters — check most specific patterns first
+  if (line.includes('Registering EureClaw MCP server')) return 'Registering tools…';
+  if (line.includes('MCP server registered successfully')) return 'Tools registered';
+  if (line.includes('Injecting system context')) return 'Loading context…';
+  if (line.includes('context injected successfully')) return 'Context loaded';
+  if (line.includes('Sending message to session')) return 'Sending to model…';
+  if (line.includes('Response received from session')) return 'Processing response…';
+  if (line.includes('Using orchestrator agent')) return 'Using orchestrator…';
+  if (line.includes('Using build agent')) return 'Using build agent…';
+  if (line.includes('Using plan agent')) return 'Using plan agent…';
+  if (line.includes('Creating new OpenCode session')) return 'Creating session…';
+  if (line.includes('Session verified, resuming')) return 'Resuming session…';
+  if (line.includes('Prompt failed') && line.includes('retrying')) return 'Retrying with fresh session…';
+  if (line.includes('ContextOverflowError')) return 'Context overflow, resetting…';
+  if (line.includes('Waiting for model response')) return 'Waiting for model…';
+  if (line.includes('Query completed successfully')) return 'Query done';
+  if (line.includes('waiting for next IPC message')) return 'Ready for next message';
+  if (line.includes('Discovered') && line.includes('agents')) return 'Discovering agents…';
+  return null;
+}
+
+/**
  * Run agent directly using Node.js (no container isolation)
  */
 export async function runDirectAgent(
@@ -27,6 +53,7 @@ export async function runDirectAgent(
   input: ContainerInput,
   onProcess: (proc: ChildProcess, processName: string) => void,
   onOutput?: (output: ContainerOutput) => Promise<void>,
+  onStatus?: (detail: string) => void,
 ): Promise<ContainerOutput> {
   const startTime = Date.now();
 
@@ -175,7 +202,14 @@ export async function runDirectAgent(
       const chunk = data.toString();
       const lines = chunk.trim().split('\n');
       for (const line of lines) {
-        if (line) logger.debug({ process: workspace.folder }, line);
+        if (line) {
+          logger.debug({ process: workspace.folder }, line);
+          // Parse agent-runner logs for real-time status updates
+          if (onStatus) {
+            const status = parseAgentStatus(line);
+            if (status) onStatus(status);
+          }
+        }
       }
       if (stderrTruncated) return;
       const remaining = CONTAINER_MAX_OUTPUT_SIZE - stderr.length;

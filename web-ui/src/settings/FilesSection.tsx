@@ -13,6 +13,8 @@ interface CacheEntry<T> { data: T; timestamp: number }
 /** Folder labels for display */
 const FOLDER_LABELS: Record<string, string> = {
   dna: '🧬 DNA', workspace: '📁 Workspace', docs: '📄 Docs',
+  logs: '📋 Logs', uploads: '📤 Uploads', downloads: '📥 Downloads',
+  conversations: '💬 Conversations', tasks: '✅ Tasks', skills: '🛠️ Skills',
 };
 
 // ── Module-level cache (survives component unmount) ──

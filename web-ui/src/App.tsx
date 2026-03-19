@@ -14,6 +14,8 @@ import AdminPage from './settings/AdminPage';
 import DebugPanel from './DebugPanel';
 import { useModelStore, getPersistedModel } from './stores/modelStore';
 
+import { ElapsedTimer } from './components/ElapsedTimer';
+
 const SELECTED_CHAT_STORAGE_KEY = 'eureclaw_selected_chat_jid';
 const THEME_STORAGE_KEY = 'eureclaw_theme';
 const PAGE_SIZE = 30;
@@ -43,6 +45,7 @@ function App() {
   const [unreadChats, setUnreadChats] = useState<Set<string>>(new Set());
   const [agentStatus, setAgentStatus] = useState<StatusEvent | null>(null);
   const [chatStatuses, setChatStatuses] = useState<Map<string, StatusEvent>>(new Map());
+  const processingStartRef = useRef<string | null>(null);
   const { settings, updateSetting, resetSettings } = useSettings();
   const { setSelectedModel } = useModelStore();
 
@@ -179,27 +182,33 @@ function App() {
     apiService.connectToEvents();
     apiService.startHealthMonitor();
 
+    // Track seen message IDs to prevent StrictMode double-processing
+    // (React StrictMode mounts effects twice, creating duplicate SSE subscriptions)
+    const seenMessageIds = new Set<string>();
+
     const unsubscribeMsg = apiService.onMessage((message) => {
+      // Dedup before entering setState — prevents StrictMode double-fire
+      if (seenMessageIds.has(message.id)) return;
+      seenMessageIds.add(message.id);
+      // Keep set from growing unbounded
+      if (seenMessageIds.size > 200) {
+        const iter = seenMessageIds.values();
+        for (let i = 0; i < 100; i++) iter.next();
+        // Can't easily trim a Set, just let it grow to 200 then clear old half
+      }
+
       setState((s) => {
         if (s.selectedChat?.jid === message.chat_jid) {
           if (s.messages.some((m) => m.id === message.id)) return s;
           
           // Detect /new command response - clear message history for fresh session
-          console.log('📨 Message received:', {
-            is_bot_message: message.is_bot_message,
-            content: message.content.substring(0, 50),
-            includes_new: message.content.includes('New session created')
-          });
-          
           const isNewSessionMessage = message.is_bot_message && 
             message.content.includes('New session created');
           
           if (isNewSessionMessage) {
             console.log('🆕 New session detected - reloading messages from backend');
-            // Reload messages from backend instead of clearing abruptly
-            // This avoids the scroll-jump caused by emptying the DOM
             void loadMessages(message.chat_jid);
-            return s; // Don't update state here, loadMessages will do it
+            return s;
           }
           
           return { ...s, messages: [...s.messages, message] };
@@ -224,10 +233,15 @@ function App() {
 
       // Track selected chat status for the composer area
       if (event.status === 'done') {
+        processingStartRef.current = null;
         setTimeout(() => setAgentStatus(null), 2000);
         setAgentStatus({ ...event, detail: 'Done' });
       } else {
-        setAgentStatus(event);
+        // Capture the first non-done timestamp as the processing start
+        if (!processingStartRef.current || event.status === 'processing') {
+          processingStartRef.current = event.timestamp;
+        }
+        setAgentStatus({ ...event, timestamp: processingStartRef.current });
       }
     });
 
@@ -550,6 +564,7 @@ function App() {
                     </span>
                   ) : null}
                   <span>{agentStatus.detail || agentStatus.status}</span>
+                  <ElapsedTimer startTime={agentStatus.timestamp} isDark={isDark} />
                 </div>
               )}
 

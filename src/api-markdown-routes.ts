@@ -24,10 +24,10 @@ interface MdFileEntry {
 }
 
 /** Folders we expose inside each workspace */
-const BROWSABLE_FOLDERS = ['dna', 'workspace', 'docs'];
+const BROWSABLE_FOLDERS = ['dna', 'workspace', 'docs', 'logs', 'uploads', 'downloads', 'conversations', 'tasks', 'skills'];
 
 /** Allowed file extensions for reading/writing */
-const ALLOWED_EXTENSIONS = new Set(['.md', '.txt', '.json', '.yaml', '.yml', '.csv']);
+const ALLOWED_EXTENSIONS = new Set(['.md', '.txt', '.json', '.yaml', '.yml', '.csv', '.log', '.png', '.jpg', '.jpeg', '.html', '.js', '.ts']);
 
 function isAllowedFile(filePath: string): boolean {
   return ALLOWED_EXTENSIONS.has(path.extname(filePath).toLowerCase());
@@ -62,11 +62,9 @@ async function scanDirectory(dirPath: string, relativeTo: string): Promise<MdFil
     const relPath = path.relative(relativeTo, fullPath).replace(/\\/g, '/');
 
     if (item.isDirectory()) {
-      if (item.name.startsWith('.') || item.name === 'node_modules' || item.name === 'downloads') continue;
+      if (item.name.startsWith('.') || item.name === 'node_modules') continue;
       const children = await scanDirectory(fullPath, relativeTo);
-      if (children.length > 0) {
-        entries.push({ name: item.name, path: relPath, type: 'folder', children });
-      }
+      entries.push({ name: item.name, path: relPath, type: 'folder', children });
     } else if (item.isFile() && isAllowedFile(item.name)) {
       filePromises.push(
         fs.stat(fullPath).then(stat => ({

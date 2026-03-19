@@ -40,24 +40,19 @@
       }
     },
     "researcher": {
-      "model": "google/gemini-3.1-flash-lite-preview",
-      "description": "Fast web research with small model"
+      "description": "Web research specialist — searches, fetches, compiles results with links"
     },
     "summarizer": {
-      "model": "google/gemini-3.1-flash-lite-preview",
-      "description": "Quick synthesis with small model"
+      "description": "Synthesizes information from multiple sources into structured summaries"
     },
     "planner": {
-      "model": "google/gemini-3.1-flash-lite-preview",
-      "description": "Deep planning with full model"
+      "description": "Decomposes complex tasks into executable subtask plans"
     },
     "task-planner": {
-      "model": "google/gemini-3.1-flash-lite-preview",
-      "description": "Creates task plans in groups/{group}/tasks/"
+      "description": "Creates task plans in workspaces/{workspace}/tasks/"
     },
     "task-executor": {
-      "model": "google/gemini-3.1-flash-lite-preview",
-      "description": "Executes task plans from groups/{group}/tasks/"
+      "description": "Executes task plans from workspaces/{workspace}/tasks/"
     }
   },
   "mcp": {}

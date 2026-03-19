@@ -39,6 +39,25 @@ When performing any search (news, web, documentation, etc.):
 (❌ No link - user can't verify or explore)
 ```
 
+## File Saving Rules
+
+When saving, creating, or downloading any file for the user:
+
+1. **Default location:** `workspaces/{current_workspace}/workspace/downloads/` (where `{current_workspace}` is the workspace the user is messaging from)
+2. **Always confirm the full path** in your response — tell the user exactly where the file was saved (folder + filename)
+3. **Use descriptive filenames** — include the topic or source (e.g., `youtube-transcript-react-hooks.txt`, not `transcript.txt`)
+4. **If a better folder exists**, suggest it (e.g., `workspace/reports/` for reports, `workspace/tasks/` for task files)
+5. **If the user specifies a location**, use that instead
+6. **Never save files outside the current workspace** unless explicitly asked
+
+**Example response:**
+```
+✓ Transcript saved to workspaces/main/workspace/downloads/transcript-video-title.txt
+```
+
+❌ Bad: "I saved the transcript." (where??)
+✅ Good: "Transcript saved to `workspaces/main/workspace/downloads/yt-react-hooks-tutorial.txt`"
+
 ## Response Quality
 
 - Be concise but complete

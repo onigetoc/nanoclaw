@@ -1323,11 +1323,14 @@ export function broadcastStatus(
     const hasChat = mappings.length === 0 || linkedJids.some((jid) => mappings.includes(jid));
 
     if (hasChat) {
+      const sentConnections = new Set<(data: string) => void>();
       for (const targetJid of linkedJids) {
         const payload = JSON.stringify({ type: 'status', chatJid: targetJid, status, detail, timestamp: new Date().toISOString() });
         for (const sendEvent of connections) {
+          if (sentConnections.has(sendEvent)) continue;
           try {
             sendEvent(payload);
+            sentConnections.add(sendEvent);
           } catch (e) {
             connections.delete(sendEvent);
           }
@@ -1362,12 +1365,17 @@ export function broadcastToToken(
     const hasChat = mappings.length === 0 || linkedJids.some((jid) => mappings.includes(jid));
 
     if (hasChat) {
-      // Broadcast once per linked JID so the web UI can match on its own JID
+      // Send once per linked JID so the web UI can match on its own JID,
+      // but deduplicate: only send once per connection by tracking which
+      // connections already received this message.
+      const sentConnections = new Set<(data: string) => void>();
       for (const targetJid of linkedJids) {
         const messageStr = JSON.stringify({ type: 'message', chatJid: targetJid, ...message });
         for (const sendEvent of connections) {
+          if (sentConnections.has(sendEvent)) continue;
           try {
             sendEvent(messageStr);
+            sentConnections.add(sendEvent);
             totalSent++;
           } catch (e) {
             connections.delete(sendEvent);

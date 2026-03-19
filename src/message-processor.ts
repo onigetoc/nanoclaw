@@ -1,6 +1,7 @@
 /**
  * Message processing: runs the agent for a workspace and handles output streaming.
  */
+import { ChildProcess } from 'child_process';
 import {
   ASSISTANT_NAME,
   IDLE_TIMEOUT,
@@ -477,30 +478,34 @@ async function runAgent(
     : undefined;
 
   try {
-    const runAgentFn = shouldUseDirectMode()
-      ? runDirectAgent
-      : runContainerAgent;
+    const useDirectMode = shouldUseDirectMode();
 
     broadcastStatus(chatJid, 'connecting', 'Starting agent…');
 
-    const output = await runAgentFn(
-      workspace,
-      {
-        prompt,
-        sessionId,
-        workspaceFolder: workspace.folder,
-        chatJid,
-        isMain,
-        forceNewSession: !sessionId || sessionId === '',
-        model: preferences?.model,
-        agent: preferences?.agent,
-      },
-      (proc, containerName) => {
-        queue.registerProcess(chatJid, proc, containerName, workspace.folder);
-        broadcastStatus(chatJid, 'waiting', 'Waiting for model response…');
-      },
-      wrappedOnOutput,
-    );
+    // Status callback for real-time agent progress (direct mode only)
+    const onStatusUpdate = (detail: string) => {
+      broadcastStatus(chatJid, 'waiting', detail);
+    };
+
+    const onProcessCb = (proc: ChildProcess, containerName: string) => {
+      queue.registerProcess(chatJid, proc, containerName, workspace.folder);
+      broadcastStatus(chatJid, 'waiting', 'Waiting for model response…');
+    };
+
+    const agentInput = {
+      prompt,
+      sessionId,
+      workspaceFolder: workspace.folder,
+      chatJid,
+      isMain,
+      forceNewSession: !sessionId || sessionId === '',
+      model: preferences?.model,
+      agent: preferences?.agent,
+    };
+
+    const output = useDirectMode
+      ? await runDirectAgent(workspace, agentInput, onProcessCb, wrappedOnOutput, onStatusUpdate)
+      : await runContainerAgent(workspace, agentInput, onProcessCb, wrappedOnOutput);
     
     // Clear preferences after use
     queue.clearMessagePreferences(chatJid);

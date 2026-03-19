@@ -29,8 +29,9 @@ interface WorkspaceState {
   };
 }
 
-// Max time a workspace can stay active before the watchdog resets it (5 minutes)
-const WATCHDOG_TIMEOUT_MS = 5 * 60 * 1000;
+// Max time a workspace can stay active before the watchdog resets it (8 minutes)
+// Must be longer than PROMPT_TIMEOUT_MS (5 min) + context injection + MCP registration overhead
+const WATCHDOG_TIMEOUT_MS = 8 * 60 * 1000;
 const WATCHDOG_INTERVAL_MS = 30 * 1000;
 
 export class WorkspaceQueue {

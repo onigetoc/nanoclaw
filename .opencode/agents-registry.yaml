@@ -1,59 +1,63 @@
-# Auto-generated Agent Registry
-# Generated: 2026-02-25T06:07:29.565Z
-# This file is automatically scanned by the orchestrator to discover available agents
+# Agent Registry for EureClaw
+# Auto-discovered by the orchestrator at session start
 # Run 'bun run scripts/sync-agents-registry.ts' to regenerate
 
 agents:
-  - name: planner
-    file: planner.md
-    description: 'Agent: planner'
-    mode: subagent
-    trigger_keywords:
-      - planner
-      - plan
-      - create plan
   - name: researcher
     file: researcher.md
-    description: 'Agent: researcher'
+    description: 'Web research specialist — searches, fetches, compiles results with links'
     mode: subagent
     trigger_keywords:
-      - researcher
       - research
       - search
+      - news
       - find
+      - look up
+      - latest
+      - current
+      - cherche
+      - nouvelles
+      - actualités
+
+  - name: planner
+    file: planner.md
+    description: 'Decomposes complex tasks into executable subtask plans'
+    mode: subagent
+    trigger_keywords:
+      - plan
+      - decompose
+      - break down
+      - strategy
+
   - name: summarizer
     file: summarizer.md
-    description: 'Agent: summarizer'
+    description: 'Synthesizes information from multiple sources into structured summaries'
     mode: subagent
     trigger_keywords:
-      - summarizer
       - summarize
       - summary
-  - name: task-executor
-    file: task-executor.md
-    description: Executes task plans from workspaces/{workspace}/tasks/
-    mode: subagent
-    trigger_keywords:
-      - task-executor
-      - task executor
-      - task
-      - create task
-      - plan
-      - create plan
-      - execute
-      - run
-      - do
+      - synthesize
+      - résume
+
   - name: task-planner
     file: task-planner.md
-    description: Creates task plans in workspaces/{workspace}/tasks/
+    description: 'Creates task plans in workspaces/{workspace}/tasks/'
     mode: subagent
     trigger_keywords:
-      - task-planner
-      - task planner
-      - task
       - create task
-      - plan
-      - create plan
+      - task plan
+      - plan task
+      - crée une tâche
+
+  - name: task-executor
+    file: task-executor.md
+    description: 'Executes task plans from workspaces/{workspace}/tasks/'
+    mode: subagent
+    trigger_keywords:
+      - execute task
+      - run task
+      - exécute
+
 orchestrator:
   auto_discover: true
   registry_file: .opencode/agents-registry.yaml
