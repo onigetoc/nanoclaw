@@ -59,12 +59,13 @@ export interface ContainerOutput {
   result: string | null;
   newSessionId?: string;
   error?: string;
+  logFile?: string;
   metadata?: {
     modelID?: string;
     providerID?: string;
     mode?: string;
     agent?: string;
-    tokens?: { total: number; input: number; output: number; reasoning: number };
+    tokens?: { total: number; input: number; output: number; reasoning: number; cacheRead?: number; cacheWrite?: number };
     cost?: number;
   };
 }
@@ -536,22 +537,27 @@ export async function runContainerAgent(
       logger.debug({ logFile, verbose: isVerbose }, 'Container log written');
 
       if (code !== 0) {
+        const wasKilled = code === null;
+        const errorMsg = wasKilled
+          ? 'Agent session was interrupted (previous session closed)'
+          : `Container exited with code ${code}: ${stderr.slice(-200)}`;
         logger.error(
           {
             workspace: workspace.name,
             code,
+            wasKilled,
             duration,
             stderr,
             stdout,
             logFile,
           },
-          'Container exited with error',
+          wasKilled ? 'Container was killed' : 'Container exited with error',
         );
 
         resolve({
           status: 'error',
           result: null,
-          error: `Container exited with code ${code}: ${stderr.slice(-200)}`,
+          error: errorMsg,
         });
         return;
       }

@@ -1,0 +1,15 @@
+[1] /FujiwaraChoki/MoneyPrinterV2
+[2] /bytedance/deer-flow
+[3] /Crosstalk-Solutions/project-nomad
+[4] /vxcontrol/pentagi
+[5] /browser-use/browser-use
+[6] /TauricResearch/TradingAgents
+[7] /tinygrad/tinygrad
+[8] /affaan-m/everything-claude-code
+[9] /NousResearch/hermes-agent
+[10] /jingyaogong/minimind
+[11] /hsliuping/TradingAgents-CN
+[12] /kepano/obsidian-skills
+[13] /czlonkowski/n8n-mcp
+[14] /iptv-org/iptv
+[15] /hesreallyhim/awesome-claude-code

@@ -19,6 +19,15 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { createOpencodeClient as _createOpencodeClient } from '@opencode-ai/sdk';
 import { sanitizeContextFile } from './context-security.js';
+import {
+  loadEureClawConfig,
+  parseModel,
+  isModelError,
+  isResponseFailure,
+  buildModelChain,
+  formatFallbackLog,
+  type EureClawConfig,
+} from './model-fallback.js';
 
 interface ContainerInput {
   prompt: string;
@@ -70,6 +79,9 @@ interface SessionsIndex {
 let IPC_INPUT_DIR = '/workspace/ipc/input';
 let IPC_INPUT_CLOSE_SENTINEL = path.join(IPC_INPUT_DIR, '_close');
 const IPC_POLL_MS = 500;
+
+// EureClaw config — loaded once in main(), used by runQuery() for model fallback
+let eureClawConfig: EureClawConfig | null = null;
 
 /**
  * Create and configure an OpenCode SDK client.
@@ -1147,15 +1159,24 @@ Your text responses must contain ONLY the final answer for the user.`;
   // Current model override — set from containerInput, may be updated by main() via containerInput.model
   let currentModelOverride = modelOverride;
 
-  const promptWithTimeout = async (sid: string, text: string, agent?: string) => {
+  // Build model fallback chain from eureclaw.json config
+  const modelsConfig = eureClawConfig?.models;
+  const modelChain = modelsConfig
+    ? buildModelChain(modelsConfig, containerInput.model)
+    : containerInput.model ? [containerInput.model] : [];
+  if (modelChain.length > 1) {
+    log(`🔄 Model fallback chain: ${modelChain.join(' → ')}`);
+  }
+
+  const promptWithTimeout = async (sid: string, text: string, agent?: string, modelOvr?: { providerID: string; modelID: string }) => {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), PROMPT_TIMEOUT_MS);
     try {
       const resp = await client.session.prompt({
         path: { id: sid },
         body: { 
-          agent, // Use specified agent (orchestrator, build, etc.)
-          model: currentModelOverride, // Override model from web UI (if set)
+          agent,
+          model: modelOvr || currentModelOverride,
           parts: [{ type: 'text', text }] 
         },
         signal: controller.signal as any,
@@ -1166,34 +1187,110 @@ Your text responses must contain ONLY the final answer for the user.`;
     }
   };
 
-  try {
-    // session.prompt() blocks until AI responds
-    // Returns { data: { info: AssistantMessage, parts: Part[] }, request, response }
-    let response: any;
+  // Helper: attempt a prompt, with session-refresh on stale session errors
+  const attemptPrompt = async (modelOvr?: { providerID: string; modelID: string }) => {
     try {
-      response = await promptWithTimeout(currentSessionId, effectivePrompt, agentName);
+      return await promptWithTimeout(currentSessionId, effectivePrompt, agentName, modelOvr);
     } catch (promptErr: any) {
-      // If session might be stale/expired, retry with a fresh session
       const msg = promptErr?.message || String(promptErr);
       const isSessionError = msg.includes('fetch failed') || msg.includes('abort') || msg.includes('timeout') || msg.includes('404') || msg.includes('not found') || msg.includes('ContextOverflow') || msg.includes('context_length') || msg.includes('context window') || msg.includes('maximum context length');
       if (isSessionError && sessionId) {
         log(`⚠ Prompt failed (${msg}), recreating client and retrying with fresh session...`);
+        client = await createOpencodeClient(sdkEnv);
+        const freshSession = await client.session.create();
+        currentSessionId = freshSession.data?.id ?? freshSession.id;
+        newSessionId = currentSessionId;
+        log(`✓ Created fresh session: ${currentSessionId}`);
+        await injectContext(currentSessionId, systemAppend);
+        return await promptWithTimeout(currentSessionId, effectivePrompt, agentName, modelOvr);
+      }
+      throw promptErr;
+    }
+  };
+
+  try {
+    // === Model Fallback Loop ===
+    // Try the primary model first, then fallbacks from eureclaw.json if it fails.
+    // This prevents silent failures when free models hit rate limits or expire.
+    let response: any;
+    let usedFallback = false;
+    let lastError: any = null;
+
+    if (modelChain.length <= 1) {
+      // No fallbacks configured — use original behavior
+      response = await attemptPrompt();
+    } else {
+      // Try each model in the chain until one succeeds
+      for (let i = 0; i < modelChain.length; i++) {
+        const modelStr = modelChain[i];
+        const modelOvr = parseModel(modelStr);
+        if (!modelOvr) continue;
+
         try {
-          // Recreate the HTTP client — the old one may have a dead connection
-          client = await createOpencodeClient(sdkEnv);
-          const freshSession = await client.session.create();
-          currentSessionId = freshSession.data?.id ?? freshSession.id;
-          newSessionId = currentSessionId;
-          log(`✓ Created fresh session: ${currentSessionId}`);
-          // Re-inject context into fresh session
-          await injectContext(currentSessionId, systemAppend);
-          response = await promptWithTimeout(currentSessionId, effectivePrompt, agentName);
-        } catch (retryErr: any) {
-          log(`ERROR: Retry with fresh session also failed: ${retryErr?.message || String(retryErr)}`);
-          throw retryErr;
+          log(`🎯 Trying model ${i + 1}/${modelChain.length}: ${modelStr}`);
+          response = await attemptPrompt(modelOvr);
+
+          // Check for empty/failed responses (HTTP 200 but no real content)
+          const respData = response?.data ?? response;
+          const failure = isResponseFailure(respData);
+          if (failure.failed) {
+            log(formatFallbackLog(i + 1, modelChain.length, modelStr, failure.reason));
+            response = null; // Reset so we try next model
+            // Need fresh session for next model attempt
+            if (i < modelChain.length - 1) {
+              try {
+                client = await createOpencodeClient(sdkEnv);
+                const freshSession = await client.session.create();
+                currentSessionId = freshSession.data?.id ?? freshSession.id;
+                newSessionId = currentSessionId;
+                await injectContext(currentSessionId, systemAppend);
+                contextInjected = true;
+              } catch (refreshErr) {
+                log(`❌ Failed to refresh session: ${refreshErr}`);
+              }
+            }
+            continue;
+          }
+
+          // Success
+          if (i > 0) {
+            usedFallback = true;
+            log(`✅ Fallback model succeeded: ${modelStr}`);
+          }
+          break;
+        } catch (err: any) {
+          lastError = err;
+          const errMsg = err?.message || String(err);
+          log(formatFallbackLog(i + 1, modelChain.length, modelStr, errMsg));
+          response = null;
+
+          if (!isModelError(err)) {
+            log(`❌ Non-model error, stopping fallback chain`);
+            break;
+          }
+
+          // Prepare fresh session for next model attempt
+          if (i < modelChain.length - 1) {
+            try {
+              client = await createOpencodeClient(sdkEnv);
+              const freshSession = await client.session.create();
+              currentSessionId = freshSession.data?.id ?? freshSession.id;
+              newSessionId = currentSessionId;
+              await injectContext(currentSessionId, systemAppend);
+              contextInjected = true;
+            } catch (refreshErr) {
+              log(`❌ Failed to refresh session for next fallback: ${refreshErr}`);
+              break;
+            }
+          }
         }
-      } else {
-        throw promptErr;
+      }
+
+      // All models exhausted
+      if (!response) {
+        const allModels = modelChain.join(', ');
+        const errMsg = lastError?.message || 'All models returned empty responses';
+        throw new Error(`All models failed [${allModels}]: ${errMsg}`);
       }
     }
 
@@ -1201,7 +1298,7 @@ Your text responses must contain ONLY the final answer for the user.`;
 
     log(`✓ Response received from session ${currentSessionId}`);
     
-    // Debug: log the raw response structure to understand what the SDK returns
+    // Debug: log the raw response structure
     log(`Response keys: ${Object.keys(response || {}).join(', ')}`);
     log(`Response.data type: ${typeof response?.data}`);
     if (response?.data) {
@@ -1219,7 +1316,6 @@ Your text responses must contain ONLY the final answer for the user.`;
 
     // Detect ContextOverflowError — the SDK returns HTTP 200 with the error
     // embedded in responseData.info.error, not as a thrown exception.
-    // When this happens, the session is saturated and we must start fresh.
     const infoError = responseData.info?.error;
     const errorName = infoError?.name || infoError?.type || '';
     const errorMessage2 = infoError?.message || '';
@@ -1235,11 +1331,7 @@ Your text responses must contain ONLY the final answer for the user.`;
         currentSessionId = freshSession.data?.id ?? freshSession.id;
         newSessionId = currentSessionId;
         log(`✓ Created fresh session after overflow: ${currentSessionId}`);
-        
-        // Re-inject context into fresh session
         await injectContext(currentSessionId, systemAppend);
-        
-        // Retry the prompt
         const retryResponse = await promptWithTimeout(currentSessionId, effectivePrompt, agentName);
         const retryData = retryResponse.data ?? retryResponse;
         responseData = retryData;
@@ -1256,13 +1348,14 @@ Your text responses must contain ONLY the final answer for the user.`;
         throw overflowRetryErr;
       }
     }
+
     // Extract text from response parts
     const textParts = parts
       .filter((p: any) => p.type === 'text')
       .map((p: any) => p.text || '')
       .join('');
 
-    // Build metadata from responseData.info (contains modelID, providerID, agent, tokens, cost)
+    // Build metadata from responseData.info
     const info = responseData.info || {};
     const outputMetadata: ContainerOutput['metadata'] = {
       modelID: info.modelID || undefined,
@@ -1280,16 +1373,18 @@ Your text responses must contain ONLY the final answer for the user.`;
       cost: info.cost ?? undefined,
     };
     if (outputMetadata.modelID) {
-      log(`📊 Model: ${outputMetadata.providerID}/${outputMetadata.modelID}, agent: ${outputMetadata.agent}, tokens: ${JSON.stringify(outputMetadata.tokens)}`);
+      log(`📊 Model: ${outputMetadata.providerID}/${outputMetadata.modelID}, agent: ${outputMetadata.agent}, tokens: ${JSON.stringify(outputMetadata.tokens)}${usedFallback ? ' (fallback)' : ''}`);
     }
 
     if (textParts) {
       resultCount++;
+      // Prepend fallback notice so user knows a different model answered
+      const fallbackNotice = usedFallback ? `⚡ _Answered by fallback model: ${outputMetadata.providerID}/${outputMetadata.modelID}_\n\n` : '';
       log(`✓ Assistant response #${resultCount}: ${textParts.slice(0, 200)}${textParts.length > 200 ? '...' : ''}`);
 
       writeOutput({
         status: 'success',
-        result: textParts,
+        result: fallbackNotice + textParts,
         newSessionId: currentSessionId,
         metadata: outputMetadata,
       });
@@ -1351,7 +1446,6 @@ Your text responses must contain ONLY the final answer for the user.`;
     });
 
     // Don't throw — return gracefully so the query loop can continue.
-    // Model timeouts and network errors should not crash the entire agent process.
     return { newSessionId: currentSessionId, lastAssistantUuid: undefined, closedDuringQuery: false, client, contextInjected, hadError: true };
   }
 
@@ -1444,6 +1538,11 @@ async function main(): Promise<void> {
   }
 
   fs.mkdirSync(IPC_INPUT_DIR, { recursive: true });
+
+  // Load EureClaw config for model fallback
+  const ecProjectDir = containerInput.directMode?.projectDir || '/workspace/project';
+  eureClawConfig = loadEureClawConfig(ecProjectDir);
+  log(`✓ EureClaw config loaded: primary=${eureClawConfig.models.primary}, small=${eureClawConfig.models.small}, primaryFallbacks=[${eureClawConfig.models.primaryFallbacks.join(', ')}], smallFallbacks=[${eureClawConfig.models.smallFallbacks.join(', ')}]`);
 
   // Clean up stale _close sentinel from previous container runs
   try { fs.unlinkSync(IPC_INPUT_CLOSE_SENTINEL); } catch { /* ignore */ }

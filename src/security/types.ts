@@ -40,7 +40,7 @@ export interface ApprovalRequest {
   id: string;
   command: string;
   chatJid: string;
-  groupFolder: string;
+  workspaceFolder: string;
   pattern: string;
   requestedAt: number;
   expiresAt: number; // requestedAt + 5 minutes

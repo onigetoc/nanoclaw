@@ -14,7 +14,11 @@ import {
 import { undo, redo } from './undo-manager.js';
 import { ASSISTANT_NAME } from '../config.js';
 import { logger } from '../logger.js';
-import { getSessions } from '../state.js';
+import { getSessions, getRegisteredWorkspaces } from '../state.js';
+import { getMonitoring } from '../monitoring.js';
+import { getModelInfo } from '../opencode-config.js';
+import { getMessagesPage } from '../db.js';
+import { getOpenCodeHost, getOpenCodePort } from '../opencode-server.js';
 
 /**
  * /restart - Restart EureClaw
@@ -141,7 +145,7 @@ registerCommand('awake', async (ctx: CommandContext): Promise<CommandResponse> =
 });
 
 /**
- * /status - Check bot status
+ * /status - Check bot status with detailed session info
  */
 registerCommand('status', async (ctx: CommandContext): Promise<CommandResponse> => {
   if (isSleeping()) {
@@ -169,10 +173,195 @@ registerCommand('status', async (ctx: CommandContext): Promise<CommandResponse> 
     return { reply: statusText };
   }
 
-  return {
-    reply: `✅ ${ASSISTANT_NAME} is awake and ready!\n\nUse /sleep to pause the bot.`,
-  };
+  // Gather rich status info
+  const monitoring = getMonitoring();
+  const modelInfo = getModelInfo();
+  const sessions = getSessions();
+  const workspaces = getRegisteredWorkspaces();
+  const stats = monitoring.getStats();
+  const uptime = monitoring.getUptime();
+  const activeExecs = monitoring.getActiveExecutions();
+
+  // Format uptime
+  const hours = Math.floor(uptime / 3600);
+  const mins = Math.floor((uptime % 3600) / 60);
+  const uptimeStr = hours > 0 ? `${hours}h ${mins}m` : `${mins}m`;
+
+  // Session info for current chat
+  const folder = ctx.group?.folder;
+  const sessionId = folder ? sessions[folder] : undefined;
+
+  // Token stats from recent bot messages in this chat
+  let tokenStats = { totalUsed: 0, totalCached: 0, totalCost: 0, responses: 0, lastInput: 0, lastModelID: '' };
+  if (ctx.chatJid) {
+    try {
+      const { messages } = getMessagesPage(ctx.chatJid, 100);
+      const botMsgs = messages.filter(m => m.is_bot_message && m.metadata?.tokens);
+      for (const m of botMsgs) {
+        const t = m.metadata!.tokens!;
+        tokenStats.totalUsed += t.input + t.output + (t.reasoning || 0);
+        tokenStats.totalCost += m.metadata!.cost ?? 0;
+        tokenStats.responses++;
+      }
+      // Last context size = input + cacheRead (cached tokens are still part of the context window)
+      if (botMsgs.length > 0) {
+        const lastMeta = botMsgs[botMsgs.length - 1].metadata!;
+        const t = lastMeta.tokens!;
+        const cacheRead = t.cacheRead ?? 0;
+        tokenStats.lastInput = t.input + cacheRead;
+        tokenStats.lastModelID = lastMeta.modelID || '';
+      }
+    } catch { /* ignore */ }
+  }
+
+  // Try to get context window limit from OpenCode server
+  let contextLimit = 0;
+  let contextPercent = 0;
+  let providerDebug = '';
+  try {
+    const host = getOpenCodeHost();
+    const port = getOpenCodePort();
+    const resp = await fetch(`http://${host}:${port}/config/providers`, { signal: AbortSignal.timeout(3000) });
+    if (resp.ok) {
+      const data = await resp.json() as any;
+      const candidates = [tokenStats.lastModelID, modelInfo.primary].filter(Boolean);
+      const providers = data?.providers || data || [];
+      const allModelIds: string[] = [];
+      for (const provider of (Array.isArray(providers) ? providers : [])) {
+        const models = provider.models || {};
+        for (const model of Object.values(models) as any[]) {
+          const mid = model.id || '';
+          allModelIds.push(mid);
+          for (const candidate of candidates) {
+            const candidateShort = candidate.split('/').pop() || '';
+            const midShort = mid.split('/').pop() || '';
+            if (mid === candidate || candidate.includes(mid) || mid.includes(candidate) ||
+                (candidateShort && midShort && candidateShort === midShort)) {
+              if (model.limit?.context) {
+                contextLimit = model.limit.context;
+                break;
+              }
+            }
+          }
+          if (contextLimit > 0) break;
+        }
+        if (contextLimit > 0) break;
+      }
+      providerDebug = `providers=${(Array.isArray(providers) ? providers : []).length}, models=[${allModelIds.join(', ')}]`;
+    } else {
+      providerDebug = `fetch failed: ${resp.status}`;
+    }
+  } catch (err) {
+    providerDebug = `fetch error: ${err instanceof Error ? err.message : String(err)}`;
+  }
+
+  if (contextLimit > 0 && tokenStats.lastInput > 0) {
+    contextPercent = Math.round((tokenStats.lastInput / contextLimit) * 100);
+  }
+
+  logger.info({
+    lastInput: tokenStats.lastInput,
+    lastModelID: tokenStats.lastModelID,
+    configuredModel: modelInfo.primary,
+    contextLimit,
+    contextPercent,
+    responses: tokenStats.responses,
+    providerDebug,
+  }, '/status context debug');
+
+  // Build status text
+  let s = `✅ ${ASSISTANT_NAME} is awake\n\n`;
+  s += `⏱ Uptime: ${uptimeStr}\n`;
+  s += `🧠 Model: ${modelInfo.primary}\n`;
+  if (modelInfo.small !== modelInfo.primary) {
+    s += `🔹 Small: ${modelInfo.small}\n`;
+  }
+  // Show current workspace and its connected channels
+  if (folder) {
+    const channelJids = Object.entries(workspaces)
+      .filter(([, ws]) => ws.folder === folder)
+      .map(([jid]) => jid);
+    s += `📡 Workspace: ${folder} (${channelJids.length} channel${channelJids.length !== 1 ? 's' : ''})\n`;
+    for (const jid of channelJids) {
+      s += `├ ${formatJidLabel(jid)}\n`;
+    }
+  } else {
+    s += `📡 Workspaces: ${Object.keys(workspaces).length} registered\n`;
+  }
+
+  if (activeExecs.length > 0) {
+    s += `⚡ Active: ${activeExecs.length} execution(s)\n`;
+  }
+
+  s += `\n📊 Session Stats (${stats.totalExecutions} total)\n`;
+  s += `├ Success: ${stats.successRate.toFixed(0)}%\n`;
+  s += `└ Avg duration: ${(stats.averageDuration / 1000).toFixed(1)}s\n`;
+
+  if (sessionId) {
+    // Try to fetch session title from OpenCode API
+    let sessionTitle = '';
+    try {
+      const host = getOpenCodeHost();
+      const port = getOpenCodePort();
+      const resp = await fetch(`http://${host}:${port}/session`, { signal: AbortSignal.timeout(2000) });
+      if (resp.ok) {
+        const sessions = await resp.json() as any[];
+        const current = (Array.isArray(sessions) ? sessions : []).find(
+          (s: any) => (s.id || s.data?.id) === sessionId,
+        );
+        if (current?.title) sessionTitle = current.title;
+      }
+    } catch { /* ignore - title is optional */ }
+
+    s += `\n💬 Current Session\n`;
+    if (sessionTitle) {
+      s += `├ Title: ${sessionTitle}\n`;
+    }
+    s += `├ ID: ${sessionId.slice(0, 12)}…\n`;
+    s += `├ Responses: ${tokenStats.responses}\n`;
+    s += `├ Tokens used: ${tokenStats.totalUsed.toLocaleString()}\n`;
+    if (tokenStats.totalCost > 0) {
+      s += `├ Cost: $${tokenStats.totalCost.toFixed(4)}\n`;
+    }
+    if (contextPercent > 0) {
+      const bar = buildContextBar(contextPercent);
+      s += `├ Context: ${bar} ${contextPercent}%`;
+      if (contextLimit > 0) {
+        s += ` (${(tokenStats.lastInput / 1000).toFixed(0)}k/${(contextLimit / 1000).toFixed(0)}k)`;
+      }
+      s += '\n';
+    } else if (tokenStats.lastInput > 0) {
+      // We have input tokens but couldn't determine the limit
+      s += `├ Last context: ${(tokenStats.lastInput / 1000).toFixed(1)}k tokens\n`;
+    }
+    s += `└ Model: ${tokenStats.lastModelID || 'unknown'}\n`;
+  } else {
+    s += `\n💬 No active session\n`;
+  }
+
+  return { reply: s };
 });
+
+/** Format a JID into a human-readable channel label */
+function formatJidLabel(jid: string): string {
+  if (jid.startsWith('web:')) return `🌐 Web UI (${jid})`;
+  if (jid.startsWith('tg:')) {
+    const id = jid.slice(3);
+    return id.startsWith('-') ? `📢 Telegram group (${jid})` : `💬 Telegram (${jid})`;
+  }
+  if (jid.endsWith('@g.us')) return `👥 WhatsApp group (${jid.split('@')[0]})`;
+  if (jid.endsWith('@s.whatsapp.net')) return `💬 WhatsApp (${jid.split('@')[0]})`;
+  return jid;
+}
+
+/** Build a text progress bar for context usage */
+function buildContextBar(percent: number): string {
+  const total = 10;
+  const filled = Math.round((percent / 100) * total);
+  const empty = total - filled;
+  const color = percent >= 80 ? '🔴' : percent >= 50 ? '🟡' : '🟢';
+  return color + '▓'.repeat(filled) + '░'.repeat(empty);
+}
 
 /**
  * /undo [steps] - Undo conversation steps

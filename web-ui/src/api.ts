@@ -94,6 +94,7 @@ export interface TaskRunLogEntry {
   status: 'success' | 'error';
   result: string | null;
   error: string | null;
+  log_file: string | null;
 }
 
 export interface MonitoringData {
@@ -531,6 +532,10 @@ class ApiService {
 
   async getTask(id: string): Promise<{ task: ScheduledTaskInfo; logs: TaskRunLogEntry[] }> {
     return this.request(`/tasks/${encodeURIComponent(id)}`);
+  }
+
+  async getRunLog(runId: number): Promise<{ content: string | null; truncated?: boolean; path?: string; message?: string }> {
+    return this.request(`/tasks/run-log/${runId}`);
   }
 
   async createTask(data: {

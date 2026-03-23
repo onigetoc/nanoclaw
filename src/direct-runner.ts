@@ -248,11 +248,18 @@ export async function runDirectAgent(
       ].join('\n'));
 
       if (code !== 0) {
-        logger.error({ workspace: workspace.name, code, logFile }, 'Agent exited with error');
+        // code === null means the process was killed by a signal (SIGTERM/SIGKILL),
+        // typically from /new, idle timeout, or workspace reset — not a real crash.
+        const wasKilled = code === null;
+        const errorMsg = wasKilled
+          ? 'Agent session was interrupted (previous session closed)'
+          : `Agent exited with code ${code}`;
+        logger.error({ workspace: workspace.name, code, wasKilled, logFile }, wasKilled ? 'Agent was killed' : 'Agent exited with error');
         resolve({
           status: 'error',
           result: null,
-          error: `Agent exited with code ${code}`,
+          error: errorMsg,
+          logFile,
         });
         return;
       }
@@ -264,6 +271,7 @@ export async function runDirectAgent(
             status: 'success',
             result: null,
             newSessionId,
+            logFile,
           });
         }).catch((err) => {
           logger.error({ workspace: workspace.name, error: err }, 'Error in onOutput callback chain');
@@ -271,6 +279,7 @@ export async function runDirectAgent(
             status: 'error',
             result: null,
             error: `onOutput callback error: ${err instanceof Error ? err.message : String(err)}`,
+            logFile,
           });
         });
         return;
@@ -288,6 +297,7 @@ export async function runDirectAgent(
           jsonLine = lines[lines.length - 1];
         }
         const output: ContainerOutput = JSON.parse(jsonLine);
+        output.logFile = logFile;
         logger.info({ workspace: workspace.name, duration, status: output.status }, 'Agent completed');
         resolve(output);
       } catch (err) {
@@ -296,6 +306,7 @@ export async function runDirectAgent(
           status: 'error',
           result: null,
           error: `Failed to parse output: ${err instanceof Error ? err.message : String(err)}`,
+          logFile,
         });
       }
     });

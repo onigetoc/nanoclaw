@@ -82,7 +82,7 @@ function writeSystemStatus(): void {
     uptime: Math.floor((Date.now() - Date.now()) / 1000), // Will be calculated properly
     recentExecutions: recentExecutions.map(exec => ({
       timestamp: exec.timestamp,
-      groupFolder: exec.groupFolder,
+      workspaceFolder: exec.workspaceFolder,
       agentType: exec.agentType,
       model: exec.model,
       status: exec.status,

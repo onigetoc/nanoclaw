@@ -9,7 +9,7 @@ import path from 'path';
 
 export interface McpToolContext {
   chatJid: string;
-  groupFolder: string;
+  workspaceFolder: string;
   isMain: boolean;
   ipcDir: string;
   messagesDir: string;

@@ -334,7 +334,7 @@ export function validateMount(
  */
 export function validateAdditionalMounts(
   mounts: AdditionalMount[],
-  groupName: string,
+  workspaceName: string,
   isMain: boolean,
 ): Array<{
   hostPath: string;
@@ -359,7 +359,7 @@ export function validateAdditionalMounts(
 
       logger.debug(
         {
-          group: groupName,
+          group: workspaceName,
           hostPath: result.realHostPath,
           containerPath: result.resolvedContainerPath,
           readonly: result.effectiveReadonly,
@@ -370,7 +370,7 @@ export function validateAdditionalMounts(
     } else {
       logger.warn(
         {
-          group: groupName,
+          group: workspaceName,
           requestedPath: mount.hostPath,
           containerPath: mount.containerPath,
           reason: result.reason,

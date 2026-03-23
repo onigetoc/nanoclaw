@@ -12,7 +12,7 @@ import type { McpToolContext } from './mcp-shared.js';
 import { writeIpcFile } from './mcp-shared.js';
 
 export function registerSecurityTools(server: McpServer, ctx: McpToolContext): void {
-  const { chatJid, groupFolder, isMain, ipcDir } = ctx;
+  const { chatJid, workspaceFolder, isMain, ipcDir } = ctx;
 
   server.tool(
     'security_report',
@@ -66,7 +66,7 @@ export function registerSecurityTools(server: McpServer, ctx: McpToolContext): v
       if (!check.safe) {
         if (!isMain) {
           writeIpcFile(path.join(ipcDir, 'messages'), {
-            type: 'security_event', chatJid, groupFolder, eventType: 'command_blocked',
+            type: 'security_event', chatJid, workspaceFolder, eventType: 'command_blocked',
             severity: 'warning', description: `Blocked [${check.pattern}]: ${check.description}`,
             command: args.command.slice(0, 500), timestamp: new Date().toISOString(),
           });
@@ -74,7 +74,7 @@ export function registerSecurityTools(server: McpServer, ctx: McpToolContext): v
         }
         const approvalId = `apr_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
         writeIpcFile(path.join(ipcDir, 'messages'), {
-          type: 'approval_request', chatJid, groupFolder, approvalId,
+          type: 'approval_request', chatJid, workspaceFolder, approvalId,
           command: args.command, pattern: check.pattern, description: check.description,
           timestamp: new Date().toISOString(),
         });

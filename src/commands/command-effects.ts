@@ -37,14 +37,14 @@ export async function handleCommandSideEffects(
     group
   ) {
     console.log(`\n🆕 /new command for ${group.folder} (${chatJid}) — creating fresh session`);
-    logger.info({ chatJid, groupFolder: group.folder }, '/new: Creating fresh OpenCode session');
+    logger.info({ chatJid, workspaceFolder: group.folder }, '/new: Creating fresh OpenCode session');
 
     // 1. Kill the running agent-runner (it holds the old session in memory)
     const closeSentinel = path.join(DATA_DIR, 'ipc', group.folder, 'input', '_close');
     try {
       fs.mkdirSync(path.dirname(closeSentinel), { recursive: true });
       fs.writeFileSync(closeSentinel, '');
-      logger.info({ groupFolder: group.folder }, '/new: Sent _close to agent-runner');
+      logger.info({ workspaceFolder: group.folder }, '/new: Sent _close to agent-runner');
     } catch {
       // Agent-runner may not be running — that's fine
     }
@@ -52,7 +52,7 @@ export async function handleCommandSideEffects(
     // 1b. Reset the workspace queue state so it's no longer stuck as "active"
     if (queue) {
       queue.resetWorkspace(chatJid);
-      logger.info({ chatJid, groupFolder: group.folder }, '/new: Reset workspace queue state');
+      logger.info({ chatJid, workspaceFolder: group.folder }, '/new: Reset workspace queue state');
     }
 
     // 2. Create a new session directly via the OpenCode SDK
@@ -67,7 +67,7 @@ export async function handleCommandSideEffects(
         clearUndoState(newSessionId); // Clear undo/redo history for new session
         const shortId = newSessionId.slice(0, 12) + '...';
         commandResult.reply = `🆕 New session created (${shortId}).`;
-        logger.info({ chatJid, groupFolder: group.folder, newSessionId }, '/new: Session created');
+        logger.info({ chatJid, workspaceFolder: group.folder, newSessionId }, '/new: Session created');
       } else {
         setWorkspaceSession(group.folder, '');
         logger.warn({ chatJid }, '/new: SDK returned no session ID, cleared session');

@@ -145,6 +145,9 @@ export function initDatabase(): void {
   // Migrate groups → workspaces terminology in DB tables/columns
   migrateGroupsToWorkspaces(db);
 
+  // Add log_file column to task_run_logs if missing
+  migrateAddLogFileColumn(db);
+
   // Migrate from JSON files if they exist
   migrateJsonState();
 }
@@ -308,12 +311,30 @@ export function migrateGroupsToWorkspaces(database: Database.Database): void {
   }
 }
 
+/**
+ * Migration: add log_file column to task_run_logs for linking runs to their log files.
+ * Idempotent: skips if column already exists.
+ */
+function migrateAddLogFileColumn(database: Database.Database): void {
+  try {
+    const columns = database
+      .prepare('PRAGMA table_info(task_run_logs)')
+      .all() as Array<{ name: string }>;
+    if (columns.some(c => c.name === 'log_file')) return;
+    database.exec('ALTER TABLE task_run_logs ADD COLUMN log_file TEXT');
+    logger.info('Migrated task_run_logs: added log_file column');
+  } catch (err) {
+    logger.warn({ err }, 'Failed to add log_file column (may already exist)');
+  }
+}
+
 /** @internal - for tests only. Creates a fresh in-memory database. */
 export function _initTestDatabase(): void {
   db = new Database(':memory:');
   createSchema(db);
   migrateDropFolderUnique(db);
   migrateGroupsToWorkspaces(db);
+  migrateAddLogFileColumn(db);
 }
 
 /**
@@ -753,12 +774,12 @@ export function getTaskById(id: string): ScheduledTask | undefined {
     | undefined;
 }
 
-export function getTasksForWorkspace(groupFolder: string): ScheduledTask[] {
+export function getTasksForWorkspace(workspaceFolder: string): ScheduledTask[] {
   return db
     .prepare(
       'SELECT * FROM scheduled_tasks WHERE workspace_folder = ? ORDER BY created_at DESC',
     )
-    .all(groupFolder) as ScheduledTask[];
+    .all(workspaceFolder) as ScheduledTask[];
 }
 
 export function getAllTasks(): ScheduledTask[] {
@@ -850,11 +871,17 @@ export function getTaskRunLogs(taskId: string, limit = 20): (TaskRunLog & { id: 
     .all(taskId, limit) as (TaskRunLog & { id: number })[];
 }
 
+export function getTaskRunLogById(runId: number): (TaskRunLog & { id: number }) | undefined {
+  return db
+    .prepare('SELECT * FROM task_run_logs WHERE id = ?')
+    .get(runId) as (TaskRunLog & { id: number }) | undefined;
+}
+
 export function logTaskRun(log: TaskRunLog): void {
   db.prepare(
     `
-    INSERT INTO task_run_logs (task_id, run_at, duration_ms, status, result, error)
-    VALUES (?, ?, ?, ?, ?, ?)
+    INSERT INTO task_run_logs (task_id, run_at, duration_ms, status, result, error, log_file)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
   `,
   ).run(
     log.task_id,
@@ -863,6 +890,7 @@ export function logTaskRun(log: TaskRunLog): void {
     log.status,
     log.result,
     log.error,
+    log.log_file,
   );
 }
 
@@ -883,17 +911,17 @@ export function setRouterState(key: string, value: string): void {
 
 // --- Session accessors ---
 
-export function getSession(groupFolder: string): string | undefined {
+export function getSession(workspaceFolder: string): string | undefined {
   const row = db
     .prepare('SELECT session_id FROM sessions WHERE workspace_folder = ?')
-    .get(groupFolder) as { session_id: string } | undefined;
+    .get(workspaceFolder) as { session_id: string } | undefined;
   return row?.session_id;
 }
 
-export function setSession(groupFolder: string, sessionId: string, model?: string): void {
+export function setSession(workspaceFolder: string, sessionId: string, model?: string): void {
   db.prepare(
     'INSERT OR REPLACE INTO sessions (workspace_folder, session_id, model) VALUES (?, ?, ?)',
-  ).run(groupFolder, sessionId, model ?? getCurrentModel() ?? null);
+  ).run(workspaceFolder, sessionId, model ?? getCurrentModel() ?? null);
 }
 
 export function getAllSessions(): Record<string, string> {

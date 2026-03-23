@@ -22,7 +22,7 @@ function getMimeType(ext: string): string {
 }
 
 export function registerDataTools(server: McpServer, ctx: McpToolContext): void {
-  const { chatJid, groupFolder, isMain, ipcDir } = ctx;
+  const { chatJid, workspaceFolder, isMain, ipcDir } = ctx;
   const groupDir = process.env.EURECLAW_WORKSPACE_DIR || '/workspace/group';
   const projectDir = process.env.PROJECT_DIR || '/workspace/project';
   const DOWNLOADS_DIR = path.join(groupDir, 'workspace', 'downloads');
@@ -60,7 +60,7 @@ export function registerDataTools(server: McpServer, ctx: McpToolContext): void 
           const model = exec.model.split('/').pop() || exec.model;
           const icon = exec.status === 'completed' ? '✅' : exec.status === 'error' ? '❌' : '⏳';
           const dur = exec.duration ? `${(exec.duration / 1000).toFixed(1)}s` : '-';
-          output += `| ${time} | ${exec.groupFolder} | ${exec.agentType} | ${model} | ${icon} | ${dur} |\n`;
+          output += `| ${time} | ${exec.workspaceFolder || exec.groupFolder} | ${exec.agentType} | ${model} | ${icon} | ${dur} |\n`;
         }
       }
       return { content: [{ type: 'text' as const, text: output }] };
@@ -182,7 +182,7 @@ export function registerDataTools(server: McpServer, ctx: McpToolContext): void 
           if (fs.existsSync(logsDir)) {
             logs.push(...fs.readdirSync(logsDir).filter(f => f.endsWith('.log')).map(f => {
               const stat = fs.statSync(path.join(logsDir, f));
-              return { file: f, group: groupFolder, timestamp: stat.mtime.toISOString(), size: stat.size };
+              return { file: f, group: workspaceFolder, timestamp: stat.mtime.toISOString(), size: stat.size };
             }));
           }
         }
@@ -291,9 +291,9 @@ export function registerDataTools(server: McpServer, ctx: McpToolContext): void 
         type: 'file_created', fileId, filename: safeFilename, storedFilename,
         description: args.description || `File: ${safeFilename}`,
         size: Buffer.byteLength(args.content, 'utf-8'), mimeType: getMimeType(ext),
-        chatJid, groupFolder, timestamp: new Date().toISOString(),
+        chatJid, workspaceFolder, timestamp: new Date().toISOString(),
       });
-      return { content: [{ type: 'text' as const, text: `File created: ${safeFilename}\nDownload: /api/files/${groupFolder}/${fileId}` }] };
+      return { content: [{ type: 'text' as const, text: `File created: ${safeFilename}\nDownload: /api/files/${workspaceFolder}/${fileId}` }] };
     },
   );
 
@@ -310,7 +310,7 @@ export function registerDataTools(server: McpServer, ctx: McpToolContext): void 
           return { fileId: match?.[1] || f, filename: match?.[2] || f, size: stat.size, created: stat.mtime.toISOString() };
         }).sort((a, b) => b.created.localeCompare(a.created)).slice(0, args.limit);
         if (files.length === 0) return { content: [{ type: 'text' as const, text: 'No files found.' }] };
-        const formatted = files.map(f => `• ${f.filename} (${(f.size / 1024).toFixed(1)}KB) - ${new Date(f.created).toLocaleString()}\n  /api/files/${groupFolder}/${f.fileId}`).join('\n\n');
+        const formatted = files.map(f => `• ${f.filename} (${(f.size / 1024).toFixed(1)}KB) - ${new Date(f.created).toLocaleString()}\n  /api/files/${workspaceFolder}/${f.fileId}`).join('\n\n');
         return { content: [{ type: 'text' as const, text: `${files.length} file(s):\n\n${formatted}` }] };
       } catch (err) {
         return { content: [{ type: 'text' as const, text: `Error: ${err instanceof Error ? err.message : String(err)}` }], isError: true };

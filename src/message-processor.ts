@@ -100,8 +100,8 @@ export async function processWorkspaceMessages(
 
   const monitoring = getMonitoring();
   const executionId = monitoring.startExecution({
-    groupName: workspace.name,
-    groupFolder: workspace.folder,
+    workspaceName: workspace.name,
+    workspaceFolder: workspace.folder,
     chatJid,
     messageCount: missedMessages.length,
     sessionId: sessionId,
@@ -382,6 +382,10 @@ function formatErrorForUser(rawError: string): string {
   }
 
   // Agent process errors (spawn/exit) — don't say "container" since we may be in direct mode
+  if (lower.includes('session was interrupted') || lower.includes('previous session closed')) {
+    return `🔄 Previous session was interrupted — this is normal after /new or a session reset.`;
+  }
+
   if (
     lower.includes('spawn error') ||
     lower.includes('exited with code')

@@ -32,11 +32,19 @@ node .opencode/skills/youtube-transcript/scripts/transcript.js https://www.youtu
 node .opencode/skills/youtube-transcript/scripts/transcript.js VIDEO_ID --lang fr,en --timestamps
 
 # Chunked output for long videos
-node .opencode/skills/youtube-transcript/scripts/transcript.js VIDEO_ID --max 6000
+node .opencode/skills/youtube-transcript/scripts/transcript.js VIDEO_URL --max 6000
 
 # Video ID directly
 node .opencode/skills/youtube-transcript/scripts/transcript.js dQw4w9WgXcQ --timestamps
 ```
+
+## User Prompt Examples
+
+Create the YouTube transcript of this video in French with timestamps and save it in the workspace: [youtube_url]
+
+Create the YouTube transcript of this video with timestamps for easier navigation and save it in the workspace: [youtube_url]
+
+Get the French transcript of this YouTube video and save it as a markdown file in the workspace: [VIDEO_ID]
 
 ## Agent Workflow
 
@@ -52,3 +60,21 @@ node .opencode/skills/youtube-transcript/scripts/transcript.js dQw4w9WgXcQ --tim
 - HTML entities and encoding glitches are auto-cleaned
 - Exit codes: 0=success, 1=invalid input, 2=empty transcript, 3=fetch error
 - Dependency: `youtube-transcript-plus` (in `.opencode/package.json`)
+
+## Example result:
+
+```text
+# OpenClaw - 14 Prompts to Supercharge Your AI Agent
+
+**Video:** https://www.youtube.com/watch?v=4bbVi5P0JT4
+
+---
+
+[00:00] Now, most people using Open Claw right now are getting maybe 10% of what it can actually do. Their agent hallucinates.
+
+[00:11] It forgets things. It gives corporate garbage answers and burns through tokens like they're free. that thinks, remembers, and works while I sleep. There's no additional tools. All you need is Open Claw.
+
+---
+
+*Saved in workspace "work"*
+```

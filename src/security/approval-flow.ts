@@ -22,7 +22,7 @@ function generateId(): string {
 export function requestApproval(
   command: string,
   chatJid: string,
-  groupFolder: string,
+  workspaceFolder: string,
   pattern: string,
 ): ApprovalRequest {
   const now = Date.now();
@@ -30,7 +30,7 @@ export function requestApproval(
     id: generateId(),
     command,
     chatJid,
-    groupFolder,
+    workspaceFolder,
     pattern,
     requestedAt: now,
     expiresAt: now + APPROVAL_WINDOW_MS,
@@ -77,7 +77,7 @@ export function expireApprovals(): SecurityEvent[] {
         timestamp: new Date().toISOString(),
         eventType: 'approval_expired',
         sourceJid: request.chatJid,
-        sourceGroup: request.groupFolder,
+        sourceGroup: request.workspaceFolder,
         severity: 'info',
         description: `Approval expired for command: ${request.command}`,
         originalContent: request.command.slice(0, 500),

@@ -147,7 +147,7 @@ export default function LogsSection({ executions, onRefresh, isDark }: LogsSecti
                     {exec.workspaceName}
                   </td>
                   <td className={`px-4 py-2.5 font-mono text-xs ${isDark ? 'text-zinc-400' : 'text-zinc-500'}`}>
-                    {exec.model.split('/').pop() || exec.model}
+                    {exec.model ? (exec.model.split('/').pop() || exec.model) : '—'}
                   </td>
                   <td className={`px-4 py-2.5 text-xs ${isDark ? 'text-zinc-400' : 'text-zinc-500'}`}>
                     {formatDuration(exec.duration)}

@@ -24,9 +24,9 @@ export interface ParsedLogInfo {
  * - "agent": "build" | "orchestrator" | etc.
  * - "tokens": {...}
  */
-export function parseLatestLog(groupFolder: string): ParsedLogInfo | null {
+export function parseLatestLog(workspaceFolder: string): ParsedLogInfo | null {
   try {
-    const logsDir = path.join(process.cwd(), 'workspaces', groupFolder, 'logs');
+    const logsDir = path.join(process.cwd(), 'workspaces', workspaceFolder, 'logs');
     
     if (!fs.existsSync(logsDir)) {
       return null;
@@ -79,7 +79,7 @@ export function parseLatestLog(groupFolder: string): ParsedLogInfo | null {
       duration,
     };
   } catch (err) {
-    logger.debug({ err, groupFolder }, 'Failed to parse latest log');
+    logger.debug({ err, workspaceFolder }, 'Failed to parse latest log');
     return null;
   }
 }

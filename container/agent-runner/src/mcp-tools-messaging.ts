@@ -13,7 +13,7 @@ import type { McpToolContext } from './mcp-shared.js';
 import { writeIpcFile } from './mcp-shared.js';
 
 export function registerMessagingTools(server: McpServer, ctx: McpToolContext): void {
-  const { chatJid, groupFolder, isMain, messagesDir, tasksDir, ipcDir } = ctx;
+  const { chatJid, workspaceFolder, isMain, messagesDir, tasksDir, ipcDir } = ctx;
 
   server.tool(
     'send_message',
@@ -28,7 +28,7 @@ export function registerMessagingTools(server: McpServer, ctx: McpToolContext): 
         chatJid,
         text: args.text,
         sender: args.sender || undefined,
-        groupFolder,
+        workspaceFolder,
         timestamp: new Date().toISOString(),
       };
       writeIpcFile(messagesDir, data);
@@ -91,7 +91,7 @@ SCHEDULE VALUE FORMAT (all times are LOCAL timezone):
         schedule_value: args.schedule_value,
         context_mode: args.context_mode || 'group',
         targetJid,
-        createdBy: groupFolder,
+        createdBy: workspaceFolder,
         timestamp: new Date().toISOString(),
       };
       const filename = writeIpcFile(tasksDir, data);
@@ -112,7 +112,7 @@ SCHEDULE VALUE FORMAT (all times are LOCAL timezone):
           return { content: [{ type: 'text' as const, text: 'No scheduled tasks found.' }] };
         }
         const allTasks = JSON.parse(fs.readFileSync(tasksFile, 'utf-8'));
-        const tasks = isMain ? allTasks : allTasks.filter((t: { groupFolder: string }) => t.groupFolder === groupFolder);
+        const tasks = isMain ? allTasks : allTasks.filter((t: { workspaceFolder: string }) => t.workspaceFolder === workspaceFolder);
         if (tasks.length === 0) {
           return { content: [{ type: 'text' as const, text: 'No scheduled tasks found.' }] };
         }
@@ -128,17 +128,17 @@ SCHEDULE VALUE FORMAT (all times are LOCAL timezone):
   );
 
   server.tool('pause_task', 'Pause a scheduled task.', { task_id: z.string() }, async (args) => {
-    writeIpcFile(tasksDir, { type: 'pause_task', taskId: args.task_id, groupFolder, isMain, timestamp: new Date().toISOString() });
+    writeIpcFile(tasksDir, { type: 'pause_task', taskId: args.task_id, workspaceFolder, isMain, timestamp: new Date().toISOString() });
     return { content: [{ type: 'text' as const, text: `Task ${args.task_id} pause requested.` }] };
   });
 
   server.tool('resume_task', 'Resume a paused task.', { task_id: z.string() }, async (args) => {
-    writeIpcFile(tasksDir, { type: 'resume_task', taskId: args.task_id, groupFolder, isMain, timestamp: new Date().toISOString() });
+    writeIpcFile(tasksDir, { type: 'resume_task', taskId: args.task_id, workspaceFolder, isMain, timestamp: new Date().toISOString() });
     return { content: [{ type: 'text' as const, text: `Task ${args.task_id} resume requested.` }] };
   });
 
   server.tool('cancel_task', 'Cancel and delete a scheduled task.', { task_id: z.string() }, async (args) => {
-    writeIpcFile(tasksDir, { type: 'cancel_task', taskId: args.task_id, groupFolder, isMain, timestamp: new Date().toISOString() });
+    writeIpcFile(tasksDir, { type: 'cancel_task', taskId: args.task_id, workspaceFolder, isMain, timestamp: new Date().toISOString() });
     return { content: [{ type: 'text' as const, text: `Task ${args.task_id} cancellation requested.` }] };
   });
 
@@ -193,7 +193,7 @@ SCHEDULE VALUE FORMAT (all times are LOCAL timezone):
       if (!supported.includes(ext)) {
         return { content: [{ type: 'text' as const, text: `Unsupported file type: ${ext}` }], isError: true };
       }
-      writeIpcFile(messagesDir, { type: 'send_image', filePath: resolvedPath, caption: args.caption, chatJid, groupFolder, timestamp: new Date().toISOString() });
+      writeIpcFile(messagesDir, { type: 'send_image', filePath: resolvedPath, caption: args.caption, chatJid, workspaceFolder, timestamp: new Date().toISOString() });
       return { content: [{ type: 'text' as const, text: `Image queued: ${path.basename(resolvedPath)}` }] };
     },
   );

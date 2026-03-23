@@ -178,7 +178,7 @@ export async function processTaskIpc(
     schedule_type?: string;
     schedule_value?: string;
     context_mode?: string;
-    groupFolder?: string;
+    workspaceFolder?: string;
     chatJid?: string;
     targetJid?: string;
     // For register_workspace

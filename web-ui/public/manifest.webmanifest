@@ -1,0 +1,25 @@
+{
+  "name": "EureClaw",
+  "short_name": "EureClaw",
+  "description": "Personal AI Assistant",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#1a1a1a",
+  "theme_color": "#1a1a1a",
+  "lang": "en",
+  "scope": "/",
+  "id": "eureclaw-web-ui",
+  "icons": [
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

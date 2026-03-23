@@ -12,8 +12,8 @@ import { getModelInfo } from './opencode-config.js';
 export interface AgentExecution {
   id: string;
   timestamp: string;
-  groupName: string;
-  groupFolder: string;
+  workspaceName: string;
+  workspaceFolder: string;
   chatJid: string;
   agentType: 'orchestrator' | 'researcher' | 'planner' | 'summarizer' | 'chat' | 'build';
   status: 'started' | 'running' | 'completed' | 'error';
@@ -28,7 +28,7 @@ export interface AgentExecution {
 export interface ModelUsage {
   timestamp: string;
   model: string;
-  groupFolder: string;
+  workspaceFolder: string;
   agentType: string;
   tokensUsed?: number;
 }
@@ -58,8 +58,8 @@ class MonitoringService {
    * Start tracking an agent execution
    */
   startExecution(params: {
-    groupName: string;
-    groupFolder: string;
+    workspaceName: string;
+    workspaceFolder: string;
     chatJid: string;
     agentType?: string;
     sessionId?: string;
@@ -71,8 +71,8 @@ class MonitoringService {
     const execution: AgentExecution = {
       id,
       timestamp: new Date().toISOString(),
-      groupName: params.groupName,
-      groupFolder: params.groupFolder,
+      workspaceName: params.workspaceName,
+      workspaceFolder: params.workspaceFolder,
       chatJid: params.chatJid,
       agentType: (params.agentType as any) || 'orchestrator',
       status: 'started',
@@ -86,7 +86,7 @@ class MonitoringService {
     
     logger.info({
       executionId: id,
-      group: params.groupName,
+      group: params.workspaceName,
       agent: execution.agentType,
       model: execution.model,
       messages: params.messageCount,
@@ -131,7 +131,7 @@ class MonitoringService {
       if (updates.status === 'completed') {
         logger.info({
           executionId: id,
-          group: execution.groupName,
+          group: execution.workspaceName,
           agent: execution.agentType,
           model: execution.model,
           duration: execution.duration,
@@ -140,7 +140,7 @@ class MonitoringService {
       } else {
         logger.error({
           executionId: id,
-          group: execution.groupName,
+          group: execution.workspaceName,
           agent: execution.agentType,
           error: updates.error,
           duration: execution.duration,
@@ -160,6 +160,13 @@ class MonitoringService {
     if (execution) {
       execution.outputSent = true;
     }
+  }
+
+  /**
+   * Get uptime in seconds
+   */
+  getUptime(): number {
+    return Math.floor((Date.now() - this.startTime) / 1000);
   }
 
   /**
@@ -227,7 +234,7 @@ class MonitoringService {
 
     for (const exec of this.recentExecutions) {
       byAgent[exec.agentType] = (byAgent[exec.agentType] || 0) + 1;
-      byGroup[exec.groupFolder] = (byGroup[exec.groupFolder] || 0) + 1;
+      byGroup[exec.workspaceFolder] = (byGroup[exec.workspaceFolder] || 0) + 1;
       if (exec.duration) {
         totalDuration += exec.duration;
       }

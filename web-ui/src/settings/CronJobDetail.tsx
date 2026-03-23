@@ -8,6 +8,9 @@ import {
   CheckCircle2,
   XCircle,
   RefreshCw,
+  FileText,
+  ChevronDown,
+  ChevronRight,
 } from 'lucide-react';
 import { apiService, type ScheduledTaskInfo, type TaskRunLogEntry } from '../api';
 
@@ -324,57 +327,7 @@ export default function CronJobDetail({ taskId, isDark, onBack, onDeleted }: Cro
       )}
 
       {/* Run history */}
-      <div className={cardClass}>
-        <div className="flex items-center justify-between mb-3">
-          <div className={labelClass}>Run History</div>
-          <span className={`text-xs ${isDark ? 'text-zinc-600' : 'text-zinc-400'}`}>
-            {logs.length} run{logs.length !== 1 ? 's' : ''}
-          </span>
-        </div>
-
-        {logs.length === 0 ? (
-          <p className={`text-sm text-center py-6 ${isDark ? 'text-zinc-600' : 'text-zinc-400'}`}>
-            No runs yet.
-          </p>
-        ) : (
-          <div className="space-y-1.5 max-h-80 overflow-y-auto">
-            {logs.map((log) => (
-              <div
-                key={log.id}
-                className={`flex items-center gap-3 rounded-lg px-3 py-2 ${
-                  isDark ? 'bg-zinc-800/50' : 'bg-zinc-50'
-                }`}
-              >
-                {log.status === 'success' ? (
-                  <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" />
-                ) : (
-                  <XCircle className="h-4 w-4 shrink-0 text-rose-400" />
-                )}
-                <div className="min-w-0 flex-1">
-                  <div className={`text-xs ${isDark ? 'text-zinc-300' : 'text-zinc-700'}`}>
-                    {new Date(log.run_at).toLocaleString()}
-                  </div>
-                  {log.error && (
-                    <div className="text-[11px] text-rose-400 truncate mt-0.5">{log.error}</div>
-                  )}
-                  {log.result && !log.error && (
-                    <div className={`text-[11px] truncate mt-0.5 ${isDark ? 'text-zinc-500' : 'text-zinc-400'}`}>
-                      {log.result}
-                    </div>
-                  )}
-                </div>
-                <span className={`shrink-0 text-xs tabular-nums ${isDark ? 'text-zinc-500' : 'text-zinc-400'}`}>
-                  {log.duration_ms >= 60000
-                    ? `${(log.duration_ms / 60000).toFixed(1)}m`
-                    : log.duration_ms >= 1000
-                      ? `${(log.duration_ms / 1000).toFixed(1)}s`
-                      : `${log.duration_ms}ms`}
-                </span>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+      <RunHistory logs={logs} isDark={isDark} cardClass={cardClass} labelClass={labelClass} />
 
       {/* Toast notification */}
       {toast && (
@@ -383,6 +336,162 @@ export default function CronJobDetail({ taskId, isDark, onBack, onDeleted }: Cro
         }`}>
           {toast.type === 'success' ? <CheckCircle2 className="h-4 w-4" /> : <XCircle className="h-4 w-4" />}
           {toast.message}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Expandable run history with log viewer */
+function RunHistory({ logs, isDark, cardClass, labelClass }: {
+  logs: TaskRunLogEntry[];
+  isDark: boolean;
+  cardClass: string;
+  labelClass: string;
+}) {
+  const [expandedId, setExpandedId] = useState<number | null>(null);
+  const [logContent, setLogContent] = useState<string | null>(null);
+  const [logLoading, setLogLoading] = useState(false);
+
+  const toggleExpand = (id: number) => {
+    setExpandedId(expandedId === id ? null : id);
+    setLogContent(null);
+  };
+
+  const loadLog = async (runId: number) => {
+    setLogLoading(true);
+    try {
+      const data = await apiService.getRunLog(runId);
+      setLogContent(data.content || data.message || 'No log content available');
+    } catch {
+      setLogContent('Failed to load log');
+    }
+    setLogLoading(false);
+  };
+
+  const fmtDuration = (ms: number) =>
+    ms >= 60000 ? `${(ms / 60000).toFixed(1)}m`
+    : ms >= 1000 ? `${(ms / 1000).toFixed(1)}s`
+    : `${ms}ms`;
+
+  return (
+    <div className={cardClass}>
+      <div className="flex items-center justify-between mb-3">
+        <div className={labelClass}>Run History</div>
+        <span className={`text-xs ${isDark ? 'text-zinc-600' : 'text-zinc-400'}`}>
+          {logs.length} run{logs.length !== 1 ? 's' : ''}
+        </span>
+      </div>
+
+      {logs.length === 0 ? (
+        <p className={`text-sm text-center py-6 ${isDark ? 'text-zinc-600' : 'text-zinc-400'}`}>
+          No runs yet.
+        </p>
+      ) : (
+        <div className="space-y-1 max-h-[500px] overflow-y-auto">
+          {logs.map((log) => {
+            const isExpanded = expandedId === log.id;
+            return (
+              <div key={log.id}>
+                <button
+                  type="button"
+                  onClick={() => toggleExpand(log.id)}
+                  className={`w-full flex items-center gap-3 rounded-lg px-3 py-2 text-left transition ${
+                    isDark
+                      ? `bg-zinc-800/50 hover:bg-zinc-800 ${isExpanded ? 'ring-1 ring-zinc-700' : ''}`
+                      : `bg-zinc-50 hover:bg-zinc-100 ${isExpanded ? 'ring-1 ring-zinc-300' : ''}`
+                  }`}
+                >
+                  {log.status === 'success' ? (
+                    <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" />
+                  ) : (
+                    <XCircle className="h-4 w-4 shrink-0 text-rose-400" />
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <div className={`text-xs ${isDark ? 'text-zinc-300' : 'text-zinc-700'}`}>
+                      {new Date(log.run_at).toLocaleString()}
+                    </div>
+                    {!isExpanded && log.error && (
+                      <div className="text-[11px] text-rose-400 truncate mt-0.5">{log.error}</div>
+                    )}
+                    {!isExpanded && log.result && !log.error && (
+                      <div className={`text-[11px] truncate mt-0.5 ${isDark ? 'text-zinc-500' : 'text-zinc-400'}`}>
+                        {log.result}
+                      </div>
+                    )}
+                  </div>
+                  <span className={`shrink-0 text-xs tabular-nums ${isDark ? 'text-zinc-500' : 'text-zinc-400'}`}>
+                    {fmtDuration(log.duration_ms)}
+                  </span>
+                  {isExpanded
+                    ? <ChevronDown className="h-3.5 w-3.5 shrink-0 text-zinc-500" />
+                    : <ChevronRight className="h-3.5 w-3.5 shrink-0 text-zinc-500" />}
+                </button>
+
+                {isExpanded && (
+                  <div className={`mx-2 mt-1 mb-2 rounded-lg border p-3 ${
+                    isDark ? 'border-zinc-700 bg-zinc-900' : 'border-zinc-200 bg-white'
+                  }`}>
+                    {log.error && (
+                      <div className="mb-2">
+                        <div className={`text-[10px] font-semibold uppercase tracking-wider mb-1 ${isDark ? 'text-rose-400/70' : 'text-rose-500'}`}>
+                          Error
+                        </div>
+                        <pre className="text-xs text-rose-400 whitespace-pre-wrap break-all font-mono">
+                          {log.error}
+                        </pre>
+                      </div>
+                    )}
+                    {log.result && (
+                      <div className="mb-2">
+                        <div className={`text-[10px] font-semibold uppercase tracking-wider mb-1 ${isDark ? 'text-zinc-500' : 'text-zinc-400'}`}>
+                          Result
+                        </div>
+                        <pre className={`text-xs whitespace-pre-wrap break-all font-mono ${isDark ? 'text-zinc-400' : 'text-zinc-600'}`}>
+                          {log.result}
+                        </pre>
+                      </div>
+                    )}
+                    {log.log_file && (
+                      <div>
+                        {logContent === null ? (
+                          <button
+                            type="button"
+                            onClick={() => loadLog(log.id)}
+                            disabled={logLoading}
+                            className={`flex items-center gap-1.5 rounded px-2 py-1 text-[11px] font-medium transition ${
+                              isDark
+                                ? 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-300'
+                                : 'bg-zinc-100 text-zinc-500 hover:bg-zinc-200 hover:text-zinc-700'
+                            }`}
+                          >
+                            <FileText className="h-3 w-3" />
+                            {logLoading ? 'Loading…' : 'View Full Log'}
+                          </button>
+                        ) : (
+                          <div>
+                            <div className={`text-[10px] font-semibold uppercase tracking-wider mb-1 ${isDark ? 'text-zinc-500' : 'text-zinc-400'}`}>
+                              Agent Log
+                            </div>
+                            <pre className={`text-[11px] whitespace-pre-wrap break-all font-mono max-h-60 overflow-y-auto rounded p-2 ${
+                              isDark ? 'bg-zinc-950 text-zinc-400' : 'bg-zinc-50 text-zinc-600'
+                            }`}>
+                              {logContent}
+                            </pre>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    {!log.error && !log.result && !log.log_file && (
+                      <p className={`text-xs ${isDark ? 'text-zinc-600' : 'text-zinc-400'}`}>
+                        No additional details for this run.
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
     </div>

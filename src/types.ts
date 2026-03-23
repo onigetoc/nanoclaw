@@ -56,7 +56,7 @@ export interface NewMessage {
     providerID?: string;
     mode?: string;
     agent?: string;
-    tokens?: { total: number; input: number; output: number; reasoning: number };
+    tokens?: { total: number; input: number; output: number; reasoning: number; cacheRead?: number; cacheWrite?: number };
     cost?: number;
   };
 }
@@ -83,6 +83,7 @@ export interface TaskRunLog {
   status: 'success' | 'error';
   result: string | null;
   error: string | null;
+  log_file: string | null;
 }
 
 // --- Channel abstraction ---

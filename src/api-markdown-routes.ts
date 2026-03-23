@@ -9,7 +9,6 @@
  */
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import fs from 'fs/promises';
-import fsSync from 'fs';
 import path from 'path';
 import { logger } from './logger.js';
 import { WORKSPACES_DIR } from './config.js';
@@ -96,10 +95,13 @@ function isPathSafe(relativePath: string): boolean {
   return !normalized.startsWith('..') && !path.isAbsolute(normalized);
 }
 
-/** Check that the path starts with one of the browsable folders */
-function isInBrowsableFolder(relativePath: string): boolean {
-  const first = relativePath.split('/')[0];
-  return BROWSABLE_FOLDERS.includes(first);
+/** Check that the path starts with one of the browsable folders or is a root-level file */
+function isAccessible(relativePath: string): boolean {
+  const parts = relativePath.split('/');
+  // Root-level file (no subfolder) — allowed if it has an allowed extension
+  if (parts.length === 1) return isAllowedFile(relativePath);
+  // Otherwise must be inside a browsable folder
+  return BROWSABLE_FOLDERS.includes(parts[0]);
 }
 
 export function registerMarkdownRoutes(fastify: FastifyInstance, authenticate: any): void {
@@ -145,6 +147,25 @@ export function registerMarkdownRoutes(fastify: FastifyInstance, authenticate: a
       if (cached) return { workspace, tree: cached };
 
       const tree: MdFileEntry[] = [];
+
+      // Scan root-level files in the workspace (not inside any subfolder)
+      const rootItems = await fs.readdir(workspacePath, { withFileTypes: true });
+      const rootFilePromises: Promise<MdFileEntry | null>[] = [];
+      for (const item of rootItems) {
+        if (item.isFile() && isAllowedFile(item.name)) {
+          const fullPath = path.join(workspacePath, item.name);
+          rootFilePromises.push(
+            fs.stat(fullPath).then(stat => ({
+              name: item.name,
+              path: item.name,
+              type: 'file' as const,
+              size: stat.size,
+              modified: stat.mtime.toISOString(),
+            })).catch(() => null),
+          );
+        }
+      }
+
       const folderScans = BROWSABLE_FOLDERS.map(async folder => {
         const folderPath = path.join(workspacePath, folder);
         try {
@@ -161,6 +182,12 @@ export function registerMarkdownRoutes(fastify: FastifyInstance, authenticate: a
         if (r) tree.push(r);
       }
 
+      // Add root-level files
+      const rootFiles = await Promise.all(rootFilePromises);
+      for (const f of rootFiles) {
+        if (f) tree.push(f);
+      }
+
       treeCache.set(workspace, { data: tree, timestamp: Date.now() });
       return { workspace, tree };
     },
@@ -174,7 +201,7 @@ export function registerMarkdownRoutes(fastify: FastifyInstance, authenticate: a
 
       if (!filePath) return reply.code(400).send({ error: 'Missing path query parameter' });
       if (!isPathSafe(filePath)) return reply.code(400).send({ error: 'Invalid path' });
-      if (!isInBrowsableFolder(filePath)) return reply.code(403).send({ error: 'Access denied' });
+      if (!isAccessible(filePath)) return reply.code(403).send({ error: 'Access denied' });
 
       const fullPath = path.join(WORKSPACES_DIR, workspace, filePath);
 
@@ -201,7 +228,7 @@ export function registerMarkdownRoutes(fastify: FastifyInstance, authenticate: a
 
       if (!filePath) return reply.code(400).send({ error: 'Missing path query parameter' });
       if (!isPathSafe(filePath)) return reply.code(400).send({ error: 'Invalid path' });
-      if (!isInBrowsableFolder(filePath)) return reply.code(403).send({ error: 'Access denied' });
+      if (!isAccessible(filePath)) return reply.code(403).send({ error: 'Access denied' });
       if (body?.content === undefined) return reply.code(400).send({ error: 'Missing content in body' });
 
       const fullPath = path.join(WORKSPACES_DIR, workspace, filePath);

@@ -19,8 +19,8 @@ const MONITORING_LOG_DIR = path.join(DATA_DIR, 'monitoring');
 interface AgentExecution {
   id: string;
   timestamp: string;
-  groupName: string;
-  groupFolder: string;
+  workspaceName: string;
+  workspaceFolder: string;
   chatJid: string;
   agentType: string;
   status: string;
@@ -107,7 +107,7 @@ function showDashboard(): void {
     
     for (const exec of executions) {
       const time = formatTimestamp(exec.timestamp);
-      const group = exec.groupFolder.padEnd(14).slice(0, 14);
+      const group = (exec.workspaceFolder || (exec as any).groupFolder || '').padEnd(14).slice(0, 14);
       const agent = exec.agentType.padEnd(13).slice(0, 13);
       const model = exec.model.split('/').pop()?.padEnd(20).slice(0, 20) || exec.model.padEnd(20).slice(0, 20);
       const status = exec.status === 'completed' ? '✅ Success' : 
@@ -149,7 +149,7 @@ function showStats(): void {
 
   for (const exec of executions) {
     byAgent[exec.agentType] = (byAgent[exec.agentType] || 0) + 1;
-    byGroup[exec.groupFolder] = (byGroup[exec.groupFolder] || 0) + 1;
+    byGroup[exec.workspaceFolder || (exec as any).groupFolder] = (byGroup[exec.workspaceFolder || (exec as any).groupFolder] || 0) + 1;
     const modelName = exec.model.split('/').pop() || exec.model;
     byModel[modelName] = (byModel[modelName] || 0) + 1;
   }
@@ -204,7 +204,7 @@ function tailLogs(): void {
   for (const line of lines) {
     try {
       const exec: AgentExecution = JSON.parse(line);
-      console.log(`[${formatTimestamp(exec.timestamp)}] ${exec.groupFolder}/${exec.agentType} - ${exec.status} (${exec.model})`);
+      console.log(`[${formatTimestamp(exec.timestamp)}] ${exec.workspaceFolder || (exec as any).groupFolder}/${exec.agentType} - ${exec.status} (${exec.model})`);
     } catch {
       // Skip invalid lines
     }
@@ -229,7 +229,7 @@ function tailLogs(): void {
           if (!line.trim()) continue;
           try {
             const exec: AgentExecution = JSON.parse(line);
-            console.log(`[${formatTimestamp(exec.timestamp)}] ${exec.groupFolder}/${exec.agentType} - ${exec.status} (${exec.model})`);
+            console.log(`[${formatTimestamp(exec.timestamp)}] ${exec.workspaceFolder || (exec as any).groupFolder}/${exec.agentType} - ${exec.status} (${exec.model})`);
           } catch {
             // Skip invalid lines
           }

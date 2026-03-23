@@ -4,6 +4,7 @@
  * Endpoints:
  *   GET    /tasks            — list all tasks (optionally filter by workspace)
  *   GET    /tasks/:id        — get task details + recent run logs
+ *   GET    /tasks/run-log/:runId — read the log file content for a specific run
  *   POST   /tasks            — create a new task
  *   PUT    /tasks/:id        — update a task
  *   DELETE /tasks/:id        — delete a task
@@ -13,6 +14,7 @@
  */
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import crypto from 'crypto';
+import fs from 'fs';
 import { CronExpressionParser } from 'cron-parser';
 import {
   getAllTasks,
@@ -22,6 +24,7 @@ import {
   updateTask,
   deleteTask,
   getTaskRunLogs,
+  getTaskRunLogById,
 } from './db.js';
 import { getRegisteredWorkspaces } from './state.js';
 import { TIMEZONE } from './config.js';
@@ -233,7 +236,36 @@ export function registerTaskRoutes(fastify: FastifyInstance, authenticate: any):
       reply.code(result.error === 'Task not found' ? 404 : 500).send({ error: result.error });
       return;
     }
-    logger.info({ taskId: id }, 'Task triggered immediately via web UI');
     return { success: true, message: 'Task enqueued for immediate execution' };
+  });
+
+  /** Read log file content for a specific run */
+  fastify.get('/tasks/run-log/:runId', { preHandler: authenticate }, async (request: FastifyRequest, reply: FastifyReply) => {
+    const { runId } = request.params as { runId: string };
+    const run = getTaskRunLogById(parseInt(runId, 10));
+    if (!run) {
+      reply.code(404).send({ error: 'Run log not found' });
+      return;
+    }
+
+    if (!run.log_file) {
+      return { content: null, message: 'No log file recorded for this run' };
+    }
+
+    try {
+      if (!fs.existsSync(run.log_file)) {
+        return { content: null, message: 'Log file no longer exists on disk' };
+      }
+      const content = fs.readFileSync(run.log_file, 'utf-8');
+      // Cap at 100KB to avoid sending huge files
+      const truncated = content.length > 100_000;
+      return {
+        content: truncated ? content.slice(0, 100_000) : content,
+        truncated,
+        path: run.log_file,
+      };
+    } catch {
+      return { content: null, message: 'Failed to read log file' };
+    }
   });
 }

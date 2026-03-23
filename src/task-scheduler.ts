@@ -71,6 +71,7 @@ async function runTask(
       status: 'error',
       result: null,
       error: `Workspace not found: ${task.workspace_folder}`,
+      log_file: null,
     });
     return;
   }
@@ -94,6 +95,7 @@ async function runTask(
 
   let result: string | null = null;
   let error: string | null = null;
+  let logFile: string | null = null;
 
   // For workspace context mode, use the workspace's current session
   const sessions = deps.getSessions();
@@ -158,6 +160,11 @@ async function runTask(
       result = output.result;
     }
 
+    // Capture log file path from agent output
+    if (output.logFile) {
+      logFile = output.logFile;
+    }
+
     logger.info(
       { taskId: task.id, durationMs: Date.now() - startTime },
       'Task completed',
@@ -184,6 +191,7 @@ async function runTask(
     status: error ? 'error' : 'success',
     result,
     error,
+    log_file: logFile,
   });
 
   let nextRun: string | null = null;

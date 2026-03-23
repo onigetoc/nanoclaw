@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import {
   X,
   Bug,
@@ -60,6 +60,41 @@ function formatCost(cost: number | undefined): string | undefined {
   if (cost < 0.001) return `$${cost.toFixed(6)}`;
   if (cost < 0.01) return `$${cost.toFixed(4)}`;
   return `$${cost.toFixed(4)}`;
+}
+/** SVG circle showing context window usage percentage */
+function ContextCircle({ percent, isDark }: { percent: number; isDark: boolean }) {
+  const size = 56;
+  const stroke = 5;
+  const radius = (size - stroke) / 2;
+  const circumference = 2 * Math.PI * radius;
+  const offset = circumference - (Math.min(percent, 100) / 100) * circumference;
+
+  const color =
+    percent >= 80
+      ? isDark ? '#f87171' : '#dc2626'
+      : percent >= 50
+        ? isDark ? '#fbbf24' : '#d97706'
+        : isDark ? '#34d399' : '#059669';
+
+  const trackColor = isDark ? '#27272a' : '#e4e4e7';
+
+  return (
+    <div className="relative flex items-center justify-center" style={{ width: size, height: size }}>
+      <svg width={size} height={size} className="-rotate-90">
+        <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke={trackColor} strokeWidth={stroke} />
+        <circle
+          cx={size / 2} cy={size / 2} r={radius} fill="none"
+          stroke={color} strokeWidth={stroke}
+          strokeDasharray={circumference} strokeDashoffset={offset}
+          strokeLinecap="round"
+          className="transition-all duration-700 ease-out"
+        />
+      </svg>
+      <span className="absolute text-[11px] font-semibold" style={{ color }}>
+        {percent}%
+      </span>
+    </div>
+  );
 }
 
 function MetadataCard({
@@ -204,6 +239,32 @@ export default function DebugPanel({
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [lastMessageCount, setLastMessageCount] = useState(0);
   const [previousSessionId, setPreviousSessionId] = useState<string | null>(null);
+  const [contextLimitMap, setContextLimitMap] = useState<Record<string, number>>({});
+
+  // Fetch context window limit from OpenCode providers (once)
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await apiService.getOpenCodeProviders();
+        if (cancelled) return;
+        // Find the active model's context limit from any provider
+        const allModels = (data.providers || []).flatMap((p: any) =>
+          Object.values(p.models || {}) as any[]
+        );
+        // We'll match against the latest metadata modelID later
+        // For now store the full map and pick the biggest reasonable default
+        // Actually, store all limits keyed by model ID
+        const limitMap: Record<string, number> = {};
+        for (const m of allModels) {
+          if (m.id && m.limit?.context) limitMap[m.id] = m.limit.context;
+        }
+        // Store in a ref-like pattern via state
+        setContextLimitMap(limitMap);
+      } catch { /* OpenCode server not available */ }
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   // Update timestamp whenever messages change
   useEffect(() => {
@@ -282,6 +343,46 @@ export default function DebugPanel({
   }, 0);
   const responseCount = botMessages.length;
 
+  // Compute context usage percentage
+  // Use the HIGHEST tokens.input seen in the session — this represents the peak
+  // context window usage. Each OpenCode response's tokens.input = total context
+  // sent to the model for that turn (prompt + full history). It should grow over
+  // the session; if it dips, OpenCode may have compacted, but the peak is what
+  // matters for knowing how close we are to the limit.
+  const contextInfo = useMemo(() => {
+    if (botMessages.length === 0) return { percent: 0, inputTokens: 0, limit: 0, lastInput: 0 };
+
+    // Find peak context size and also keep the latest for display
+    // Context size = input + cacheRead (cached tokens are still part of the context window)
+    let peakInput = 0;
+    let lastInput = 0;
+    let modelId: string | undefined;
+    for (const m of botMessages) {
+      const inp = (m.metadata?.tokens?.input ?? 0) + (m.metadata?.tokens?.cacheRead ?? 0);
+      if (inp > peakInput) peakInput = inp;
+      lastInput = inp;
+      if (m.metadata?.modelID) modelId = m.metadata.modelID;
+    }
+
+    // Try to find context limit for this model
+    let limit = 0;
+    if (modelId && contextLimitMap[modelId]) {
+      limit = contextLimitMap[modelId];
+    } else if (modelId) {
+      // Try partial match (provider/model vs just model)
+      const modelShort = modelId.split('/').pop();
+      for (const [key, val] of Object.entries(contextLimitMap)) {
+        if (key.includes(modelId) || modelId.includes(key) ||
+            (modelShort && key.split('/').pop() === modelShort)) {
+          limit = val;
+          break;
+        }
+      }
+    }
+    const percent = limit > 0 ? Math.round((peakInput / limit) * 100) : 0;
+    return { percent: Math.min(percent, 100), inputTokens: peakInput, limit, lastInput };
+  }, [botMessages, contextLimitMap]);
+
   return (
     <aside
       className={`flex w-72 shrink-0 flex-col border-l ${isDark ? 'border-zinc-800 bg-zinc-950' : 'border-zinc-200 bg-zinc-50'}`}
@@ -357,6 +458,33 @@ export default function DebugPanel({
               <span title="Total cost">{formatCost(totalCost)}</span>
             </>
           )}
+        </div>
+      )}
+
+      {/* Context usage circle */}
+      {contextInfo.percent > 0 && (
+        <div
+          className={`flex items-center gap-3 border-b px-4 py-3 ${isDark ? 'border-zinc-800' : 'border-zinc-200'}`}
+        >
+          <ContextCircle percent={contextInfo.percent} isDark={isDark} />
+          <div className="min-w-0 flex-1">
+            <div
+              className={`text-[10px] font-medium uppercase tracking-wider ${isDark ? 'text-zinc-500' : 'text-zinc-400'}`}
+            >
+              Context Window
+            </div>
+            <div className={`mt-0.5 text-xs ${isDark ? 'text-zinc-300' : 'text-zinc-700'}`}>
+              {(contextInfo.inputTokens / 1000).toFixed(1)}k / {(contextInfo.limit / 1000).toFixed(0)}k tokens
+              {contextInfo.lastInput > 0 && contextInfo.lastInput !== contextInfo.inputTokens && (
+                <span className={`ml-1 text-[10px] ${isDark ? 'text-zinc-500' : 'text-zinc-400'}`}>
+                  (now: {(contextInfo.lastInput / 1000).toFixed(1)}k)
+                </span>
+              )}
+            </div>
+            <div className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-zinc-400'}`}>
+              {contextInfo.percent >= 80 ? '⚠ Near limit' : contextInfo.percent >= 50 ? 'Moderate usage' : 'Healthy'}
+            </div>
+          </div>
         </div>
       )}
 
