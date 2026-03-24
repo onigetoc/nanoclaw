@@ -65,7 +65,7 @@ export default function ConfigSection({ settings, onUpdate, onReset, isDark }: C
       </p>
 
       <div
-        className={`rounded-xl border ${isDark ? 'border-zinc-800 bg-zinc-900/80' : 'border-zinc-200 bg-white'}`}
+        className={`rounded-xl border ${isDark ? 'border-zinc-800 bg-zinc-800/60' : 'border-zinc-300 bg-zinc-200'}`}
       >
         {/* Developer */}
         <div className="p-2">

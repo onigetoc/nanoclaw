@@ -26,7 +26,7 @@ interface MdFileEntry {
 const BROWSABLE_FOLDERS = ['dna', 'workspace', 'docs', 'logs', 'uploads', 'downloads', 'conversations', 'tasks', 'skills'];
 
 /** Allowed file extensions for reading/writing */
-const ALLOWED_EXTENSIONS = new Set(['.md', '.txt', '.json', '.yaml', '.yml', '.csv', '.log', '.png', '.jpg', '.jpeg', '.html', '.js', '.ts']);
+const ALLOWED_EXTENSIONS = new Set(['.md', '.txt', '.json', '.yaml', '.yml', '.csv', '.log', '.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.svg', '.html', '.js', '.ts']);
 
 function isAllowedFile(filePath: string): boolean {
   return ALLOWED_EXTENSIONS.has(path.extname(filePath).toLowerCase());
@@ -102,6 +102,25 @@ function isAccessible(relativePath: string): boolean {
   if (parts.length === 1) return isAllowedFile(relativePath);
   // Otherwise must be inside a browsable folder
   return BROWSABLE_FOLDERS.includes(parts[0]);
+}
+
+function getMimeType(filePath: string): string {
+  const ext = path.extname(filePath).toLowerCase();
+  if (ext === '.png') return 'image/png';
+  if (ext === '.jpg' || ext === '.jpeg') return 'image/jpeg';
+  if (ext === '.gif') return 'image/gif';
+  if (ext === '.webp') return 'image/webp';
+  if (ext === '.bmp') return 'image/bmp';
+  if (ext === '.svg') return 'image/svg+xml';
+  if (ext === '.md') return 'text/markdown; charset=utf-8';
+  if (ext === '.txt' || ext === '.log') return 'text/plain; charset=utf-8';
+  if (ext === '.json') return 'application/json; charset=utf-8';
+  if (ext === '.yaml' || ext === '.yml') return 'application/x-yaml; charset=utf-8';
+  if (ext === '.csv') return 'text/csv; charset=utf-8';
+  if (ext === '.html') return 'text/html; charset=utf-8';
+  if (ext === '.js') return 'text/javascript; charset=utf-8';
+  if (ext === '.ts') return 'text/plain; charset=utf-8';
+  return 'application/octet-stream';
 }
 
 export function registerMarkdownRoutes(fastify: FastifyInstance, authenticate: any): void {
@@ -214,6 +233,32 @@ export function registerMarkdownRoutes(fastify: FastifyInstance, authenticate: a
       } catch (err: any) {
         if (err.code === 'ENOENT') return reply.code(404).send({ error: 'File not found' });
         logger.error({ err, workspace, filePath }, 'Failed to read markdown file');
+        return reply.code(500).send({ error: 'Failed to read file' });
+      }
+    },
+  );
+
+  /** Read a file as raw bytes (used for image preview/download in web UI) */
+  fastify.get('/md/workspaces/:workspace/raw', { preHandler: authenticate },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const { workspace } = request.params as { workspace: string };
+      const { path: filePath } = request.query as { path?: string };
+
+      if (!filePath) return reply.code(400).send({ error: 'Missing path query parameter' });
+      if (!isPathSafe(filePath)) return reply.code(400).send({ error: 'Invalid path' });
+      if (!isAccessible(filePath)) return reply.code(403).send({ error: 'Access denied' });
+
+      const fullPath = path.join(WORKSPACES_DIR, workspace, filePath);
+
+      try {
+        const content = await fs.readFile(fullPath);
+        return reply
+          .header('Content-Type', getMimeType(filePath))
+          .header('Cache-Control', 'no-store')
+          .send(content);
+      } catch (err: any) {
+        if (err.code === 'ENOENT') return reply.code(404).send({ error: 'File not found' });
+        logger.error({ err, workspace, filePath }, 'Failed to read raw file');
         return reply.code(500).send({ error: 'Failed to read file' });
       }
     },

@@ -110,7 +110,7 @@ function MetadataCard({
 
   return (
     <div
-      className={`rounded-lg border ${isDark ? 'border-zinc-800 bg-zinc-900/80' : 'border-zinc-200 bg-white'}`}
+      className={`rounded-lg border ${isDark ? 'border-zinc-800 bg-zinc-900/80' : 'border-zinc-300 bg-zinc-100'}`}
     >
       <div className="space-y-0.5 p-1">
         <MetadataRow
@@ -385,7 +385,7 @@ export default function DebugPanel({
 
   return (
     <aside
-      className={`flex w-72 shrink-0 flex-col border-l ${isDark ? 'border-zinc-800 bg-zinc-950' : 'border-zinc-200 bg-zinc-50'}`}
+      className={`flex w-72 shrink-0 flex-col border-l ${isDark ? 'border-zinc-800 bg-zinc-950' : 'border-zinc-300 bg-zinc-200'}`}
     >
       {/* Header */}
       <div
@@ -398,7 +398,7 @@ export default function DebugPanel({
           <div>
             <h2 className="text-sm font-semibold">Debug</h2>
             <div
-              className={`flex items-center gap-1 text-[10px] ${isDark ? 'text-zinc-500' : 'text-zinc-400'}`}
+              className={`flex items-center gap-1 text-[10px] ${isDark ? 'text-zinc-500' : 'text-zinc-500'}`}
             >
               <Clock className="h-2.5 w-2.5" />
               <span>Last update: {lastRefreshedAt.toLocaleTimeString()}</span>
@@ -416,14 +416,14 @@ export default function DebugPanel({
 
       {/* Live Session ID */}
       <div
-        className={`flex items-start gap-2.5 border-b px-4 py-2.5 ${isDark ? 'border-zinc-800' : 'border-zinc-200'}`}
+        className={`flex items-start gap-2.5 border-b px-4 py-2.5 ${isDark ? 'border-zinc-800' : 'border-zinc-300 bg-zinc-200/80'}`}
       >
         <Radio
           className={`h-3.5 w-3.5 shrink-0 mt-0.5 ${sessionId ? (isDark ? 'text-emerald-400' : 'text-emerald-600') : isDark ? 'text-zinc-600' : 'text-zinc-400'}`}
         />
         <div className="min-w-0 flex-1">
           <div
-            className={`text-[10px] font-medium uppercase tracking-wider ${isDark ? 'text-zinc-500' : 'text-zinc-400'}`}
+            className={`text-[10px] font-medium uppercase tracking-wider ${isDark ? 'text-zinc-500' : 'text-zinc-500'}`}
           >
             Session
           </div>
@@ -439,7 +439,7 @@ export default function DebugPanel({
       {/* Aggregate stats bar */}
       {responseCount > 0 && (
         <div
-          className={`flex items-center gap-3 border-b px-4 py-2.5 text-[11px] ${isDark ? 'border-zinc-800 bg-zinc-900/50 text-zinc-400' : 'border-zinc-200 bg-zinc-100 text-zinc-500'}`}
+          className={`flex items-center gap-3 border-b px-4 py-2.5 text-[11px] ${isDark ? 'border-zinc-800 bg-zinc-900/50 text-zinc-400' : 'border-zinc-300 bg-white text-zinc-600'}`}
         >
           <span title="Total responses">{responseCount} responses</span>
           <span className={isDark ? 'text-zinc-700' : 'text-zinc-300'}>|</span>
@@ -464,7 +464,7 @@ export default function DebugPanel({
       {/* Context usage circle */}
       {contextInfo.percent > 0 && (
         <div
-          className={`flex items-center gap-3 border-b px-4 py-3 ${isDark ? 'border-zinc-800' : 'border-zinc-200'}`}
+          className={`flex items-center gap-3 border-b px-4 py-3 ${isDark ? 'border-zinc-800' : 'border-zinc-300 bg-zinc-200/70'}`}
         >
           <ContextCircle percent={contextInfo.percent} isDark={isDark} />
           <div className="min-w-0 flex-1">

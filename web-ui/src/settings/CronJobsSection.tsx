@@ -206,7 +206,7 @@ export default function CronJobsSection({ isDark }: CronJobsSectionProps) {
 
       {tasks.length === 0 ? (
         <div className={`flex flex-col items-center justify-center rounded-xl border py-12 ${
-          isDark ? 'border-zinc-800 bg-zinc-900/80 text-zinc-600' : 'border-zinc-200 bg-white text-zinc-400'
+          isDark ? 'border-zinc-800 bg-zinc-800/60 text-zinc-600' : 'border-zinc-300 bg-zinc-200 text-zinc-500'
         }`}>
           <Clock className="mb-2 h-6 w-6" />
           <p className="text-sm">No scheduled tasks</p>
@@ -223,8 +223,8 @@ export default function CronJobsSection({ isDark }: CronJobsSectionProps) {
 
             return (
               <div key={wsName} className={`rounded-xl border overflow-hidden ${
-                isDark ? 'border-zinc-800 bg-zinc-900/60' : 'border-zinc-200 bg-white'
-              }`}>
+                  isDark ? 'border-zinc-800 bg-zinc-800/60' : 'border-zinc-300 bg-zinc-200'
+                }`}>
                 {/* Workspace header */}
                 <button
                   type="button"
@@ -320,7 +320,7 @@ function TaskRow({
 
   return (
     <div className={`flex items-center gap-3 px-4 py-3 transition ${
-      isDark ? 'hover:bg-zinc-800/40 border-b border-zinc-800/50 last:border-b-0' : 'hover:bg-zinc-50 border-b border-zinc-100 last:border-b-0'
+      isDark ? 'hover:bg-zinc-800/40 border-b border-zinc-800/50 last:border-b-0' : 'hover:bg-zinc-50 border-b border-zinc-300 last:border-b-0'
     }`}>
       {/* Status dot */}
       <div className="shrink-0">

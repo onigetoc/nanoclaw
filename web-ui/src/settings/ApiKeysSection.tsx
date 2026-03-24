@@ -202,7 +202,7 @@ export default function ApiKeysSection({ isDark }: ApiKeysSectionProps) {
       )}
 
       {/* Add / Update API Key */}
-      <div className={`rounded-xl border p-4 mb-6 ${isDark ? 'border-zinc-800 bg-zinc-900/80' : 'border-zinc-200 bg-white'}`}>
+      <div className={`rounded-xl border p-4 mb-6 ${isDark ? 'border-zinc-800 bg-zinc-800/60' : 'border-zinc-300 bg-zinc-200'}`}>
         <h3 className={`text-sm font-medium mb-3 ${isDark ? 'text-zinc-200' : 'text-zinc-800'}`}>
           Add / Update API Key
         </h3>
@@ -263,7 +263,7 @@ export default function ApiKeysSection({ isDark }: ApiKeysSectionProps) {
       </div>
 
       {/* Scan API Keys */}
-      <div className={`rounded-xl border p-4 mb-6 ${isDark ? 'border-zinc-800 bg-zinc-900/80' : 'border-zinc-200 bg-white'}`}>
+      <div className={`rounded-xl border p-4 mb-6 ${isDark ? 'border-zinc-800 bg-zinc-800/60' : 'border-zinc-300 bg-zinc-200'}`}>
         <div className="flex items-center justify-between mb-1">
           <h3 className={`text-sm font-medium ${isDark ? 'text-zinc-200' : 'text-zinc-800'}`}>
             Detect System API Keys
@@ -288,7 +288,7 @@ export default function ApiKeysSection({ isDark }: ApiKeysSectionProps) {
 
         {/* Scan results */}
         {scannedKeys !== null && (
-          <div className={`mt-3 rounded-lg border ${isDark ? 'border-zinc-700 bg-zinc-800/50' : 'border-zinc-200 bg-zinc-50'}`}>
+          <div className={`mt-3 rounded-lg border ${isDark ? 'border-zinc-700 bg-zinc-800/50' : 'border-zinc-300 bg-zinc-100'}`}>
             {scannedKeys.length === 0 ? (
               <p className={`px-4 py-3 text-sm ${isDark ? 'text-zinc-500' : 'text-zinc-400'}`}>
                 No API keys found in system environment.
@@ -340,7 +340,7 @@ export default function ApiKeysSection({ isDark }: ApiKeysSectionProps) {
 
       {/* Configured providers */}
       {configured.length > 0 && (
-        <div className={`rounded-xl border mb-6 ${isDark ? 'border-zinc-800 bg-zinc-900/80' : 'border-zinc-200 bg-white'}`}>
+        <div className={`rounded-xl border mb-6 ${isDark ? 'border-zinc-800 bg-zinc-800/60' : 'border-zinc-300 bg-zinc-200'}`}>
           <h3 className={`px-4 pt-3 pb-1 text-[10px] font-semibold uppercase tracking-wider ${isDark ? 'text-zinc-500' : 'text-zinc-400'}`}>
             Configured in EureClaw
           </h3>

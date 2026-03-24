@@ -53,7 +53,7 @@ export default function ChatSidebar({
 }: ChatSidebarProps) {
 
   return (
-    <aside className={`flex w-72 shrink-0 flex-col border-r ${isDark ? 'border-zinc-800 bg-zinc-950' : 'border-zinc-200 bg-zinc-50'}`}>
+    <aside className={`flex w-72 shrink-0 flex-col border-r ${isDark ? 'border-zinc-800 bg-zinc-950' : 'border-zinc-300 bg-zinc-200'}`}>
       <div className={`flex h-16 items-center justify-between border-b px-5 ${isDark ? 'border-zinc-800' : 'border-zinc-300'}`}>
         <h1 className="text-xl font-semibold">EureClaw Chat</h1>
         <span
@@ -78,7 +78,7 @@ export default function ChatSidebar({
       )}
 
       <div className="flex-1 overflow-y-auto p-2">
-        <div className={`mb-1 px-3 text-[10px] font-semibold uppercase tracking-wider ${isDark ? 'text-zinc-600' : 'text-zinc-400'}`}>
+        <div className={`mb-1 px-3 text-[10px] font-semibold uppercase tracking-wider ${isDark ? 'text-zinc-600' : 'text-zinc-500'}`}>
           Workspaces
         </div>
         {chats.map((chat) => {
@@ -90,7 +90,7 @@ export default function ChatSidebar({
               key={chat.jid}
               className={`mb-1 flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left transition ${
                 active
-                  ? isDark ? 'bg-zinc-800 ring-1 ring-zinc-700' : 'bg-zinc-100 ring-1 ring-zinc-300'
+                  ? isDark ? 'bg-zinc-800 ring-1 ring-zinc-700' : 'bg-white ring-1 ring-zinc-300 shadow-sm'
                   : isDark ? 'hover:bg-zinc-800/60' : 'hover:bg-zinc-100'
               }`}
               onClick={() => onSelectChat(chat)}
@@ -111,7 +111,7 @@ export default function ChatSidebar({
                     <AgentStatusBadge status={chatStatus} isDark={isDark} />
                   )}
                 </div>
-                <div className={`mt-0.5 flex items-center gap-1 truncate text-xs ${isDark ? 'text-zinc-400' : 'text-zinc-500'}`}>
+                <div className={`mt-0.5 flex items-center gap-1 truncate text-xs ${isDark ? 'text-zinc-400' : 'text-zinc-600'}`}>
                   <Folder className="h-3.5 w-3.5 shrink-0" />
                   <span>{chat.workspaceInfo ? chat.workspaceInfo.folder : chat.jid}</span>
                 </div>
@@ -126,14 +126,14 @@ export default function ChatSidebar({
 
       <div className={`border-t p-3 space-y-2 ${isDark ? 'border-zinc-800' : 'border-zinc-300'}`}>
         <button
-          className={`flex w-full items-center justify-center gap-2 rounded-lg border px-3 py-2 text-sm transition ${isDark ? 'border-zinc-700 bg-zinc-800 text-zinc-200 hover:bg-zinc-700' : 'border-zinc-300 bg-zinc-100 text-zinc-700 hover:bg-zinc-200'}`}
+          className={`flex w-full items-center justify-center gap-2 rounded-lg border px-3 py-2 text-sm transition ${isDark ? 'border-zinc-700 bg-zinc-800 text-zinc-200 hover:bg-zinc-700' : 'border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-100 shadow-sm'}`}
           onClick={onOpenSettings}
         >
           <LayoutDashboard className="h-4 w-4" />
           Control Panel
         </button>
         <button
-          className={`flex w-full items-center justify-center gap-2 rounded-lg border px-3 py-2 text-sm transition ${isDark ? 'border-zinc-700 bg-zinc-800 text-zinc-200 hover:bg-zinc-700' : 'border-zinc-300 bg-zinc-100 text-zinc-700 hover:bg-zinc-200'}`}
+          className={`flex w-full items-center justify-center gap-2 rounded-lg border px-3 py-2 text-sm transition ${isDark ? 'border-zinc-700 bg-zinc-800 text-zinc-200 hover:bg-zinc-700' : 'border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-100 shadow-sm'}`}
           onClick={onDisconnect}
         >
           <Power className="h-4 w-4" />

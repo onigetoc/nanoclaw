@@ -603,6 +603,50 @@ class ApiService {
     });
   }
 
+  async getMdFileBlob(workspace: string, filePath: string): Promise<Blob> {
+    const token = this.getToken();
+    if (!token) throw new Error('Not authenticated');
+
+    const response = await fetch(
+      `${API_BASE}/md/workspaces/${encodeURIComponent(workspace)}/raw?path=${encodeURIComponent(filePath)}`,
+      {
+        headers: { Authorization: `Bearer ${token}` },
+      },
+    );
+
+    if (!response.ok) {
+      const error = await response
+        .json()
+        .catch(() => ({ error: 'Request failed' }));
+      throw new Error(error.error || `HTTP ${response.status}`);
+    }
+
+    return response.blob();
+  }
+
+  async getFileBlobByRelativeUrl(relativeUrl: string): Promise<Blob> {
+    const token = this.getToken();
+    if (!token) throw new Error('Not authenticated');
+
+    const normalized = relativeUrl.startsWith('/') ? relativeUrl : `/${relativeUrl}`;
+    const response = await fetch(`${API_BASE}${normalized}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    if (!response.ok) {
+      const error = await response
+        .json()
+        .catch(() => ({ error: 'Request failed' }));
+      throw new Error(error.error || `HTTP ${response.status}`);
+    }
+
+    return response.blob();
+  }
+
+  async getWorkspaceDownloadBlob(workspaceFolder: string, fileId: string): Promise<Blob> {
+    return this.getFileBlobByRelativeUrl(`/files/${encodeURIComponent(workspaceFolder)}/${encodeURIComponent(fileId)}`);
+  }
+
   private abortController: AbortController | null = null;
   private messageListeners: ((message: Message) => void)[] = [];
   private statusListeners: ((event: StatusEvent) => void)[] = [];

@@ -37,7 +37,7 @@ export default function SessionsSection({ sessions, isDark }: SessionsSectionPro
       {entries.length === 0 ? (
         <div
           className={`flex flex-col items-center justify-center rounded-xl border py-12 ${
-            isDark ? 'border-zinc-800 bg-zinc-900/80 text-zinc-600' : 'border-zinc-200 bg-white text-zinc-400'
+            isDark ? 'border-zinc-800 bg-zinc-800/60 text-zinc-600' : 'border-zinc-300 bg-zinc-200 text-zinc-500'
           }`}
         >
           <Radio className="mb-2 h-6 w-6" />
@@ -49,7 +49,7 @@ export default function SessionsSection({ sessions, isDark }: SessionsSectionPro
             <div
               key={folder}
               className={`rounded-xl border p-4 ${
-                isDark ? 'border-zinc-800 bg-zinc-900/80' : 'border-zinc-200 bg-white'
+                isDark ? 'border-zinc-800 bg-zinc-800/60' : 'border-zinc-300 bg-zinc-200'
               }`}
             >
               <div className="flex items-center gap-2 mb-2">
@@ -60,7 +60,7 @@ export default function SessionsSection({ sessions, isDark }: SessionsSectionPro
               </div>
               <div
                 className={`rounded-lg px-3 py-2 font-mono text-xs break-all ${
-                  isDark ? 'bg-zinc-800/60 text-emerald-300' : 'bg-zinc-100 text-emerald-700'
+                  isDark ? 'bg-zinc-800 text-emerald-300' : 'bg-white text-emerald-700'
                 }`}
               >
                 {sessionId}

@@ -134,7 +134,7 @@ export default function CronJobDetail({ taskId, isDark, onBack, onDeleted }: Cro
     );
   }
 
-  const cardClass = `rounded-xl border p-5 ${isDark ? 'border-zinc-800 bg-zinc-900/60' : 'border-zinc-200 bg-white'}`;
+  const cardClass = `rounded-xl border p-5 ${isDark ? 'border-zinc-800 bg-zinc-800/60' : 'border-zinc-300 bg-zinc-200'}`;
   const labelClass = `text-[10px] font-semibold uppercase tracking-wider mb-1 ${isDark ? 'text-zinc-600' : 'text-zinc-400'}`;
   const valueClass = `text-sm ${isDark ? 'text-zinc-200' : 'text-zinc-800'}`;
   const inputClass = `w-full rounded-lg border px-3 py-2 text-sm outline-none transition ${
@@ -399,7 +399,7 @@ function RunHistory({ logs, isDark, cardClass, labelClass }: {
                   className={`w-full flex items-center gap-3 rounded-lg px-3 py-2 text-left transition ${
                     isDark
                       ? `bg-zinc-800/50 hover:bg-zinc-800 ${isExpanded ? 'ring-1 ring-zinc-700' : ''}`
-                      : `bg-zinc-50 hover:bg-zinc-100 ${isExpanded ? 'ring-1 ring-zinc-300' : ''}`
+                      : `bg-zinc-100 hover:bg-white ${isExpanded ? 'ring-1 ring-zinc-400' : ''}`
                   }`}
                 >
                   {log.status === 'success' ? (
@@ -430,8 +430,8 @@ function RunHistory({ logs, isDark, cardClass, labelClass }: {
 
                 {isExpanded && (
                   <div className={`mx-2 mt-1 mb-2 rounded-lg border p-3 ${
-                    isDark ? 'border-zinc-700 bg-zinc-900' : 'border-zinc-200 bg-white'
-                  }`}>
+                      isDark ? 'border-zinc-700 bg-zinc-800' : 'border-zinc-300 bg-zinc-100'
+                    }`}>
                     {log.error && (
                       <div className="mb-2">
                         <div className={`text-[10px] font-semibold uppercase tracking-wider mb-1 ${isDark ? 'text-rose-400/70' : 'text-rose-500'}`}>

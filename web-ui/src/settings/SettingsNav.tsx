@@ -54,7 +54,7 @@ export default function SettingsNav({ active, onSelect, onBack, isDark }: Settin
   return (
     <aside
       className={`flex w-72 shrink-0 flex-col border-r ${
-        isDark ? 'border-zinc-800 bg-zinc-950' : 'border-zinc-200 bg-zinc-50'
+        isDark ? 'border-zinc-800 bg-zinc-950' : 'border-zinc-300 bg-zinc-200'
       }`}
     >
       {/* Header */}
@@ -67,7 +67,7 @@ export default function SettingsNav({ active, onSelect, onBack, isDark }: Settin
       </div>
 
       {/* Back to Chat button */}
-      <div className={`border-b px-3 py-2.5 ${isDark ? 'border-zinc-800' : 'border-zinc-200'}`}>
+      <div className={`border-b px-3 py-2.5 ${isDark ? 'border-zinc-800' : 'border-zinc-300'}`}>
         <button
           type="button"
           onClick={onBack}
@@ -88,7 +88,7 @@ export default function SettingsNav({ active, onSelect, onBack, isDark }: Settin
           <div key={group} className="mb-4">
             <div
               className={`mb-1 px-3 text-[10px] font-semibold uppercase tracking-wider ${
-                isDark ? 'text-zinc-600' : 'text-zinc-400'
+                isDark ? 'text-zinc-600' : 'text-zinc-500'
               }`}
             >
               {group}
@@ -104,10 +104,10 @@ export default function SettingsNav({ active, onSelect, onBack, isDark }: Settin
                     isActive
                       ? isDark
                         ? 'bg-zinc-800 text-zinc-100 font-medium'
-                        : 'bg-zinc-200 text-zinc-900 font-medium'
+                        : 'bg-white text-zinc-900 font-medium shadow-sm'
                       : isDark
                         ? 'text-zinc-400 hover:bg-zinc-800/60 hover:text-zinc-200'
-                        : 'text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900'
+                        : 'text-zinc-700 hover:bg-zinc-100 hover:text-zinc-900'
                   }`}
                 >
                   {item.icon}

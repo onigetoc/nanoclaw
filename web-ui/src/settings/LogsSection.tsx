@@ -74,7 +74,7 @@ export default function LogsSection({ executions, onRefresh, isDark }: LogsSecti
               <div
                 key={err.id}
                 className={`rounded-lg px-3 py-2 ${
-                  isDark ? 'bg-zinc-900/80' : 'bg-white'
+                  isDark ? 'bg-zinc-800/60' : 'bg-zinc-50'
                 }`}
               >
                 <div className="flex items-center justify-between mb-1">
@@ -103,7 +103,7 @@ export default function LogsSection({ executions, onRefresh, isDark }: LogsSecti
       {all.length === 0 ? (
         <div
           className={`flex flex-col items-center justify-center rounded-xl border py-12 ${
-            isDark ? 'border-zinc-800 bg-zinc-900/80 text-zinc-600' : 'border-zinc-200 bg-white text-zinc-400'
+            isDark ? 'border-zinc-800 bg-zinc-800/60 text-zinc-600' : 'border-zinc-300 bg-zinc-200 text-zinc-500'
           }`}
         >
           <FileWarning className="mb-2 h-6 w-6" />
@@ -117,7 +117,7 @@ export default function LogsSection({ executions, onRefresh, isDark }: LogsSecti
         >
           <table className="w-full text-sm">
             <thead>
-              <tr className={isDark ? 'bg-zinc-900/80' : 'bg-zinc-50'}>
+              <tr className={isDark ? 'bg-zinc-800/60' : 'bg-zinc-200'}>
                 <th className={`px-4 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider ${isDark ? 'text-zinc-500' : 'text-zinc-400'}`}>Status</th>
                 <th className={`px-4 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider ${isDark ? 'text-zinc-500' : 'text-zinc-400'}`}>Workspace</th>
                 <th className={`px-4 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider ${isDark ? 'text-zinc-500' : 'text-zinc-400'}`}>Model</th>
@@ -130,7 +130,7 @@ export default function LogsSection({ executions, onRefresh, isDark }: LogsSecti
                 <tr
                   key={exec.id}
                   className={`border-t ${
-                    isDark ? 'border-zinc-800 hover:bg-zinc-800/40' : 'border-zinc-100 hover:bg-zinc-50'
+                    isDark ? 'border-zinc-800 hover:bg-zinc-800/40' : 'border-zinc-300 hover:bg-zinc-50'
                   }`}
                   title={exec.error || undefined}
                 >

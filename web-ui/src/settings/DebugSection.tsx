@@ -29,7 +29,7 @@ export default function DebugSection({ executions, isDark }: DebugSectionProps) 
       {recent.length === 0 ? (
         <div
           className={`flex flex-col items-center justify-center rounded-xl border py-12 ${
-            isDark ? 'border-zinc-800 bg-zinc-900/80 text-zinc-600' : 'border-zinc-200 bg-white text-zinc-400'
+            isDark ? 'border-zinc-800 bg-zinc-800/60 text-zinc-600' : 'border-zinc-300 bg-zinc-200 text-zinc-500'
           }`}
         >
           <Bug className="mb-2 h-6 w-6" />
@@ -37,16 +37,16 @@ export default function DebugSection({ executions, isDark }: DebugSectionProps) 
           <p className="mt-1 text-[10px]">Send a message to see agent debug info</p>
         </div>
       ) : (
-        <div className="space-y-4">
+        <div className="grid grid-cols-1 gap-4">
           {recent.map((exec) => (
             <div
               key={exec.id}
-              className={`rounded-xl border p-4 ${
-                isDark ? 'border-zinc-800 bg-zinc-900/80' : 'border-zinc-200 bg-white'
+              className={`w-full max-w-full rounded-xl border p-4 ${
+                isDark ? 'border-zinc-800 bg-zinc-800/60' : 'border-zinc-300 bg-zinc-200'
               }`}
             >
-              <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-2">
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                <div className="flex min-w-0 items-center gap-2">
                   <span
                     className={`inline-flex h-5 items-center rounded-full px-2 text-[10px] font-medium ${
                       exec.status === 'completed'
@@ -56,11 +56,11 @@ export default function DebugSection({ executions, isDark }: DebugSectionProps) 
                   >
                     {exec.status}
                   </span>
-                  <span className={`text-sm font-medium ${isDark ? 'text-zinc-200' : 'text-zinc-800'}`}>
+                  <span className={`min-w-0 break-all text-sm font-medium ${isDark ? 'text-zinc-200' : 'text-zinc-800'}`}>
                     {exec.workspaceName}
                   </span>
                 </div>
-                <span className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-zinc-400'}`}>
+                <span className={`shrink-0 text-[10px] ${isDark ? 'text-zinc-500' : 'text-zinc-400'}`}>
                   {new Date(exec.timestamp).toLocaleTimeString()}
                 </span>
               </div>

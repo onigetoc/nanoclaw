@@ -446,7 +446,7 @@ function App() {
 
   // --- Render: Main app ---
   return (
-    <div className={`flex h-screen ${isDark ? 'bg-zinc-950 text-zinc-100' : 'bg-zinc-100 text-zinc-900'}`}>
+    <div className={`flex h-screen ${isDark ? 'bg-zinc-950 text-zinc-100' : 'bg-zinc-50 text-zinc-900'}`}>
       {/* Settings page overlay */}
       {showSettingsPage && (
         <div className="absolute inset-0 z-50">
@@ -473,10 +473,10 @@ function App() {
           onDisconnect={() => setToken(null)}
         />
 
-        <main className={`relative flex min-w-0 flex-1 flex-col ${isDark ? 'bg-zinc-900' : 'bg-white'}`}>
+        <main className={`relative flex min-w-0 flex-1 flex-col ${isDark ? 'bg-zinc-900' : 'bg-zinc-100'}`}>
           {state.selectedChat ? (
             <>
-              <header className={`flex h-16 items-center justify-between border-b px-4 md:px-6 ${isDark ? 'border-zinc-800 bg-zinc-950/90' : 'border-zinc-200 bg-zinc-50/90'}`}>
+              <header className={`flex h-16 items-center justify-between border-b px-4 md:px-6 ${isDark ? 'border-zinc-800 bg-zinc-950/90' : 'border-zinc-300 bg-zinc-200/95'}`}>
                 <div className="min-w-0">
                   <h2 className="truncate text-base font-semibold md:text-lg">{state.selectedChat.name || state.selectedChat.jid}</h2>
                   <p className={`truncate text-xs ${isDark ? 'text-zinc-400' : 'text-zinc-500'}`}>{state.selectedChat.jid}</p>
@@ -487,7 +487,7 @@ function App() {
                     className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border ${
                       settings.debugPanel
                         ? isDark ? 'border-amber-700/50 bg-amber-500/15 text-amber-300 hover:bg-amber-500/25' : 'border-amber-300 bg-amber-50 text-amber-600 hover:bg-amber-100'
-                        : isDark ? 'border-zinc-700 bg-zinc-800 text-zinc-400 hover:bg-zinc-700' : 'border-zinc-300 bg-zinc-100 text-zinc-500 hover:bg-zinc-200'
+                        : isDark ? 'border-zinc-700 bg-zinc-800 text-zinc-400 hover:bg-zinc-700' : 'border-zinc-300 bg-white text-zinc-600 hover:bg-zinc-100 shadow-sm'
                     }`}
                     title={settings.debugPanel ? 'Hide debug panel' : 'Show debug panel'}
                   >
@@ -495,7 +495,7 @@ function App() {
                   </button>
                   <button
                     type="button" onClick={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))}
-                    className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border ${isDark ? 'border-zinc-700 bg-zinc-800 text-zinc-200 hover:bg-zinc-700' : 'border-zinc-300 bg-zinc-100 text-zinc-700 hover:bg-zinc-200'}`}
+                    className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border ${isDark ? 'border-zinc-700 bg-zinc-800 text-zinc-200 hover:bg-zinc-700' : 'border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-100 shadow-sm'}`}
                     title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
                   >
                     {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}

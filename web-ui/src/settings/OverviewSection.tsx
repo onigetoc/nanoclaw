@@ -25,7 +25,7 @@ function StatCard({
   return (
     <div
       className={`rounded-xl border p-4 ${
-        isDark ? 'border-zinc-800 bg-zinc-900/80' : 'border-zinc-200 bg-white'
+        isDark ? 'border-zinc-800 bg-zinc-800/60' : 'border-zinc-300 bg-zinc-200'
       }`}
     >
       <div className="flex items-center gap-2 mb-2">
@@ -181,7 +181,7 @@ export default function OverviewSection({ data, serverOnline, isDark }: Overview
         {sysInfo && (
           <div
             className={`rounded-xl border p-4 ${
-              isDark ? 'border-zinc-800 bg-zinc-900/80' : 'border-zinc-200 bg-white'
+              isDark ? 'border-zinc-800 bg-zinc-800/60' : 'border-zinc-300 bg-zinc-200'
             }`}
           >
             <h3
@@ -356,7 +356,7 @@ export default function OverviewSection({ data, serverOnline, isDark }: Overview
         {data.sessions && Object.keys(data.sessions).length > 0 && (
           <div
             className={`rounded-xl border p-4 ${
-              isDark ? 'border-zinc-800 bg-zinc-900/80' : 'border-zinc-200 bg-white'
+              isDark ? 'border-zinc-800 bg-zinc-800/60' : 'border-zinc-300 bg-zinc-200'
             }`}
           >
             <h3
@@ -371,7 +371,7 @@ export default function OverviewSection({ data, serverOnline, isDark }: Overview
                 <div
                   key={folder}
                   className={`flex items-center justify-between rounded-lg px-3 py-2 ${
-                    isDark ? 'bg-zinc-800/60' : 'bg-zinc-100'
+                    isDark ? 'bg-zinc-800' : 'bg-white'
                   }`}
                 >
                   <span className={`text-sm font-medium ${isDark ? 'text-zinc-200' : 'text-zinc-800'}`}>

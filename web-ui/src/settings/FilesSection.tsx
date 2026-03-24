@@ -33,6 +33,11 @@ function getCached<T>(cache: Map<string, CacheEntry<T>>, key: string, ttl: numbe
   return null;
 }
 
+function extractDownloadFileId(filePath: string): string | null {
+  const match = filePath.match(/(?:^|\/)workspace\/downloads\/(\d+-[a-z0-9]+)_.+$/i);
+  return match ? match[1] : null;
+}
+
 export default function FilesSection({ isDark }: FilesSectionProps) {
   const [workspaces, setWorkspaces] = useState<WorkspaceInfo[]>(cachedWorkspaces?.data ?? []);
   const [selectedWorkspace, setSelectedWorkspace] = useState(cachedSelectedWorkspace);
@@ -48,12 +53,21 @@ export default function FilesSection({ isDark }: FilesSectionProps) {
   const [saving, setSaving] = useState(false);
   const [copied, setCopied] = useState(false);
   const [fileModified, setFileModified] = useState('');
+  const [fileBlobUrl, setFileBlobUrl] = useState<string | null>(null);
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(cachedExpandedFolders);
   const [error, setError] = useState<string | null>(null);
   const [treeLoading, setTreeLoading] = useState(false);
   const initDone = useRef(false);
 
   const hasChanges = fileContent !== originalContent;
+  const isImageFile = !!selectedFile && /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(selectedFile);
+
+  const clearBlobUrl = useCallback(() => {
+    setFileBlobUrl((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return null;
+    });
+  }, []);
 
   // Token count (GPT tokenizer) — lazy-loaded, debounced
   const tokenCount = useTokenCount(fileContent);
@@ -103,6 +117,12 @@ export default function FilesSection({ isDark }: FilesSectionProps) {
   }, []);
 
   useEffect(() => {
+    return () => {
+      if (fileBlobUrl) URL.revokeObjectURL(fileBlobUrl);
+    };
+  }, [fileBlobUrl]);
+
+  useEffect(() => {
     if (!selectedWorkspace) return;
     // On first mount, restore cached file if available
     if (!initDone.current && cachedSelectedFile) {
@@ -117,16 +137,56 @@ export default function FilesSection({ isDark }: FilesSectionProps) {
       return;
     }
     initDone.current = true;
+    clearBlobUrl();
     setSelectedFile(null);
     setFileContent('');
     setOriginalContent('');
     setIsEditing(false);
     void loadTree(selectedWorkspace);
-  }, [selectedWorkspace, loadTree]);
+  }, [selectedWorkspace, loadTree, clearBlobUrl]);
 
   const openFile = async (filePath: string) => {
     if (hasChanges && !confirm('You have unsaved changes. Discard?')) return;
     setError(null);
+    clearBlobUrl();
+
+    if (/\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(filePath)) {
+      setSelectedFile(filePath);
+      setFileContent('');
+      setOriginalContent('');
+      setIsEditing(false);
+      setLoading(true);
+      try {
+        let blob: Blob;
+        try {
+          // Preferred path when backend exposes /md/.../raw
+          blob = await apiService.getMdFileBlob(selectedWorkspace, filePath);
+        } catch {
+          // Fallback for separate API deployments: load from /files endpoint if this image is in workspace/downloads
+          const fileId = extractDownloadFileId(filePath);
+          if (fileId) {
+            blob = await apiService.getWorkspaceDownloadBlob(selectedWorkspace, fileId);
+          } else {
+            // Last fallback: some backends return a URL/path in content instead of bytes
+            const data = await apiService.getMdFile(selectedWorkspace, filePath);
+            const hinted = data.content.trim();
+            if (hinted.startsWith('/')) {
+              blob = await apiService.getFileBlobByRelativeUrl(hinted);
+            } else {
+              throw new Error('Image endpoint unavailable');
+            }
+          }
+        }
+        const url = URL.createObjectURL(blob);
+        setFileBlobUrl(url);
+      } catch {
+        setError('Failed to load image');
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
+
     // Check file cache first
     const cacheKey = `${selectedWorkspace}:${filePath}`;
     const cached = getCached(fileCache, cacheKey, FILE_TTL);
@@ -184,6 +244,13 @@ export default function FilesSection({ isDark }: FilesSectionProps) {
 
   const downloadFile = () => {
     if (!selectedFile) return;
+    if (isImageFile && fileBlobUrl) {
+      const a = document.createElement('a');
+      a.href = fileBlobUrl;
+      a.download = selectedFile.split('/').pop() || 'image';
+      a.click();
+      return;
+    }
     const blob = new Blob([fileContent], { type: 'text/markdown' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -207,7 +274,7 @@ export default function FilesSection({ isDark }: FilesSectionProps) {
   const textMuted = isDark ? 'text-zinc-400' : 'text-zinc-500';
   const textMain = isDark ? 'text-zinc-100' : 'text-zinc-900';
   const hoverBg = isDark ? 'hover:bg-zinc-800' : 'hover:bg-zinc-100';
-  const activeBg = isDark ? 'bg-zinc-800' : 'bg-zinc-100';
+  const activeBg = isDark ? 'bg-zinc-700' : 'bg-zinc-100';
 
   return (
     <div className="flex h-[calc(100vh-8rem)] gap-4">
@@ -227,7 +294,7 @@ export default function FilesSection({ isDark }: FilesSectionProps) {
         </div>
 
         {/* Tree */}
-        <div className="flex-1 overflow-y-auto p-2">
+        <div className={`flex-1 overflow-y-auto p-2 ${isDark ? 'bg-zinc-800/50' : ''}`}>
           {treeLoading ? (
             <div className="flex flex-col gap-2 p-2">
               {[1, 2, 3].map(i => (
@@ -272,7 +339,7 @@ export default function FilesSection({ isDark }: FilesSectionProps) {
       </div>
 
       {/* Right panel: file viewer/editor */}
-      <div className={`flex-1 rounded-lg border ${border} ${bg} flex flex-col min-w-0`}>
+      <div className={`flex-1 rounded-lg border ${border} ${bg} flex min-w-0 flex-col`}>
         {selectedFile ? (
           <>
             {/* Toolbar */}
@@ -280,10 +347,13 @@ export default function FilesSection({ isDark }: FilesSectionProps) {
               <div className="flex items-center gap-2 min-w-0">
                 <FileText className={`h-4 w-4 shrink-0 ${textMuted}`} />
                 <span className={`text-sm font-medium truncate ${textMain}`}>{selectedFile}</span>
-                {hasChanges && <span className="text-xs text-amber-400">● unsaved</span>}
+                {!isImageFile && hasChanges && <span className="text-xs text-amber-400">● unsaved</span>}
               </div>
               <div className="flex items-center gap-1">
-                {isEditing ? (
+                {isImageFile ? (
+                  <button onClick={downloadFile} title="Download"
+                    className={`rounded-md p-1.5 ${textMuted} ${hoverBg}`}><Download className="h-3.5 w-3.5" /></button>
+                ) : isEditing ? (
                   <>
                     <button onClick={() => { setIsEditing(false); setFileContent(originalContent); }}
                       className={`rounded-md px-2 py-1 text-xs ${textMuted} ${hoverBg}`}>Cancel</button>
@@ -308,14 +378,26 @@ export default function FilesSection({ isDark }: FilesSectionProps) {
             </div>
 
             {/* Content area */}
-            <div className="flex-1 overflow-y-auto">
+            <div className={`flex-1 overflow-y-auto ${isDark ? 'bg-zinc-800/50' : ''}`}>
               {loading ? (
                 <div className={`flex h-full items-center justify-center ${textMuted}`}>Loading...</div>
+              ) : isImageFile ? (
+                <div className="flex h-full items-center justify-center p-4">
+                  {fileBlobUrl ? (
+                    <img
+                      src={fileBlobUrl}
+                      alt={selectedFile}
+                      className="max-h-full max-w-full rounded-lg object-contain"
+                    />
+                  ) : (
+                    <div className={`${textMuted}`}>Unable to display image</div>
+                  )}
+                </div>
               ) : isEditing ? (
                 <textarea
                   value={fileContent}
                   onChange={e => setFileContent(e.target.value)}
-                  className={`h-full w-full resize-none border-0 p-4 font-mono text-sm focus:outline-none ${isDark ? 'bg-zinc-900 text-zinc-100' : 'bg-white text-zinc-900'}`}
+                  className={`h-full w-full resize-none border-0 p-4 font-mono text-sm focus:outline-none ${isDark ? 'bg-zinc-800/50 text-zinc-100' : 'bg-white text-zinc-900'}`}
                   spellCheck={false}
                 />
               ) : (
@@ -326,7 +408,7 @@ export default function FilesSection({ isDark }: FilesSectionProps) {
             </div>
 
             {/* Footer */}
-            {fileModified && (
+            {fileModified && !isImageFile && (
               <div className={`flex items-center justify-between border-t ${border} px-4 py-1.5 text-[11px] ${textMuted}`}>
                 <span>Last modified: {new Date(fileModified).toLocaleString()}</span>
                 {tokenCount > 0 && <span>Tokens: {tokenCount.toLocaleString()} (GPT)</span>}

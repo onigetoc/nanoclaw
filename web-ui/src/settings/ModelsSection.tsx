@@ -273,7 +273,7 @@ export default function ModelsSection({ isDark }: ModelsSectionProps) {
       ) : (
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
           {/* Left: Provider Selection (single selection, no checkboxes) */}
-          <div className={`rounded-lg border p-4 ${isDark ? 'border-zinc-800 bg-zinc-950' : 'border-zinc-200 bg-zinc-50'}`}>
+          <div className={`rounded-lg border p-4 ${isDark ? 'border-zinc-800 bg-zinc-950' : 'border-zinc-300 bg-zinc-200'}`}>
             <h3 className="mb-3 text-sm font-semibold">Providers</h3>
             
             {/* Search input with clear button */}
@@ -348,7 +348,7 @@ export default function ModelsSection({ isDark }: ModelsSectionProps) {
           </div>
 
           {/* Right: Model Selection with checkboxes */}
-          <div className={`lg:col-span-2 rounded-lg border p-4 ${isDark ? 'border-zinc-800 bg-zinc-950' : 'border-zinc-200 bg-zinc-50'}`}>
+          <div className={`lg:col-span-2 rounded-lg border p-4 ${isDark ? 'border-zinc-800 bg-zinc-950' : 'border-zinc-300 bg-zinc-200'}`}>
             <div className="mb-3 flex items-center justify-between">
               <h3 className="text-sm font-semibold">
                 Models ({totalSelectedModels} selected)

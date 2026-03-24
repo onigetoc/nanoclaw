@@ -141,7 +141,7 @@ export default function EnvVarsSection({ isDark }: EnvVarsSectionProps) {
       )}
 
       {/* Add variable form */}
-      <div className={`rounded-xl border p-4 mb-6 ${isDark ? 'border-zinc-800 bg-zinc-900/80' : 'border-zinc-200 bg-white'}`}>
+      <div className={`rounded-xl border p-4 mb-6 ${isDark ? 'border-zinc-800 bg-zinc-800/60' : 'border-zinc-300 bg-zinc-200'}`}>
         <h3 className={`text-sm font-medium mb-3 ${isDark ? 'text-zinc-200' : 'text-zinc-800'}`}>
           Add / Update Variable
         </h3>
@@ -191,7 +191,7 @@ export default function EnvVarsSection({ isDark }: EnvVarsSectionProps) {
 
       {/* Saved variables list */}
       {variables.length > 0 && (
-        <div className={`rounded-xl border ${isDark ? 'border-zinc-800 bg-zinc-900/80' : 'border-zinc-200 bg-white'}`}>
+        <div className={`rounded-xl border ${isDark ? 'border-zinc-800 bg-zinc-800/60' : 'border-zinc-300 bg-zinc-200'}`}>
           <h3 className={`px-4 pt-3 pb-1 text-[10px] font-semibold uppercase tracking-wider ${isDark ? 'text-zinc-500' : 'text-zinc-400'}`}>
             Registered Variables
           </h3>
