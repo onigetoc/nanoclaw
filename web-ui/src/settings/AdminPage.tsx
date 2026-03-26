@@ -10,6 +10,7 @@ import LogsSection from './LogsSection';
 import ApiKeysSection from './ApiKeysSection';
 import ModelsSection from './ModelsSection';
 import ConfigSection from './ConfigSection';
+import ExecutionTrace from './ExecutionTrace';
 import FilesSection from './FilesSection';
 
 interface AdminPageProps {
@@ -86,6 +87,14 @@ export default function AdminPage({
             )}
             {section === 'cron' && (
               <CronJobsSection isDark={isDark} />
+            )}
+            {section === 'trace' && (
+              <ExecutionTrace
+                executions={monitoringData?.recent ?? []}
+                activeExecutions={monitoringData?.active ?? []}
+                onRefresh={fetchMonitoring}
+                isDark={isDark}
+              />
             )}
             {section === 'debug' && (
               <DebugSection

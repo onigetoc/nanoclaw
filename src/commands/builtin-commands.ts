@@ -12,13 +12,15 @@ import {
   formatDuration,
 } from './sleep-manager.js';
 import { undo, redo } from './undo-manager.js';
+import { createOpencodeClient } from '@opencode-ai/sdk';
 import { ASSISTANT_NAME } from '../config.js';
 import { logger } from '../logger.js';
-import { getSessions, getRegisteredWorkspaces } from '../state.js';
+import { discoveredAgents } from './agent-commands.js';
+import { getSessions, getRegisteredWorkspaces, setWorkspaceSession } from '../state.js';
+import { getOpenCodeHost, getOpenCodePort } from '../opencode-server.js';
 import { getMonitoring } from '../monitoring.js';
 import { getModelInfo } from '../opencode-config.js';
 import { getMessagesPage } from '../db.js';
-import { getOpenCodeHost, getOpenCodePort } from '../opencode-server.js';
 
 /**
  * /restart - Restart EureClaw
@@ -438,15 +440,79 @@ registerCommand('redo', async (ctx: CommandContext): Promise<CommandResponse> =>
 });
 
 /**
+ * /stop - Abort the current OpenCode session (stops ongoing generation)
+ */
+registerCommand('stop', async (ctx: CommandContext): Promise<CommandResponse> => {
+  if (!ctx.group) {
+    return { reply: '⛔ This command is only available in registered chats.' };
+  }
+
+  const sessions = getSessions();
+  const sessionId = sessions[ctx.group.folder];
+
+  if (!sessionId) {
+    return { reply: '❌ No active session to stop.' };
+  }
+
+  try {
+    const baseUrl = `http://${getOpenCodeHost()}:${getOpenCodePort()}`;
+    const client = createOpencodeClient({ baseUrl });
+    await client.session.abort({ path: { id: sessionId } });
+
+    logger.info({ chatJid: ctx.chatJid, sessionId, user: ctx.senderName }, '/stop: Session aborted');
+    return { reply: `🛑 Session aborted (${sessionId.slice(0, 12)}…).\nThe agent has stopped processing.` };
+  } catch (err) {
+    const errMsg = err instanceof Error ? err.message : String(err);
+    logger.error({ sessionId, err: errMsg }, '/stop: Abort failed');
+    return { reply: `❌ Failed to stop session: ${errMsg}` };
+  }
+});
+
+/**
+ * /clear - Delete the current OpenCode session entirely
+ */
+registerCommand('clear', async (ctx: CommandContext): Promise<CommandResponse> => {
+  if (!ctx.group) {
+    return { reply: '⛔ This command is only available in registered chats.' };
+  }
+
+  const sessions = getSessions();
+  const sessionId = sessions[ctx.group.folder];
+
+  if (!sessionId) {
+    return { reply: '❌ No active session to clear.' };
+  }
+
+  try {
+    const baseUrl = `http://${getOpenCodeHost()}:${getOpenCodePort()}`;
+    const client = createOpencodeClient({ baseUrl });
+    await client.session.delete({ path: { id: sessionId } });
+
+    // Clear the session from state so next message creates a fresh one
+    setWorkspaceSession(ctx.group.folder, '');
+
+    logger.info({ chatJid: ctx.chatJid, sessionId, user: ctx.senderName }, '/clear: Session deleted');
+    return { reply: `🗑️ Session deleted (${sessionId.slice(0, 12)}…).\nNext message will start a fresh session.` };
+  } catch (err) {
+    const errMsg = err instanceof Error ? err.message : String(err);
+    logger.error({ sessionId, err: errMsg }, '/clear: Delete failed');
+    return { reply: `❌ Failed to clear session: ${errMsg}` };
+  }
+});
+
+/**
  * /help - Show available commands
  */
 registerCommand('help', async (ctx: CommandContext): Promise<CommandResponse> => {
+  // Build agent list dynamically from discovered agents
+  const agentLines = discoveredAgents
+    .map(a => `/${a.name} [message] - ${a.description}`)
+    .join('\n');
+
   const helpText =
     `🤖 ${ASSISTANT_NAME} Commands\n\n` +
     '**Agent Modes:**\n' +
-    '/plan [message] - Use Plan agent (read-only, analysis)\n' +
-    '/build [message] - Use Build agent (full access)\n' +
-    '/orchestrator [message] - Use Orchestrator (delegates to subagents)\n' +
+    agentLines + '\n' +
     '/model <model-id> [message] - Override model\n' +
     '/agent <name> [message] - Switch to any agent\n\n' +
     '**System Control:**\n' +
@@ -458,6 +524,8 @@ registerCommand('help', async (ctx: CommandContext): Promise<CommandResponse> =>
     '/awake - Wake from sleep mode\n\n' +
     '**Session:**\n' +
     '/new - Start a new conversation session\n' +
+    '/stop - Stop the current agent execution\n' +
+    '/clear - Delete the current session entirely\n' +
     '/undo [steps] - Undo conversation steps (default: 1)\n' +
     '/redo [steps] - Redo conversation steps (default: 1)\n\n' +
     '**Info:**\n' +

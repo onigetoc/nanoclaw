@@ -9,9 +9,11 @@ import {
   ChevronRight,
   CheckCircle2,
   XCircle,
+  Plus,
 } from 'lucide-react';
 import { apiService, type ScheduledTaskInfo } from '../api';
 import CronJobDetail from './CronJobDetail';
+import CronJobCreate from './CronJobCreate';
 
 interface CronJobsSectionProps {
   isDark: boolean;
@@ -77,8 +79,10 @@ export default function CronJobsSection({ isDark }: CronJobsSectionProps) {
   const [tasks, setTasks] = useState<ScheduledTaskInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
   const [expandedWorkspaces, setExpandedWorkspaces] = useState<Set<string>>(new Set());
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [_refreshing, _setRefreshing] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
   const showToast = (message: string, type: 'success' | 'error' = 'success') => {
@@ -159,6 +163,17 @@ export default function CronJobsSection({ isDark }: CronJobsSectionProps) {
     setActionLoading(null);
   };
 
+  // Create view
+  if (creating) {
+    return (
+      <CronJobCreate
+        isDark={isDark}
+        onBack={() => setCreating(false)}
+        onCreated={() => { setCreating(false); void fetchTasks(); }}
+      />
+    );
+  }
+
   // Detail view
   if (selectedTaskId) {
     return (
@@ -190,15 +205,26 @@ export default function CronJobsSection({ isDark }: CronJobsSectionProps) {
     <div>
       <div className="flex items-center justify-between mb-1">
         <h1 className={`text-xl font-semibold ${isDark ? 'text-zinc-100' : 'text-zinc-900'}`}>Cron Jobs</h1>
-        <button
-          type="button"
-          onClick={fetchTasks}
-          className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition ${
-            isDark ? 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200' : 'text-zinc-500 hover:bg-zinc-100 hover:text-zinc-700'
-          }`}
-        >
-          <RefreshCw className="h-3.5 w-3.5" /> Refresh
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setCreating(true)}
+            className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition ${
+              isDark ? 'bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30' : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+            }`}
+          >
+            <Plus className="h-3.5 w-3.5" /> Add
+          </button>
+          <button
+            type="button"
+            onClick={fetchTasks}
+            className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition ${
+              isDark ? 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200' : 'text-zinc-500 hover:bg-zinc-100 hover:text-zinc-700'
+            }`}
+          >
+            <RefreshCw className="h-3.5 w-3.5" /> Refresh
+          </button>
+        </div>
       </div>
       <p className={`text-sm mb-6 ${isDark ? 'text-zinc-500' : 'text-zinc-500'}`}>
         {tasks.length} task{tasks.length !== 1 ? 's' : ''} across {workspaceNames.length} workspace{workspaceNames.length !== 1 ? 's' : ''}.
@@ -211,7 +237,7 @@ export default function CronJobsSection({ isDark }: CronJobsSectionProps) {
           <Clock className="mb-2 h-6 w-6" />
           <p className="text-sm">No scheduled tasks</p>
           <p className={`text-xs mt-1 ${isDark ? 'text-zinc-600' : 'text-zinc-400'}`}>
-            Tasks are created via the agent's schedule_task tool.
+            Create one with the + Add button above, or via the agent's schedule_task tool.
           </p>
         </div>
       ) : (

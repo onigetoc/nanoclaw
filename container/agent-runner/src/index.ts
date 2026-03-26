@@ -19,6 +19,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { createOpencodeClient as _createOpencodeClient } from '@opencode-ai/sdk';
 import { sanitizeContextFile } from './context-security.js';
+import { extractFrontmatterBlock, getFrontmatterValue } from '../../../shared/frontmatter.js';
 import {
   loadEureClawConfig,
   parseModel,
@@ -844,20 +845,238 @@ async function runQuery(
   const promptLower = effectivePrompt.toLowerCase();
   const envDefaultAgent = (process.env.EURECLAW_DEFAULT_AGENT || '').toLowerCase();
 
+  const OPENCODE_TOOLS = new Set([
+    'bash',
+    'read',
+    'write',
+    'edit',
+    'list',
+    'glob',
+    'grep',
+    'webfetch',
+    'task',
+    'todowrite',
+    'todoread',
+  ]);
+
+  type ValidatedSubagent = {
+    name: string;
+    description: string;
+    mode: 'all' | 'primary' | 'subagent';
+    resolvedModel: string;
+    resolvedTemperature: number;
+    hasExplicitMode?: boolean;
+    hasExplicitModel?: boolean;
+    hasExplicitTemperature?: boolean;
+    source: 'config' | 'file' | 'merged';
+  };
+
+  const projectDir = isDirectMode
+    ? containerInput.directMode!.projectDir!
+    : '/workspace/project';
+
+  let runtimeModel: string | undefined;
+  let runtimeSmallModel: string | undefined;
+  let runtimeAgentTemps: Record<string, number> = {};
+  let runtimeConfigAgentDefs: Array<{
+    name: string;
+    description?: string;
+    mode?: string;
+    model?: string;
+    temperature?: number;
+  }> = [];
+  try {
+    const opencodeConfigPath = path.join(projectDir, 'opencode.json');
+    if (fs.existsSync(opencodeConfigPath)) {
+      const cfgRaw = fs.readFileSync(opencodeConfigPath, 'utf-8');
+      const cfg = JSON.parse(cfgRaw) as {
+        model?: string;
+        small_model?: string;
+        agent?: Record<string, { description?: string; mode?: string; model?: string; temperature?: number }>;
+      };
+      runtimeModel = cfg.model;
+      runtimeSmallModel = cfg.small_model;
+      if (cfg.agent && typeof cfg.agent === 'object') {
+        runtimeAgentTemps = Object.fromEntries(
+          Object.entries(cfg.agent)
+            .filter(([, v]) => typeof v?.temperature === 'number')
+            .map(([k, v]) => [k, v!.temperature as number])
+        );
+        runtimeConfigAgentDefs = Object.entries(cfg.agent).map(([name, conf]) => ({
+          name,
+          description: conf?.description,
+          mode: conf?.mode,
+          model: conf?.model,
+          temperature: conf?.temperature,
+        }));
+      }
+    }
+  } catch (err) {
+    log(`⚠ Failed to read opencode.json for agent validation: ${err instanceof Error ? err.message : String(err)}`);
+  }
+
+  const resolveMode = (rawMode?: string): 'all' | 'primary' | 'subagent' => {
+    if (rawMode === 'primary' || rawMode === 'subagent' || rawMode === 'all') return rawMode;
+    return 'all';
+  };
+
+  const resolveModelForMode = (mode: 'all' | 'primary' | 'subagent'): string | undefined => {
+    const fallbackPrimary = eureClawConfig?.models?.primary;
+    const fallbackSmall = eureClawConfig?.models?.small;
+    if (mode === 'subagent') {
+      return runtimeSmallModel || fallbackSmall || runtimeModel || fallbackPrimary;
+    }
+    return runtimeModel || fallbackPrimary || runtimeSmallModel || fallbackSmall;
+  };
+
+  const resolveTemperatureForAgent = (
+    agentName: string,
+    mode: 'all' | 'primary' | 'subagent',
+    rawTemperature?: string,
+  ): number => {
+    if (rawTemperature) {
+      const parsed = Number(rawTemperature);
+      if (!Number.isNaN(parsed)) return parsed;
+    }
+    if (typeof runtimeAgentTemps[agentName] === 'number') {
+      return runtimeAgentTemps[agentName];
+    }
+    return mode === 'subagent' ? 0.1 : 0.2;
+  };
+
+  const validateSubagent = (filePath: string, fileName: string, content: string): { valid: true; agent: ValidatedSubagent } | { valid: false; errors: string[] } => {
+    const frontmatter = extractFrontmatterBlock(content);
+    const description = getFrontmatterValue(frontmatter, 'description') || 'No description available';
+    const rawMode = getFrontmatterValue(frontmatter, 'mode');
+    const rawModel = getFrontmatterValue(frontmatter, 'model');
+    const rawTemperature = getFrontmatterValue(frontmatter, 'temperature');
+    const mode = resolveMode(rawMode);
+    const model = rawModel || resolveModelForMode(mode);
+    const temperature = resolveTemperatureForAgent(fileName, mode, rawTemperature);
+    const toolsRaw = getFrontmatterValue(frontmatter, 'tools');
+    const errors: string[] = [];
+
+    if (!model) {
+      errors.push('model unresolved (missing in frontmatter and config fallback chain)');
+    }
+    if (!Number.isFinite(temperature)) {
+      errors.push('temperature unresolved or invalid');
+    }
+
+    if (toolsRaw && toolsRaw.toLowerCase() !== 'all') {
+      const tools = toolsRaw.split(',').map(t => t.trim()).filter(Boolean);
+      const invalidTools = tools.filter(t => !OPENCODE_TOOLS.has(t));
+      if (invalidTools.length > 0) {
+        errors.push(`invalid tools: ${invalidTools.join(', ')}`);
+      }
+    }
+
+    if (errors.length > 0) {
+      log(`⚠ Subagent ${fileName} is invalid (${filePath}): ${errors.join('; ')}`);
+      return { valid: false, errors };
+    }
+
+    return {
+      valid: true,
+      agent: {
+        name: fileName,
+        description,
+        mode,
+        resolvedModel: model!,
+        resolvedTemperature: temperature,
+        hasExplicitMode: typeof rawMode === 'string' && rawMode.length > 0,
+        hasExplicitModel: typeof rawModel === 'string' && rawModel.length > 0,
+        hasExplicitTemperature: typeof rawTemperature === 'string' && rawTemperature.length > 0,
+        source: 'file',
+      }
+    };
+  };
+
+  const validatedConfigAgents: ValidatedSubagent[] = runtimeConfigAgentDefs
+    .map((a) => {
+      const mode = resolveMode(a.mode);
+      const model = a.model || resolveModelForMode(mode);
+      if (!model) {
+        log(`⚠ Config agent ${a.name} skipped: model unresolved`);
+        return undefined;
+      }
+      const resolvedTemperature = Number.isFinite(a.temperature)
+        ? (a.temperature as number)
+        : resolveTemperatureForAgent(a.name, mode, undefined);
+      return {
+        name: a.name,
+        description: a.description || 'Configured in opencode.json',
+        mode,
+        resolvedModel: model,
+        resolvedTemperature,
+        hasExplicitMode: typeof a.mode === 'string' && a.mode.length > 0,
+        hasExplicitModel: typeof a.model === 'string' && a.model.length > 0,
+        hasExplicitTemperature: typeof a.temperature === 'number',
+        source: 'config',
+      } as ValidatedSubagent;
+    })
+    .filter((a): a is ValidatedSubagent => !!a);
+
   // Discover available subagent names dynamically from .opencode/agents
   // so newly added agents work without code changes.
   const agentsDirForRouting = isDirectMode
     ? path.join(containerInput.directMode!.projectDir!, '.opencode', 'agents')
     : '/workspace/project/.opencode/agents';
   let knownAgentNames = new Set<string>();
+  let validatedSubagents: ValidatedSubagent[] = [];
   try {
     if (fs.existsSync(agentsDirForRouting)) {
       const files = fs.readdirSync(agentsDirForRouting).filter(f => f.endsWith('.md'));
-      knownAgentNames = new Set(files.map(f => path.basename(f, '.md').toLowerCase()));
+      const discovered: ValidatedSubagent[] = [];
+      for (const file of files) {
+        const filePath = path.join(agentsDirForRouting, file);
+        const name = path.basename(file, '.md');
+        const content = fs.readFileSync(filePath, 'utf-8');
+        const result = validateSubagent(filePath, name, content);
+        if (result.valid) {
+          discovered.push(result.agent);
+        }
+      }
+      validatedSubagents = discovered;
     }
   } catch (err) {
     log(`⚠ Failed to discover agents for routing: ${err instanceof Error ? err.message : String(err)}`);
   }
+
+  // Merge agents from opencode.json + .opencode/agents without duplicates.
+  // Policy: keep one entry by name, merge params so explicit values are not lost.
+  // - Description: prefer file description when available
+  // - Mode/model/temperature: prefer explicit file values, otherwise keep config values
+  const allAgentsByName = new Map<string, ValidatedSubagent>();
+  for (const agent of validatedConfigAgents) {
+    allAgentsByName.set(agent.name.toLowerCase(), agent);
+  }
+  for (const agent of validatedSubagents) {
+    const key = agent.name.toLowerCase();
+    const existing = allAgentsByName.get(key);
+    if (!existing) {
+      allAgentsByName.set(key, agent);
+      continue;
+    }
+
+    const merged: ValidatedSubagent = {
+      name: existing.name,
+      description: agent.description && agent.description !== 'No description available'
+        ? agent.description
+        : existing.description,
+      mode: agent.hasExplicitMode ? agent.mode : existing.mode,
+      resolvedModel: agent.hasExplicitModel ? agent.resolvedModel : existing.resolvedModel,
+      resolvedTemperature: agent.hasExplicitTemperature ? agent.resolvedTemperature : existing.resolvedTemperature,
+      hasExplicitMode: existing.hasExplicitMode || agent.hasExplicitMode,
+      hasExplicitModel: existing.hasExplicitModel || agent.hasExplicitModel,
+      hasExplicitTemperature: existing.hasExplicitTemperature || agent.hasExplicitTemperature,
+      source: 'merged',
+    };
+
+    allAgentsByName.set(key, merged);
+  }
+  const allKnownAgents = Array.from(allAgentsByName.values());
+  knownAgentNames = new Set(allKnownAgents.map(a => a.name.toLowerCase()));
 
   // Extract explicit @agent mentions from user prompt.
   const mentionedAgents = Array.from(
@@ -909,106 +1128,23 @@ async function runQuery(
 
   // Session context removed — agents/skills are discovered dynamically below
 
-  // Discover agents and skills dynamically for ALL agents
+  // Discover agents dynamically for ALL agents
   // Build agent needs this to answer "list your agents" questions
   // Orchestrator needs this to delegate to subagents
+  // NOTE: Skills are already injected natively by OpenCode (name+description from .opencode/skills/).
+  //       We only inject agents here since OpenCode does not expose opencode.json inline agents,
+  //       and we add extra metadata (mode, model, temp) that OpenCode does not inject.
   let agentsAndSkillsContext = '';
   {
     try {
-      log('🔍 Discovering available agents and skills...');
+      log('🔍 Discovering available agents...');
       
-      // Discover agents by scanning .opencode/agents/
-      const agentsDir = isDirectMode
-        ? path.join(containerInput.directMode!.projectDir!, '.opencode', 'agents')
-        : '/workspace/project/.opencode/agents';
+      const agents = allKnownAgents.map(a => ({
+        name: a.name,
+        description: `${a.description} [mode=${a.mode}, model=${a.resolvedModel}, temp=${a.resolvedTemperature}]`
+      }));
       
-      const agents: Array<{ name: string; description: string }> = [];
-      if (fs.existsSync(agentsDir)) {
-        const agentFiles = fs.readdirSync(agentsDir).filter(f => f.endsWith('.md'));
-        for (const file of agentFiles) {
-          const filePath = path.join(agentsDir, file);
-          const content = fs.readFileSync(filePath, 'utf-8');
-          
-          // Extract frontmatter description
-          const frontmatterMatch = content.match(/^---\n([\s\S]*?)\n---/);
-          let description = 'No description available';
-          
-          if (frontmatterMatch) {
-            const descMatch = frontmatterMatch[1].match(/description:\s*(.+)/);
-            if (descMatch) {
-              description = descMatch[1].trim().replace(/^["']|["']$/g, '');
-            }
-          }
-          
-          // Fallback: first non-heading line
-          if (description === 'No description available') {
-            const lines = content.replace(/^---\n[\s\S]*?\n---\n/, '').split('\n');
-            for (const line of lines) {
-              const trimmed = line.trim();
-              if (trimmed && !trimmed.startsWith('#')) {
-                description = trimmed.slice(0, 150);
-                break;
-              }
-            }
-          }
-          
-          agents.push({
-            name: path.basename(file, '.md'),
-            description
-          });
-        }
-      }
-      
-      // Discover skills by scanning .opencode/skills/
-      const skillsDir = isDirectMode
-        ? path.join(containerInput.directMode!.projectDir!, '.opencode', 'skills')
-        : '/workspace/project/.opencode/skills';
-      
-      const skills: Array<{ name: string; description: string }> = [];
-      if (fs.existsSync(skillsDir)) {
-        const skillDirs = fs.readdirSync(skillsDir, { withFileTypes: true })
-          .filter(d => d.isDirectory())
-          .map(d => d.name);
-        
-        for (const dir of skillDirs) {
-          const skillFile = path.join(skillsDir, dir, 'SKILL.md');
-          if (!fs.existsSync(skillFile)) continue;
-          
-          const content = fs.readFileSync(skillFile, 'utf-8');
-          
-          // Extract frontmatter description
-          const frontmatterMatch = content.match(/^---\n([\s\S]*?)\n---/);
-          let description = 'No description available';
-          
-          if (frontmatterMatch) {
-            const descMatch = frontmatterMatch[1].match(/description:\s*(.+)/);
-            if (descMatch) {
-              description = descMatch[1].trim().replace(/^["']|["']$/g, '');
-            }
-          }
-          
-          // Fallback: first non-heading line
-          if (description === 'No description available') {
-            const lines = content.replace(/^---\n[\s\S]*?\n---\n/, '').split('\n');
-            for (const line of lines) {
-              const trimmed = line.trim();
-              if (trimmed && !trimmed.startsWith('#')) {
-                description = trimmed.slice(0, 150);
-                break;
-              }
-            }
-          }
-          
-          skills.push({
-            name: dir,
-            description
-          });
-        }
-      }
-      
-      // Build context
       const agentsList = agents.map(a => `- **@${a.name}**: ${a.description}`).join('\n');
-      const skillsList = skills.map(s => `- **${s.name}**: ${s.description}`).join('\n');
       
       agentsAndSkillsContext = `
 ## Available Subagents
@@ -1017,18 +1153,12 @@ You can delegate tasks to these specialized agents:
 
 ${agentsList || 'No agents found'}
 
-## Available Skills
-
-These skills provide additional capabilities:
-
-${skillsList || 'No skills found'}
-
 Use the Task tool to invoke agents when appropriate.
 `;
       
-      log(`✅ Discovered ${agents.length} agents and ${skills.length} skills`);
+      log(`✅ Discovered ${agents.length} agents`);
     } catch (err) {
-      log(`⚠ Failed to discover agents/skills: ${err instanceof Error ? err.message : String(err)}`);
+      log(`⚠ Failed to discover agents: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
 

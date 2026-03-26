@@ -7,7 +7,7 @@ import {
   POLL_INTERVAL,
   TRIGGER_PATTERN,
 } from './config.js';
-import { getMessagesSince, getNewMessages } from './db.js';
+import { getMessagesSince, getMessagesSinceLinked, getNewMessages } from './db.js';
 import { WorkspaceQueue } from './workspace-queue.js';
 import { findChannel, formatMessages } from './router.js';
 import {
@@ -109,7 +109,7 @@ export async function startMessageLoop(
             if (!hasTrigger) continue;
           }
 
-          const allPending = getMessagesSince(
+          const allPending = getMessagesSinceLinked(
             resolvedJid,
             getLastAgentTimestampForJid(resolvedJid),
             ASSISTANT_NAME,

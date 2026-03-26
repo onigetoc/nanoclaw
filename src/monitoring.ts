@@ -9,6 +9,14 @@ import path from 'path';
 import { logger } from './logger.js';
 import { getModelInfo } from './opencode-config.js';
 
+export interface ExecutionStep {
+  timestamp: string;
+  phase: 'queue' | 'init' | 'context' | 'model' | 'fallback' | 'response' | 'error' | 'done';
+  message: string;
+  durationMs?: number;
+  metadata?: Record<string, unknown>;
+}
+
 export interface AgentExecution {
   id: string;
   timestamp: string;
@@ -23,6 +31,7 @@ export interface AgentExecution {
   duration?: number; // milliseconds
   error?: string;
   outputSent: boolean;
+  steps: ExecutionStep[];
 }
 
 export interface ModelUsage {
@@ -48,6 +57,7 @@ class MonitoringService {
   private maxRecentExecutions = 100;
   private startTime = Date.now();
   private logsDir: string;
+  private onStepCallback: ((executionId: string, chatJid: string, step: ExecutionStep) => void) | null = null;
 
   constructor(logsDir: string) {
     this.logsDir = logsDir;
@@ -80,6 +90,11 @@ class MonitoringService {
       sessionId: params.sessionId,
       messageCount: params.messageCount,
       outputSent: false,
+      steps: [{
+        timestamp: new Date().toISOString(),
+        phase: 'queue',
+        message: `Processing ${params.messageCount} message(s) for ${params.workspaceName}`,
+      }],
     };
 
     this.executions.set(id, execution);
@@ -108,6 +123,54 @@ class MonitoringService {
         realModel: execution.model,
       }, '🧠 Real model detected from OpenCode');
     }
+  }
+
+  /**
+   * Add a step to an execution trace.
+   * Steps are kept in-memory on the execution and also broadcast via the onStep callback.
+   */
+  addStep(
+    id: string,
+    phase: ExecutionStep['phase'],
+    message: string,
+    metadata?: Record<string, unknown>,
+  ): void {
+    const execution = this.executions.get(id) || this.recentExecutions.find(e => e.id === id);
+    if (!execution) return;
+
+    const step: ExecutionStep = {
+      timestamp: new Date().toISOString(),
+      phase,
+      message,
+      metadata,
+    };
+
+    // Calculate duration from previous step
+    if (execution.steps.length > 0) {
+      const prevStep = execution.steps[execution.steps.length - 1];
+      prevStep.durationMs = Date.now() - new Date(prevStep.timestamp).getTime();
+    }
+
+    execution.steps.push(step);
+
+    // Notify listener (used by api-server to broadcast via SSE)
+    if (this.onStepCallback) {
+      this.onStepCallback(id, execution.chatJid, step);
+    }
+  }
+
+  /**
+   * Get a specific execution by ID (active or recent).
+   */
+  getExecution(id: string): AgentExecution | undefined {
+    return this.executions.get(id) || this.recentExecutions.find(e => e.id === id);
+  }
+
+  /**
+   * Register a callback for real-time step notifications.
+   */
+  onStep(callback: (executionId: string, chatJid: string, step: ExecutionStep) => void): void {
+    this.onStepCallback = callback;
   }
 
   /**

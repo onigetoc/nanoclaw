@@ -33,6 +33,26 @@ Always use `bun` instead of `npm` for all commands:
 - Use clear, descriptive names
 - Prefer composition over inheritance
 
+## Dynamic Over Hardcoded — CRITICAL RULE
+
+NEVER hardcode lists of agents, workspaces, commands, or any user-configurable entities. EureClaw is designed so users can add their own agents, workspaces, channels, etc. Everything must be discovered dynamically at runtime.
+
+Examples of what NOT to do:
+- Hardcoding agent names like `/plan`, `/build`, `/talk` as individual command handlers
+- Hardcoding workspace names like `main`, `work` in dropdown options
+- Hardcoding channel types instead of scanning registered channels
+- Writing `if (agent === 'plan') ...` instead of a generic handler
+
+Instead, ALWAYS:
+- Scan directories (e.g., `.opencode/agents/*.md`) to discover entities
+- Read config files (e.g., `opencode.json`) to discover entries
+- Use generic handlers that work for any entity name
+- Build UI options (dropdowns, lists) from runtime data, not static arrays
+- Use Maps/registries with dynamic registration patterns
+
+This applies to ALL features: agents, workspaces, commands, cron jobs, UI selectors, etc.
+If a user adds a new agent file or workspace folder, it should work automatically without code changes.
+
 ## TypeScript
 
 - Use strict type checking

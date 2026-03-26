@@ -96,6 +96,42 @@ Rules:
 
 ---
 
+## Chained Delegation — Agents calling Agents
+
+You can instruct a subagent to call another agent by mentioning `@nom_agent` in the prompt you send it. The subagent must have the target agent in its own `task` permissions to proceed.
+
+**Syntax in a delegated prompt:**
+```
+Task(agent="planner", prompt="[WORKSPACE: {folder}] Decompose this task into steps. 
+For each step requiring web data, delegate to @researcher before writing the plan.")
+```
+
+**When to use chaining:**
+- When the subagent needs specialized input mid-task (e.g. @planner needs @researcher to gather context before planning)
+- When a long pipeline exceeds your own scope (e.g. @task-executor needs @summarizer to condense a large output)
+
+**Rules for chaining:**
+1. Only chain when truly necessary — prefer handling the coordination yourself
+2. Always verify the target agent is in the subagent's permissions before chaining
+3. Pass `[WORKSPACE: {folder}]` in every chained prompt
+4. If chaining fails (agent not permitted), handle the sub-task yourself and inject the result into the next call
+
+**Example — research-then-plan:**
+```
+Task(agent="planner", prompt="[WORKSPACE: myproject] 
+First use @researcher to find best practices for X. 
+Then write a 5-step implementation plan based on the results.")
+```
+
+**Example — execute-then-summarize:**
+```
+Task(agent="task-executor", prompt="[WORKSPACE: myproject] 
+Execute workspaces/myproject/tasks/setup.md. 
+When done, use @summarizer to produce a concise completion report.")
+```
+
+---
+
 ## Error Handling
 
 - If a subagent fails or returns empty: retry once with a rephrased prompt

@@ -61,6 +61,7 @@ export default function FilesSection({ isDark }: FilesSectionProps) {
 
   const hasChanges = fileContent !== originalContent;
   const isImageFile = !!selectedFile && /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(selectedFile);
+  const isHtmlFile = !!selectedFile && /\.(html?)$/i.test(selectedFile);
 
   const clearBlobUrl = useCallback(() => {
     setFileBlobUrl((prev) => {
@@ -251,7 +252,8 @@ export default function FilesSection({ isDark }: FilesSectionProps) {
       a.click();
       return;
     }
-    const blob = new Blob([fileContent], { type: 'text/markdown' });
+    const mimeType = isHtmlFile ? 'text/html' : 'text/markdown';
+    const blob = new Blob([fileContent], { type: mimeType });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -400,6 +402,15 @@ export default function FilesSection({ isDark }: FilesSectionProps) {
                   className={`h-full w-full resize-none border-0 p-4 font-mono text-sm focus:outline-none ${isDark ? 'bg-zinc-800/50 text-zinc-100' : 'bg-white text-zinc-900'}`}
                   spellCheck={false}
                 />
+              ) : isHtmlFile ? (
+                <div className="h-full p-3">
+                  <iframe
+                    title={`HTML preview: ${selectedFile}`}
+                    srcDoc={fileContent}
+                    sandbox="allow-forms allow-modals allow-pointer-lock allow-popups allow-presentation allow-scripts"
+                    className={`h-full w-full rounded-md border ${border} ${isDark ? 'bg-white' : 'bg-white'}`}
+                  />
+                </div>
               ) : (
                 <div className={`prose prose-base max-w-none p-4 ${isDark ? 'prose-invert' : ''}`}>
                   <ReactMarkdown remarkPlugins={[remarkGfm]}>{preserveParagraphBreaks(fileContent)}</ReactMarkdown>
@@ -411,7 +422,7 @@ export default function FilesSection({ isDark }: FilesSectionProps) {
             {fileModified && !isImageFile && (
               <div className={`flex items-center justify-between border-t ${border} px-4 py-1.5 text-[11px] ${textMuted}`}>
                 <span>Last modified: {new Date(fileModified).toLocaleString()}</span>
-                {tokenCount > 0 && <span>Tokens: {tokenCount.toLocaleString()} (GPT)</span>}
+                {!isHtmlFile && tokenCount > 0 && <span>Tokens: {tokenCount.toLocaleString()} (GPT)</span>}
               </div>
             )}
           </>

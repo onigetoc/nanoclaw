@@ -5,6 +5,7 @@
 import {
   getAllRegisteredWorkspaces,
   getAllSessions,
+  getLinkedChatJids,
   getRouterState,
   setRegisteredWorkspace,
   setRouterState,
@@ -56,8 +57,30 @@ export function setWorkspaceSession(folder: string, sessionId: string): void {
   setSession(folder, sessionId);
 }
 
+/**
+ * Advance the agent cursor for a JID AND all JIDs linked to the same
+ * workspace folder.  This prevents cross-channel desync when the user
+ * switches between Telegram and the Web UI: without this, messages
+ * already processed via one channel would be re-collected when the
+ * other channel triggers processing (because each JID had its own
+ * independent cursor).
+ */
 export function setLastAgentTimestampForJid(jid: string, ts: string): void {
   lastAgentTimestamp[jid] = ts;
+
+  // Sync all sibling JIDs that share the same workspace folder
+  try {
+    const linkedJids = getLinkedChatJids(jid);
+    for (const linked of linkedJids) {
+      if (linked === jid) continue;
+      const existing = lastAgentTimestamp[linked] || '';
+      if (ts > existing) {
+        lastAgentTimestamp[linked] = ts;
+      }
+    }
+  } catch {
+    // DB not ready yet (e.g. during early startup) — skip sync
+  }
 }
 
 export function getLastAgentTimestampForJid(jid: string): string {

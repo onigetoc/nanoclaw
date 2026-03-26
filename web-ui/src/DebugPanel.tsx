@@ -221,9 +221,10 @@ function MetadataCard({
       </div>
 
       <div
-        className={`border-t px-3 py-1.5 text-[10px] ${isDark ? 'border-zinc-800 text-zinc-600' : 'border-zinc-200 text-zinc-400'}`}
+        className={`flex items-center gap-1.5 border-t px-3 py-1.5 text-[12px] ${isDark ? 'border-zinc-800 text-zinc-600' : 'border-zinc-200 text-zinc-400'}`}
       >
-        {new Date(timestamp).toLocaleTimeString()}
+        <Clock className="h-3 w-3" />
+        <span>Last update: {new Date(timestamp).toLocaleTimeString()}</span>
       </div>
     </div>
   );
@@ -235,7 +236,6 @@ export default function DebugPanel({
   isDark,
   chatFolder,
 }: DebugPanelProps) {
-  const [lastRefreshedAt, setLastRefreshedAt] = useState<Date>(new Date());
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [lastMessageCount, setLastMessageCount] = useState(0);
   const [previousSessionId, setPreviousSessionId] = useState<string | null>(null);
@@ -266,11 +266,8 @@ export default function DebugPanel({
     return () => { cancelled = true; };
   }, []);
 
-  // Update timestamp whenever messages change
+  // Detect if message history was cleared (e.g., /new command)
   useEffect(() => {
-    setLastRefreshedAt(new Date());
-    
-    // Detect if message history was cleared (e.g., /new command)
     if (messages.length < lastMessageCount) {
       console.log('📊 Message history cleared, resetting stats');
     }
@@ -391,19 +388,11 @@ export default function DebugPanel({
       <div
         className={`flex h-16 items-center justify-between border-b px-4 ${isDark ? 'border-zinc-800' : 'border-zinc-300'}`}
       >
-        <div className="flex items-start gap-2 mt-1">
+        <div className="flex items-center gap-2">
           <Bug
             className={`h-4 w-4 ${isDark ? 'text-amber-400' : 'text-amber-600'}`}
           />
-          <div>
-            <h2 className="text-sm font-semibold">Debug</h2>
-            <div
-              className={`flex items-center gap-1 text-[10px] ${isDark ? 'text-zinc-500' : 'text-zinc-500'}`}
-            >
-              <Clock className="h-2.5 w-2.5" />
-              <span>Last update: {lastRefreshedAt.toLocaleTimeString()}</span>
-            </div>
-          </div>
+          <h2 className="text-sm font-semibold">Debug</h2>
         </div>
         <button
           type="button"

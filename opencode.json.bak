@@ -1,0 +1,60 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "google/gemini-3.1-flash-lite-preview",
+  "small_model": "opencode/mimo-v2-flash-free",
+  "provider": {
+    "opencode": {
+      "options": {
+        "timeout": 600000
+      }
+    }
+  },
+  "agent": {
+    "build": {
+      "description": "Main development agent with full tool access",
+      "mode": "primary",
+      "temperature": 0.3,
+      "permission": {
+        "task": {
+          "*": "allow"
+        }
+      }
+    },
+    "orchestrator": {
+      "description": "Intelligent task orchestrator that delegates to specialized subagents",
+      "mode": "primary",
+      "temperature": 0.2,
+      "prompt": "{file:.opencode/prompts/orchestrator.md}",
+      "permission": {
+        "edit": "ask",
+        "bash": "ask",
+        "skill": "allow",
+        "task": {
+          "planner": "allow",
+          "researcher": "allow",
+          "summarizer": "allow",
+          "general": "allow",
+          "explore": "allow",
+          "task-planner": "allow",
+          "task-executor": "allow"
+        }
+      }
+    },
+    "researcher": {
+      "description": "Web research specialist — searches, fetches, compiles results with links"
+    },
+    "summarizer": {
+      "description": "Synthesizes information from multiple sources into structured summaries"
+    },
+    "planner": {
+      "description": "Decomposes complex tasks into executable subtask plans"
+    },
+    "task-planner": {
+      "description": "Creates task plans in workspaces/{workspace}/tasks/"
+    },
+    "task-executor": {
+      "description": "Executes task plans from workspaces/{workspace}/tasks/"
+    }
+  },
+  "mcp": {}
+}

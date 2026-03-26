@@ -1,7 +1,8 @@
 {
   "$schema": "https://opencode.ai/config.json",
   "model": "google/gemini-3.1-flash-lite-preview",
-  "small_model": "opencode/mimo-v2-flash-free",
+  "small_model": "opencode/big-pickle",
+  "default_agent": "orchestrator",
   "provider": {
     "opencode": {
       "options": {
@@ -23,19 +24,15 @@
     "orchestrator": {
       "description": "Intelligent task orchestrator that delegates to specialized subagents",
       "mode": "primary",
+      "model": "opencode/big-pickle",
       "temperature": 0.2,
       "prompt": "{file:.opencode/prompts/orchestrator.md}",
       "permission": {
         "edit": "ask",
         "bash": "ask",
+        "skill": "allow",
         "task": {
-          "planner": "allow",
-          "researcher": "allow",
-          "summarizer": "allow",
-          "general": "allow",
-          "explore": "allow",
-          "task-planner": "allow",
-          "task-executor": "allow"
+          "*": "allow"
         }
       }
     },
@@ -53,6 +50,21 @@
     },
     "task-executor": {
       "description": "Executes task plans from workspaces/{workspace}/tasks/"
+    },
+    "talk": {
+      "description": "Read-only agent - can ask, read files, and browse the internet but cannot execute commands or modify files",
+      "mode": "primary",
+      "temperature": 0.2,
+      "permission": {
+        "read": "allow",
+        "websearch": "allow",
+        "webfetch": "allow",
+        "edit": "deny",
+        "bash": "deny",
+        "write": "deny",
+        "skill": "deny",
+        "task": "deny"
+      }
     }
   },
   "mcp": {}

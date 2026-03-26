@@ -13,6 +13,7 @@ import {
   ChevronRight,
 } from 'lucide-react';
 import { apiService, type ScheduledTaskInfo, type TaskRunLogEntry } from '../api';
+import CronBuilder from './CronBuilder';
 
 interface CronJobDetailProps {
   taskId: string;
@@ -40,6 +41,10 @@ export default function CronJobDetail({ taskId, isDark, onBack, onDeleted }: Cro
   const [editPrompt, setEditPrompt] = useState('');
   const [editScheduleType, setEditScheduleType] = useState('');
   const [editScheduleValue, setEditScheduleValue] = useState('');
+  const [editWorkspaceFolder, setEditWorkspaceFolder] = useState('');
+
+  // Workspace list for the edit dropdown (fetched dynamically)
+  const [workspaceList, setWorkspaceList] = useState<Array<{ folder: string; name: string }>>([]);
 
   const fetchDetail = useCallback(async () => {
     try {
@@ -51,6 +56,7 @@ export default function CronJobDetail({ taskId, isDark, onBack, onDeleted }: Cro
         setEditPrompt(data.task.prompt);
         setEditScheduleType(data.task.schedule_type);
         setEditScheduleValue(data.task.schedule_value);
+        setEditWorkspaceFolder(data.task.workspace_folder);
       }
     } catch { /* */ }
     setLoading(false);
@@ -62,6 +68,17 @@ export default function CronJobDetail({ taskId, isDark, onBack, onDeleted }: Cro
     return () => clearInterval(interval);
   }, [fetchDetail]);
 
+  // Fetch workspaces once for the edit dropdown
+  useEffect(() => {
+    apiService.getWorkspaces().then((ws) => {
+      const seen = new Map<string, string>();
+      for (const w of Object.values(ws)) {
+        if (!seen.has(w.folder)) seen.set(w.folder, w.name);
+      }
+      setWorkspaceList(Array.from(seen.entries()).map(([folder, name]) => ({ folder, name })));
+    }).catch(() => {});
+  }, []);
+
   const handleSave = async () => {
     setActionLoading(true);
     try {
@@ -69,6 +86,7 @@ export default function CronJobDetail({ taskId, isDark, onBack, onDeleted }: Cro
         prompt: editPrompt,
         schedule_type: editScheduleType,
         schedule_value: editScheduleValue,
+        workspace_folder: editWorkspaceFolder !== task?.workspace_folder ? editWorkspaceFolder : undefined,
       });
       setEditing(false);
       showToast('Task updated');
@@ -210,6 +228,18 @@ export default function CronJobDetail({ taskId, isDark, onBack, onDeleted }: Cro
       {/* Info cards */}
       <div className="grid grid-cols-2 gap-4 mb-6">
         <div className={cardClass}>
+          <div className={labelClass}>Workspace</div>
+          {editing ? (
+            <select value={editWorkspaceFolder} onChange={(e) => setEditWorkspaceFolder(e.target.value)} className={inputClass}>
+              {workspaceList.map((ws) => (
+                <option key={ws.folder} value={ws.folder}>{ws.name}</option>
+              ))}
+            </select>
+          ) : (
+            <div className={valueClass}>{task.workspace_name}</div>
+          )}
+        </div>
+        <div className={cardClass}>
           <div className={labelClass}>Status</div>
           <div className="flex items-center gap-2">
             <span className={`h-2 w-2 rounded-full ${
@@ -243,10 +273,6 @@ export default function CronJobDetail({ taskId, isDark, onBack, onDeleted }: Cro
           </div>
         </div>
         <div className={cardClass}>
-          <div className={labelClass}>Context Mode</div>
-          <div className={valueClass}>{task.context_mode}</div>
-        </div>
-        <div className={cardClass}>
           <div className={labelClass}>Created</div>
           <div className={valueClass}>{new Date(task.created_at).toLocaleString()}</div>
         </div>
@@ -273,10 +299,10 @@ export default function CronJobDetail({ taskId, isDark, onBack, onDeleted }: Cro
       {editing && (
         <div className={`${cardClass} mb-6`}>
           <div className={labelClass}>Schedule</div>
-          <div className="flex items-center gap-3 mt-1">
+          <div className="mb-3">
             <select
               value={editScheduleType}
-              onChange={(e) => setEditScheduleType(e.target.value)}
+              onChange={(e) => { setEditScheduleType(e.target.value); setEditScheduleValue(''); }}
               className={inputClass}
               style={{ maxWidth: 140 }}
             >
@@ -284,14 +310,24 @@ export default function CronJobDetail({ taskId, isDark, onBack, onDeleted }: Cro
               <option value="interval">Interval</option>
               <option value="once">Once</option>
             </select>
+          </div>
+
+          {editScheduleType === 'cron' ? (
+            <CronBuilder
+              value={editScheduleValue || '0 9 * * *'}
+              onChange={setEditScheduleValue}
+              isDark={isDark}
+            />
+          ) : (
             <input
               type="text"
               value={editScheduleValue}
               onChange={(e) => setEditScheduleValue(e.target.value)}
-              placeholder={editScheduleType === 'cron' ? '*/30 * * * *' : editScheduleType === 'interval' ? '3600000' : '2026-04-01T10:00:00Z'}
+              placeholder={editScheduleType === 'interval' ? '3600000' : '2026-04-01T10:00:00'}
               className={inputClass}
             />
-          </div>
+          )}
+
           <div className="flex justify-end gap-2 mt-3">
             <button
               type="button"

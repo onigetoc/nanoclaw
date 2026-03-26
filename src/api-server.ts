@@ -32,6 +32,7 @@ import { registerMarkdownRoutes } from './api-markdown-routes.js';
 import { registerTaskRoutes } from './api-tasks-routes.js';
 import { getProviders, getPopularProviders, clearCache as clearModelsCache } from './models-cache.js';
 import { restartServer as restartOpenCodeServer } from './opencode-server.js';
+import { extractFrontmatterBlock, getFrontmatterValue } from '../shared/frontmatter.js';
 
 const API_PORT = parseInt(process.env.API_PORT || '4300', 10);
 
@@ -920,24 +921,21 @@ fastify.get('/config', { preHandler: authenticate }, async () => {
  * 1. Hardcoded defaults: build + plan (always present)
  * 2. opencode.json agents with mode: "primary"
  * 3. .opencode/agents/*.md files with mode: primary in frontmatter
- * Deduplicates by agent ID (first wins).
+ * Smart merge: both sources are read independently; for duplicates, file description
+ * wins if meaningful, otherwise config description is preserved. Source tracked as
+ * 'config' | 'file' | 'merged' for debug visibility.
  */
 fastify.get('/agents', { preHandler: authenticate }, async () => {
   try {
     const { loadOpenCodeConfig } = await import('./opencode-config.js');
     const config = loadOpenCodeConfig();
-    const seen = new Set<string>();
-    const agents: Array<{ id: string; name: string; description: string }> = [];
 
-    const addAgent = (id: string, name: string, description: string) => {
-      if (seen.has(id)) return;
-      seen.add(id);
-      agents.push({ id, name, description });
-    };
+    type AgentEntry = { id: string; name: string; description: string; source: 'config' | 'file' | 'merged' };
+    const agentMap = new Map<string, AgentEntry>();
 
-    // 1. Hardcoded OpenCode defaults (always first)
-    addAgent('build', 'Build', 'Main development agent with full tool access');
-    addAgent('plan', 'Plan', 'Planning and task breakdown agent');
+    // 1. Hardcoded OpenCode defaults (always included)
+    agentMap.set('build', { id: 'build', name: 'Build', description: 'Main development agent with full tool access', source: 'config' });
+    agentMap.set('plan', { id: 'plan', name: 'Plan', description: 'Planning and task breakdown agent', source: 'config' });
 
     // 2. Primary agents from opencode.json
     if (config.agent) {
@@ -945,17 +943,18 @@ fastify.get('/agents', { preHandler: authenticate }, async () => {
         if (typeof agentConfig === 'object' && agentConfig !== null) {
           const conf = agentConfig as { description?: string; mode?: string };
           if (conf.mode === 'primary') {
-            addAgent(
-              agentId,
-              agentId.charAt(0).toUpperCase() + agentId.slice(1),
-              conf.description || `${agentId} agent`,
-            );
+            agentMap.set(agentId.toLowerCase(), {
+              id: agentId,
+              name: agentId.charAt(0).toUpperCase() + agentId.slice(1),
+              description: conf.description || `${agentId} agent`,
+              source: 'config',
+            });
           }
         }
       }
     }
 
-    // 3. Scan .opencode/agents/*.md for primary agents (frontmatter mode: primary)
+    // 3. Scan .opencode/agents/*.md — smart merge with config entries
     try {
       const fs = await import('fs');
       const path = await import('path');
@@ -964,26 +963,32 @@ fastify.get('/agents', { preHandler: authenticate }, async () => {
         const files = fs.readdirSync(agentsDir).filter((f: string) => f.endsWith('.md'));
         for (const file of files) {
           const content = fs.readFileSync(path.join(agentsDir, file), 'utf-8');
-          // Parse YAML frontmatter between --- markers
-          const fmMatch = content.match(/^---\n([\s\S]*?)\n---/);
-          if (!fmMatch) continue;
-          const fm = fmMatch[1];
-          // Check mode: primary (not subagent, not absent)
-          const modeMatch = fm.match(/^mode:\s*(.+)$/m);
-          if (!modeMatch || modeMatch[1].trim() !== 'primary') continue;
+          const frontmatter = extractFrontmatterBlock(content);
+          const mode = getFrontmatterValue(frontmatter, 'mode');
+          if (mode !== 'primary') continue;
           const agentId = file.replace(/\.md$/, '');
-          const descMatch = fm.match(/^description:\s*(.+)$/m);
-          addAgent(
-            agentId,
-            agentId.charAt(0).toUpperCase() + agentId.slice(1),
-            descMatch ? descMatch[1].trim() : `${agentId} agent`,
-          );
+          const key = agentId.toLowerCase();
+          const fileDesc = getFrontmatterValue(frontmatter, 'description') || '';
+          const existing = agentMap.get(key);
+          if (!existing) {
+            agentMap.set(key, {
+              id: agentId,
+              name: agentId.charAt(0).toUpperCase() + agentId.slice(1),
+              description: fileDesc || `${agentId} agent`,
+              source: 'file',
+            });
+          } else {
+            // File description wins if it's meaningful (not a generic placeholder)
+            const mergedDesc = fileDesc && fileDesc !== `${agentId} agent` ? fileDesc : existing.description;
+            agentMap.set(key, { ...existing, description: mergedDesc, source: 'merged' });
+          }
         }
       }
     } catch (mdErr) {
       logger.warn({ err: mdErr }, 'Failed to scan .opencode/agents/ directory');
     }
 
+    const agents = Array.from(agentMap.values()).map(({ id, name, description }) => ({ id, name, description }));
     logger.debug({ agentCount: agents.length, agents }, 'Loaded primary agents');
     return { agents };
   } catch (err) {
@@ -1041,6 +1046,19 @@ fastify.get('/monitoring', { preHandler: authenticate }, async () => {
       sessions: {},
     };
   }
+});
+
+/**
+ * Execution detail endpoint: get a specific execution with its step trace.
+ */
+fastify.get('/monitoring/executions/:id', { preHandler: authenticate }, async (request) => {
+  const { id } = request.params as { id: string };
+  const monitoring = getMonitoring();
+  const execution = monitoring.getExecution(id);
+  if (!execution) {
+    return { error: 'Execution not found' };
+  }
+  return execution;
 });
 
 /**
@@ -1341,6 +1359,38 @@ export function broadcastStatus(
           } catch (e) {
             connections.delete(sendEvent);
           }
+        }
+      }
+    }
+  }
+}
+
+/**
+ * Broadcast an execution step event to web UI clients.
+ * Used for the real-time execution trace timeline.
+ */
+export function broadcastStep(
+  chatJid: string,
+  executionId: string,
+  step: { timestamp: string; phase: string; message: string; metadata?: Record<string, unknown> },
+): void {
+  const linkedJids = getLinkedChatJids(chatJid);
+  if (!linkedJids.includes(chatJid)) linkedJids.push(chatJid);
+
+  for (const [tokenId, connections] of sseConnections.entries()) {
+    const mappings = getApiTokenChatMappings(tokenId);
+    const hasChat = mappings.length === 0 || linkedJids.some((jid) => mappings.includes(jid));
+
+    if (hasChat) {
+      const sentConnections = new Set<(data: string) => void>();
+      const payload = JSON.stringify({ type: 'step', chatJid, executionId, step, timestamp: new Date().toISOString() });
+      for (const sendEvent of connections) {
+        if (sentConnections.has(sendEvent)) continue;
+        try {
+          sendEvent(payload);
+          sentConnections.add(sendEvent);
+        } catch (e) {
+          connections.delete(sendEvent);
         }
       }
     }

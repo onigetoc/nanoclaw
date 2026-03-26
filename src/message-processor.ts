@@ -64,9 +64,11 @@ export async function processWorkspaceMessages(
 
   const sinceTimestamp = getLastAgentTimestampForJid(chatJid);
 
-  const missedMessages = chatJid.startsWith('web:')
-    ? getMessagesSinceLinked(chatJid, sinceTimestamp, ASSISTANT_NAME)
-    : getMessagesSince(chatJid, sinceTimestamp, ASSISTANT_NAME);
+  // Always use linked query so messages from ALL channels (Telegram, Web UI, etc.)
+  // sharing the same workspace folder are collected together.
+  // Previously, non-web JIDs used getMessagesSince (single JID) which missed
+  // messages sent via the Web UI, causing cursor desync and message replay.
+  const missedMessages = getMessagesSinceLinked(chatJid, sinceTimestamp, ASSISTANT_NAME);
 
   if (missedMessages.length === 0) return true;
 
@@ -137,6 +139,8 @@ export async function processWorkspaceMessages(
   const channel = findChannel(channels, chatJid);
   if (!channel) return true;
 
+  monitoring.addStep(executionId, 'init', 'Starting agent…', { model: preferences?.model, agent: preferences?.agent });
+
   await channel.setTyping?.(chatJid, true);
   let hadError = false;
   let lastErrorMessage = '';
@@ -147,6 +151,7 @@ export async function processWorkspaceMessages(
     prompt,
     chatJid,
     queue,
+    executionId,
     preferences,
     async (result) => {
       if (result.result) {
@@ -168,6 +173,11 @@ export async function processWorkspaceMessages(
         // Track actual model used for monitoring
         if (result.metadata?.modelID && !actualModel) {
           actualModel = `${result.metadata.providerID || 'unknown'}/${result.metadata.modelID}`;
+          monitoring.addStep(executionId, 'response', `Response from ${actualModel}`, {
+            agent: result.metadata.agent,
+            tokens: result.metadata.tokens,
+            cost: result.metadata.cost,
+          });
         }
         if (text) {
           const msgMetadata = result.metadata
@@ -229,6 +239,7 @@ export async function processWorkspaceMessages(
       if (result.status === 'error') {
         hadError = true;
         lastErrorMessage = result.error || 'Unknown error';
+        monitoring.addStep(executionId, 'error', lastErrorMessage);
         monitoring.updateExecution(executionId, {
           status: 'error',
           error: result.error,
@@ -285,6 +296,7 @@ export async function processWorkspaceMessages(
     return true; // Return true so the queue doesn't retry automatically
   }
 
+  monitoring.addStep(executionId, 'done', actualModel ? `Completed with ${actualModel}` : 'Completed');
   monitoring.updateExecution(executionId, { status: 'completed', model: actualModel });
   return true;
 }
@@ -413,6 +425,7 @@ async function runAgent(
   prompt: string,
   chatJid: string,
   queue: WorkspaceQueue,
+  executionId: string,
   preferences?: { model?: string; agent?: string },
   onOutput?: (output: ContainerOutput) => Promise<void>,
 ): Promise<'success' | 'error'> {
@@ -507,8 +520,14 @@ async function runAgent(
       agent: preferences?.agent,
     };
 
+    // Step callback: forward agent-runner log steps to monitoring
+    const monitoring = getMonitoring();
+    const onStepUpdate = (step: import('./direct-runner.js').AgentStepEvent) => {
+      monitoring.addStep(executionId, step.phase, step.message, step.metadata);
+    };
+
     const output = useDirectMode
-      ? await runDirectAgent(workspace, agentInput, onProcessCb, wrappedOnOutput, onStatusUpdate)
+      ? await runDirectAgent(workspace, agentInput, onProcessCb, wrappedOnOutput, onStatusUpdate, onStepUpdate)
       : await runContainerAgent(workspace, agentInput, onProcessCb, wrappedOnOutput);
     
     // Clear preferences after use

@@ -39,9 +39,113 @@ function parseAgentStatus(line: string): string | null {
   if (line.includes('Prompt failed') && line.includes('retrying')) return 'Retrying with fresh session…';
   if (line.includes('ContextOverflowError')) return 'Context overflow, resetting…';
   if (line.includes('Waiting for model response')) return 'Waiting for model…';
-  if (line.includes('Query completed successfully')) return 'Query done';
-  if (line.includes('waiting for next IPC message')) return 'Ready for next message';
+  // i keep it to may be use it but keep it commented because i do not want to see it in the Web UI for now 
+  // Because it appear long after de conversation in finish and i do not like it.
+  //if (line.includes('Query completed successfully')) return 'Query done';
+  //if (line.includes('waiting for next IPC message')) return 'Ready for next message';
   if (line.includes('Discovered') && line.includes('agents')) return 'Discovering agents…';
+  return null;
+}
+
+export interface AgentStepEvent {
+  phase: 'init' | 'context' | 'model' | 'fallback' | 'response' | 'error' | 'done';
+  message: string;
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Parse agent-runner stderr lines for execution trace steps.
+ * Returns a structured step event for key milestones, null for noise.
+ */
+function parseAgentStep(line: string): AgentStepEvent | null {
+  // Model fallback chain
+  if (line.includes('Model fallback chain:')) {
+    const chain = line.split('Model fallback chain:')[1]?.trim();
+    return { phase: 'model', message: `Fallback chain: ${chain}` };
+  }
+  // Trying a specific model
+  const tryMatch = line.match(/Trying model (\d+\/\d+): (.+)/);
+  if (tryMatch) {
+    return { phase: 'model', message: `Trying ${tryMatch[2]} (${tryMatch[1]})`, metadata: { model: tryMatch[2] } };
+  }
+  // Model failed
+  const failMatch = line.match(/Model "(.+?)" failed \(attempt (\d+\/\d+)\): (.+)/);
+  if (failMatch) {
+    return { phase: 'fallback', message: `${failMatch[1]} failed: ${failMatch[3].slice(0, 120)}`, metadata: { model: failMatch[1], attempt: failMatch[2] } };
+  }
+  // Fallback succeeded
+  if (line.includes('Fallback model succeeded:')) {
+    const model = line.split('Fallback model succeeded:')[1]?.trim();
+    return { phase: 'response', message: `Fallback succeeded: ${model}`, metadata: { model } };
+  }
+  // All models failed
+  if (line.includes('All models failed')) {
+    const detail = line.split('All models failed')[1]?.trim() || '';
+    return { phase: 'error', message: `All models failed ${detail.slice(0, 150)}` };
+  }
+  // Session creation
+  if (line.includes('Creating new OpenCode session')) {
+    return { phase: 'init', message: 'Creating new session' };
+  }
+  if (line.includes('Session verified, resuming')) {
+    return { phase: 'init', message: 'Resuming existing session' };
+  }
+  // Context injection
+  if (line.includes('Injecting system context')) {
+    const sizeMatch = line.match(/\((\d+) chars\)/);
+    return { phase: 'context', message: `Injecting context${sizeMatch ? ` (${sizeMatch[1]} chars)` : ''}` };
+  }
+  if (line.includes('context injected successfully')) {
+    return { phase: 'context', message: 'Context loaded' };
+  }
+  // Agent routing
+  if (line.includes('Using orchestrator agent')) {
+    return { phase: 'init', message: 'Routed to orchestrator agent' };
+  }
+  if (line.includes('Using build agent')) {
+    return { phase: 'init', message: 'Routed to build agent' };
+  }
+  if (line.includes('Using plan agent')) {
+    return { phase: 'init', message: 'Routed to plan agent' };
+  }
+  const agentMatch = line.match(/Using (.+?) agent \((.+?)\)/);
+  if (agentMatch) {
+    return { phase: 'init', message: `Routed to ${agentMatch[1]} (${agentMatch[2]})` };
+  }
+  // Sending to model
+  if (line.includes('Sending message to session')) {
+    return { phase: 'model', message: 'Sending prompt to model…' };
+  }
+  // Response received
+  if (line.includes('Response received from session')) {
+    return { phase: 'response', message: 'Response received' };
+  }
+  // Model info
+  const modelInfoMatch = line.match(/Model: (.+?), agent: (.+?), tokens: (.+?)(?:\s|$)/);
+  if (modelInfoMatch) {
+    try {
+      const tokens = JSON.parse(modelInfoMatch[3]);
+      return { phase: 'response', message: `Model: ${modelInfoMatch[1]}, agent: ${modelInfoMatch[2]}`, metadata: { tokens } };
+    } catch {
+      return { phase: 'response', message: `Model: ${modelInfoMatch[1]}, agent: ${modelInfoMatch[2]}` };
+    }
+  }
+  // Context overflow
+  if (line.includes('ContextOverflowError')) {
+    return { phase: 'error', message: 'Context overflow — resetting session' };
+  }
+  // Session refresh during fallback
+  if (line.includes('Failed to refresh session')) {
+    return { phase: 'error', message: 'Failed to refresh session for fallback' };
+  }
+  // Non-model error stopping chain
+  if (line.includes('Non-model error, stopping fallback chain')) {
+    return { phase: 'error', message: 'Non-model error, stopping fallback chain' };
+  }
+  // Query done
+  if (line.includes('Query completed successfully')) {
+    return { phase: 'done', message: 'Query completed' };
+  }
   return null;
 }
 
@@ -54,6 +158,7 @@ export async function runDirectAgent(
   onProcess: (proc: ChildProcess, processName: string) => void,
   onOutput?: (output: ContainerOutput) => Promise<void>,
   onStatus?: (detail: string) => void,
+  onStep?: (step: AgentStepEvent) => void,
 ): Promise<ContainerOutput> {
   const startTime = Date.now();
 

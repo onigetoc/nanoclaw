@@ -68,6 +68,15 @@ export interface AgentExecution {
   duration?: number;
   error?: string;
   outputSent: boolean;
+  steps?: ExecutionStep[];
+}
+
+export interface ExecutionStep {
+  timestamp: string;
+  phase: 'queue' | 'init' | 'context' | 'model' | 'fallback' | 'response' | 'error' | 'done';
+  message: string;
+  durationMs?: number;
+  metadata?: Record<string, unknown>;
 }
 
 export interface ScheduledTaskInfo {
@@ -452,6 +461,15 @@ class ApiService {
     return result;
   }
 
+  async getExecutionDetail(id: string): Promise<AgentExecution | null> {
+    try {
+      const result = await this.request<AgentExecution>(`/monitoring/executions/${id}`);
+      return result;
+    } catch {
+      return null;
+    }
+  }
+
   async getSystemInfo(): Promise<SystemInfo> {
     const result = await this.request<SystemInfo>('/system/info');
     return result;
@@ -553,6 +571,7 @@ class ApiService {
     prompt?: string;
     schedule_type?: string;
     schedule_value?: string;
+    workspace_folder?: string;
   }): Promise<{ success: boolean }> {
     return this.request(`/tasks/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify(data) });
   }

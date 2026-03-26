@@ -160,6 +160,19 @@ export function registerTaskRoutes(fastify: FastifyInstance, authenticate: any):
     if (body?.schedule_type !== undefined) updates.schedule_type = (body.schedule_type as string).trim();
     if (body?.schedule_value !== undefined) updates.schedule_value = (body.schedule_value as string).trim();
 
+    // Allow changing workspace (also updates chat_jid to match)
+    if (body?.workspace_folder !== undefined) {
+      const newFolder = (body.workspace_folder as string).trim();
+      const workspaces = getRegisteredWorkspaces();
+      const wsEntry = Object.entries(workspaces).find(([, ws]) => ws.folder === newFolder);
+      if (!wsEntry) {
+        reply.code(400).send({ error: 'Workspace not found' });
+        return;
+      }
+      updates.workspace_folder = newFolder;
+      updates.chat_jid = wsEntry[0]; // JID is the key
+    }
+
     // Validate cron if changed
     const newType = (updates.schedule_type as string) || task.schedule_type;
     const newValue = (updates.schedule_value as string) || task.schedule_value;

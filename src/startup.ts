@@ -36,15 +36,15 @@ import {
 import { scanAndGetApiKeys, logApiKeysReport } from './api-key-scanner.js';
 import { executeCommand } from './commands/index.js';
 import { handleCommandSideEffects } from './commands/command-effects.js';
+import './commands/agent-commands.js';
 import './commands/builtin-commands.js';
 import './commands/opencode-commands.js';
-import './commands/agent-commands.js';
 import {
   loadSleepState,
   isSleeping,
   setOnWakeCallback,
 } from './commands/sleep-manager.js';
-import { initMonitoring } from './monitoring.js';
+import { initMonitoring, getMonitoring } from './monitoring.js';
 import {
   loadState,
   getRegisteredWorkspaces,
@@ -66,6 +66,7 @@ import {
   setQueueRef,
   broadcastToToken,
   broadcastStatus,
+  broadcastStep,
 } from './api-server.js';
 import { setTriggerTaskFunction } from './api-tasks-routes.js';
 import { processWorkspaceMessages } from './message-processor.js';
@@ -407,6 +408,11 @@ export async function main(): Promise<void> {
   const logsDir = path.join(process.cwd(), 'logs');
   initMonitoring(logsDir);
   logger.info('Monitoring service initialized');
+
+  // Wire monitoring step events to SSE broadcast for real-time execution trace
+  getMonitoring().onStep((executionId, chatJid, step) => {
+    broadcastStep(chatJid, executionId, step);
+  });
 
   loadState();
   loadSleepState();

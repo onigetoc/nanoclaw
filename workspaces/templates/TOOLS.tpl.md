@@ -110,42 +110,36 @@ When performing ANY search (news, YouTube, Wikipedia, web, Brave, GitHub, etc.):
 - Answer questions about image content
 - **Never say "I can't see images"** - You have vision capabilities, use them!
 
-## Available Skills
+## Dynamic Discovery
 
-Skills are located in `.opencode/skills/`. Each skill has a `SKILL.md` file with detailed instructions.
+Do not treat this file as the source of truth for the current agent or skill inventory.
 
-### Communication & Channels
-- **add-telegram** - Add Telegram channel support to EureClaw
-- **add-telegram-swarm** - Multi-agent Telegram coordination
-- **add-gmail** - Gmail integration for email management
+### Skills
+- Skills live in `.opencode/skills/`
+- OpenCode scans `.opencode/skills/*/SKILL.md` at session start and injects skill names and descriptions natively
+- If a skill exists on disk but is not mentioned in this file, trust the dynamic scan, not this document
 
-### Voice & Media
-- **add-voice-transcription** - Transcribe voice messages using OpenAI Whisper
-  - Automatically handles WhatsApp/Telegram voice notes
-  - Requires OpenAI API key
-  - Cost: ~$0.006 per minute of audio
+### Agents
+- File-based agents live in `.opencode/agents/`
+- Inline agents live in `opencode.json`
+- OpenCode scans `.opencode/agents/*.md` natively
+- EureClaw additionally injects agents from `opencode.json` plus merged metadata at session start
 
-### Automation & Integration
-- **add-parallel** - Enable parallel agent execution for faster processing
-- **x-integration** - Twitter/X integration (post, reply, like, retweet, quote)
+### Important Constraint
+- Discovery is effectively a session-start snapshot
+- If agents or skills are added, removed, or renamed during an existing session, the model may need a new session to see the updated inventory reliably
 
-### Development & Deployment
-- **convert-to-docker** - Containerize EureClaw for deployment
-- **setup** - Complete setup wizard for EureClaw installation
-- **debug** - Debugging tools and troubleshooting guides
-
-### Customization
-- **customize** - Customize EureClaw behavior and appearance
-- **skill-creator** - Create new skills for EureClaw
+Use this file for general operational guidance only. Use dynamic discovery for the actual list of agents and skills.
 
 ## How to Use Skills
 
 When you encounter a need that might be covered by a skill:
 
-1. **Check if the skill exists**: Look in `.opencode/skills/` directory
-2. **Read the SKILL.md**: Each skill has complete documentation
-3. **Just do it**: Install, configure, and use it immediately
-4. **Briefly explain what you did**: Tell the user after the fact so they understand (especially if it involves paid APIs)
+1. Use the dynamically injected skill list first if it is available in the current session
+2. If needed, verify on disk in `.opencode/skills/`
+3. Read the corresponding `SKILL.md`
+4. Use the skill immediately when it is the right tool
+5. Briefly explain what you did afterward, especially if it involves paid APIs
 
 **IMPORTANT: Act first, explain after.** Don't ask "would you like me to...?" — just do it. But always tell the user what you did and any cost implications.
 
@@ -165,13 +159,11 @@ _(J'ai utilisé l'API Whisper d'OpenAI pour transcrire ton audio — ça coûte 
 ## Proactive Behavior
 
 When you encounter something new:
-- **Voice message** → Check for `add-voice-transcription` skill
-- **Email request** → Check for `add-gmail` skill  
-- **Twitter/X mention** → Check for `x-integration` skill
-- **Need for speed** → Consider `add-parallel` skill
-- **Deployment question** → Check for `convert-to-docker` skill
+- Check the dynamically available skills and agents first
+- If the current session inventory looks incomplete, verify `.opencode/skills/`, `.opencode/agents/`, and `opencode.json`
+- Prefer discovery over memory when deciding what is available right now
 
-Don't wait to be told what tools you have. Explore and discover!
+Don't wait to be told what tools you have. Discover them from the real sources.
 
 ## Cost Transparency
 
@@ -212,8 +204,9 @@ Use the database path from your Runtime Environment section.
 
 If you need a capability not listed here:
 1. Search `.opencode/skills/` for relevant skills
-2. Check MCP tools with `mcp__*` prefix
-3. Look in documentation and memory
-4. If nothing exists, propose creating a new skill or workflow
+2. Search `.opencode/agents/` and `opencode.json` for relevant agents
+3. Check MCP tools with `mcp__*` prefix
+4. Look in documentation and memory
+5. If nothing exists, propose creating a new skill or workflow
 
 Remember: You're not limited to what's explicitly documented here. This is a starting point, not a boundary.

@@ -2,7 +2,7 @@ import { Bot, InputFile } from 'grammy';
 import path from 'path';
 import fs from 'fs/promises';
 
-import { ASSISTANT_NAME, TRIGGER_PATTERN } from '../config.js';
+import { ASSISTANT_NAME, TRIGGER_PATTERN, WORKSPACES_DIR } from '../config.js';
 import { logger } from '../logger.js';
 import {
   Channel,
@@ -402,9 +402,53 @@ export class TelegramChannel implements Channel {
         is_private_chat: ctx.chat.type === 'private',
       });
     });
-    this.bot.on('message:document', (ctx) => {
-      const name = ctx.message.document?.file_name || 'file';
-      storeNonText(ctx, `[Document: ${name}]`);
+    this.bot.on('message:document', async (ctx) => {
+      const chatJid = `tg:${ctx.chat.id}`;
+      const workspace = this.opts.registeredWorkspaces()[chatJid];
+      if (!workspace) return;
+
+      const timestamp = new Date(ctx.message.date * 1000).toISOString();
+      const senderName =
+        ctx.from?.first_name ||
+        ctx.from?.username ||
+        ctx.from?.id?.toString() ||
+        'Unknown';
+      const caption = ctx.message.caption ? ` ${ctx.message.caption}` : '';
+
+      this.opts.onChatMetadata(chatJid, timestamp);
+
+      const originalName = ctx.message.document?.file_name || 'file';
+      let content = `[Document: ${originalName}]`;
+
+      try {
+        const file = await ctx.getFile();
+        const fileUrl = `https://api.telegram.org/file/bot${this.botToken}/${file.file_path}`;
+        const fileInfo = await fetch(fileUrl);
+        const fileBuffer = Buffer.from(await fileInfo.arrayBuffer());
+
+        const uploadsDir = path.join(WORKSPACES_DIR, workspace.folder, 'uploads');
+        await fs.mkdir(uploadsDir, { recursive: true });
+
+        const safeName = `${Date.now()}-${originalName.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
+        const filePath = path.join(uploadsDir, safeName);
+        await fs.writeFile(filePath, fileBuffer);
+
+        content = `[Document: ${originalName} saved to uploads/${safeName}]`;
+        logger.info({ chatJid, safeName, size: fileBuffer.length }, 'Document downloaded from Telegram');
+      } catch (err) {
+        logger.warn({ chatJid, err }, 'Document download failed, using placeholder');
+      }
+
+      this.opts.onMessage(chatJid, {
+        id: ctx.message.message_id.toString(),
+        chat_jid: chatJid,
+        sender: ctx.from?.id?.toString() || '',
+        sender_name: senderName,
+        content: `${content}${caption}`,
+        timestamp,
+        is_from_me: false,
+        is_private_chat: ctx.chat.type === 'private',
+      });
     });
     this.bot.on('message:sticker', (ctx) => {
       const emoji = ctx.message.sticker?.emoji || '';
@@ -461,18 +505,29 @@ export class TelegramChannel implements Channel {
    * Keep-alive mechanism to prevent session timeouts.
    * Sends a getMe() request every 5 minutes to keep the connection alive.
    */
+  private keepAliveFailCount = 0;
+  private static readonly KEEPALIVE_MAX_FAILS = 2; // Reconnect after 2 consecutive failures
+
   private startKeepAlive(): void {
     if (this.keepAliveTimer) return;
+    this.keepAliveFailCount = 0;
 
     this.keepAliveTimer = setInterval(async () => {
       if (!this.bot || this.isShuttingDown) return;
 
       try {
         await this.bot.api.getMe();
+        this.keepAliveFailCount = 0;
         logger.debug('Telegram keep-alive ping successful');
       } catch (err) {
-        logger.warn({ err }, 'Telegram keep-alive ping failed, reconnecting...');
-        this.reconnect();
+        this.keepAliveFailCount++;
+        if (this.keepAliveFailCount >= TelegramChannel.KEEPALIVE_MAX_FAILS) {
+          logger.warn({ err, fails: this.keepAliveFailCount }, 'Telegram keep-alive failed multiple times, reconnecting...');
+          this.keepAliveFailCount = 0;
+          this.reconnect();
+        } else {
+          logger.warn({ err, fails: this.keepAliveFailCount }, 'Telegram keep-alive ping failed, will retry next interval');
+        }
       }
     }, 5 * 60 * 1000); // Every 5 minutes
   }
@@ -485,20 +540,23 @@ export class TelegramChannel implements Channel {
 
     logger.info('Reconnecting Telegram bot...');
 
-    // Stop existing bot
-    if (this.bot) {
-      try {
-        this.bot.stop();
-      } catch (err) {
-        logger.debug({ err }, 'Error stopping bot during reconnect');
-      }
-      this.bot = null;
-    }
-
-    // Clear timers
+    // Clear timers first to prevent concurrent reconnect attempts
     if (this.keepAliveTimer) {
       clearInterval(this.keepAliveTimer);
       this.keepAliveTimer = null;
+    }
+
+    // Stop existing bot — MUST await because bot.stop() returns a Promise
+    // that does a final getUpdates call. Without await, network errors
+    // during stop cause unhandled rejections.
+    if (this.bot) {
+      const botRef = this.bot;
+      this.bot = null; // Clear reference immediately to prevent double-stop
+      try {
+        await Promise.resolve(botRef.stop()).catch(() => {});
+      } catch (err) {
+        logger.debug({ err }, 'Error stopping bot during reconnect (ignored)');
+      }
     }
 
     // Wait a bit before reconnecting
@@ -599,8 +657,13 @@ export class TelegramChannel implements Channel {
     }
 
     if (this.bot) {
-      this.bot.stop();
+      const botRef = this.bot;
       this.bot = null;
+      try {
+        await Promise.resolve(botRef.stop()).catch(() => {});
+      } catch {
+        // Ignore — shutting down anyway
+      }
       logger.info('Telegram bot stopped');
     }
   }
