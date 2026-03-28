@@ -796,11 +796,30 @@ export async function main(): Promise<void> {
 
       const isWebUI = jid.startsWith('web:');
 
-      // If message came from WebUI, only send via SSE (not to other channels like Telegram)
+      // Scheduled tasks should deliver to ALL connected channels for the workspace,
+      // not just the channel that created the task. A cron job created from the web UI
+      // should still notify the user on Telegram/WhatsApp.
       if (isWebUI) {
+        // Send to web UI via SSE
         const webuiChannel = channels.find((c) => c.name === 'webui');
         if (webuiChannel) {
           await webuiChannel.sendMessage(jid, text);
+        }
+
+        // Also mirror to messaging channels (Telegram, WhatsApp) for the same workspace
+        const workspaceFolder = jid.replace(/^web:/, '');
+        const workspaces = getRegisteredWorkspaces();
+        for (const [wsJid, ws] of Object.entries(workspaces)) {
+          if (ws.folder === workspaceFolder && !wsJid.startsWith('web:')) {
+            const ch = findChannel(channels, wsJid);
+            if (ch && ch.isConnected()) {
+              try {
+                await ch.sendMessage(wsJid, text);
+              } catch (err) {
+                logger.warn({ jid: wsJid, err }, 'Failed to mirror scheduled task to messaging channel');
+              }
+            }
+          }
         }
       } else {
         // Regular channel routing for non-WebUI messages
@@ -814,7 +833,7 @@ export async function main(): Promise<void> {
       const timestamp = new Date().toISOString();
       storeMessageDirect({
         id: msgId,
-        chat_jid: jid, // Use full JID (web:main, tg:123, etc.) consistently
+        chat_jid: jid,
         sender: 'bot',
         sender_name: ASSISTANT_NAME,
         content: text,

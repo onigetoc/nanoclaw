@@ -74,8 +74,8 @@ function MessageBubble({ msg, isDark, showThinking = true, onSendCommand }: Mess
         )}
 
         {sources.length > 0 && (
-          <details className={`mb-2 rounded-lg border p-2 text-xs ${isDark ? 'border-zinc-700 bg-zinc-800/80 text-zinc-300' : 'border-zinc-200 bg-zinc-100 text-zinc-700'}`}>
-            <summary className="cursor-pointer select-none font-medium">Sources ({sources.length})</summary>
+          <details className="mb-2 text-xs">
+            <summary className={`cursor-pointer select-none ${isDark ? 'text-zinc-500' : 'text-zinc-400'}`}>Sources ({sources.length})</summary>
             <div className="mt-2 space-y-1">
               {sources.map((source) => (
                 <a

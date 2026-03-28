@@ -24,6 +24,8 @@ import { WorkspaceQueue } from './workspace-queue.js';
 import { logger } from './logger.js';
 import { RegisteredWorkspace, ScheduledTask } from './types.js';
 import { isSleeping } from './commands/sleep-manager.js';
+import { getMonitoring } from './monitoring.js';
+import { broadcastStatus } from './api-server.js';
 
 /**
  * Format a scheduled task error into a user-readable message.
@@ -54,6 +56,18 @@ async function runTask(
     'Running scheduled task',
   );
 
+  // Start execution trace so scheduled tasks appear in the web UI
+  const monitoring = getMonitoring();
+  const executionId = monitoring.startExecution({
+    workspaceName: task.workspace_folder,
+    workspaceFolder: task.workspace_folder,
+    chatJid: task.chat_jid,
+    agentType: 'build',
+    messageCount: 1,
+  });
+  monitoring.addStep(executionId, 'queue', `Scheduled task: ${task.prompt.slice(0, 80)}…`);
+  broadcastStatus(task.chat_jid, 'processing', `Running scheduled task…`);
+
   const workspaces = deps.registeredWorkspaces();
   const workspace = Object.values(workspaces).find(
     (w) => w.folder === task.workspace_folder,
@@ -64,6 +78,9 @@ async function runTask(
       { taskId: task.id, workspaceFolder: task.workspace_folder },
       'Workspace not found for task',
     );
+    monitoring.addStep(executionId, 'error', `Workspace not found: ${task.workspace_folder}`);
+    monitoring.updateExecution(executionId, { status: 'error', error: `Workspace not found: ${task.workspace_folder}` });
+    broadcastStatus(task.chat_jid, 'done');
     logTaskRun({
       task_id: task.id,
       run_at: new Date().toISOString(),
@@ -117,6 +134,7 @@ async function runTask(
   try {
     // Use direct mode on Windows/Linux, container mode on macOS
     const runAgentFn = shouldUseDirectMode() ? runDirectAgent : runContainerAgent;
+    monitoring.addStep(executionId, 'init', 'Starting agent…');
     
     const output = await runAgentFn(
       workspace,
@@ -136,9 +154,23 @@ async function runTask(
           await deps.sendMessage(task.chat_jid, streamedOutput.result);
           // Only reset idle timer on actual results, not session-update markers
           resetIdleTimer();
+
+          // Update trace with model info if available
+          if (streamedOutput.metadata?.modelID) {
+            const model = `${streamedOutput.metadata.providerID || 'unknown'}/${streamedOutput.metadata.modelID}`;
+            monitoring.setRealModel(executionId, streamedOutput.metadata.modelID as string, streamedOutput.metadata.providerID as string || 'unknown');
+            monitoring.addStep(executionId, 'response', `Response from ${model}`, {
+              agent: streamedOutput.metadata.agent,
+              tokens: streamedOutput.metadata.tokens,
+            });
+          } else {
+            monitoring.addStep(executionId, 'response', 'Response received');
+          }
+          monitoring.markOutputSent(executionId);
         }
         if (streamedOutput.status === 'error') {
           error = streamedOutput.error || 'Unknown error';
+          monitoring.addStep(executionId, 'error', error);
           // Send error to user so they see what happened with their scheduled task
           const errorMsg = formatTaskErrorForUser(task.prompt, error);
           await deps.sendMessage(task.chat_jid, errorMsg);
@@ -173,6 +205,7 @@ async function runTask(
     if (idleTimer) clearTimeout(idleTimer);
     error = err instanceof Error ? err.message : String(err);
     logger.error({ taskId: task.id, error }, 'Task failed');
+    monitoring.addStep(executionId, 'error', error);
     // Notify user about the scheduled task failure
     const errorMsg = formatTaskErrorForUser(task.prompt, error);
     try {
@@ -181,6 +214,14 @@ async function runTask(
       logger.error({ taskId: task.id, sendErr }, 'Failed to send task error to user');
     }
   }
+
+  // Finalize execution trace
+  monitoring.addStep(executionId, 'done', error ? `Failed: ${error}` : 'Completed');
+  monitoring.updateExecution(executionId, {
+    status: error ? 'error' : 'completed',
+    error: error || undefined,
+  });
+  broadcastStatus(task.chat_jid, 'done');
 
   const durationMs = Date.now() - startTime;
 

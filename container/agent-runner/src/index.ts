@@ -1277,8 +1277,7 @@ Your text responses must contain ONLY the final answer for the user.`;
     }
   }, IPC_POLL_MS);
 
-  // Helper: call session.prompt with a timeout (default 10 minutes)
-  // Keep this aligned with provider timeout expectations (often 600000 ms).
+  // Prompt timeout — configurable via env, default 5 minutes.
   const PROMPT_TIMEOUT_MS = Number(process.env.PROMPT_TIMEOUT_MS || 5 * 60 * 1000);
 
   const modelOverride = parseModelOverride(containerInput.model);
