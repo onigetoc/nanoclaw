@@ -472,6 +472,28 @@ export function storeMessageDirect(msg: {
   );
 }
 
+/**
+ * Merge reasoning text into a message's metadata JSON (SQLite).
+ * Keeps existing metadata fields intact; only adds/overwrites `reasoning`.
+ */
+export function updateMessageReasoning(messageId: string, reasoning: string): void {
+  const row = db
+    .prepare('SELECT metadata FROM messages WHERE id = ?')
+    .get(messageId) as { metadata: string | null } | undefined;
+  if (!row) return;
+
+  let meta: Record<string, unknown> = {};
+  if (row.metadata) {
+    try { meta = JSON.parse(row.metadata); } catch { /* keep empty */ }
+  }
+  meta.reasoning = reasoning;
+
+  db.prepare('UPDATE messages SET metadata = ? WHERE id = ?').run(
+    JSON.stringify(meta),
+    messageId,
+  );
+}
+
 export function getNewMessages(
   jids: string[],
   lastTimestamp: string,

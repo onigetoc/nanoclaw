@@ -284,6 +284,21 @@ export function triggerTaskNow(taskId: string): { success: boolean; error?: stri
     task.status = 'active';
   }
 
+  // Immediately advance next_run so the scheduler loop doesn't pick it up again
+  // while this manual run is in progress (prevents double execution).
+  if (task.schedule_type === 'cron') {
+    const interval = CronExpressionParser.parse(task.schedule_value, { tz: TIMEZONE });
+    const nextRun = interval.next().toISOString();
+    updateTask(taskId, { next_run: nextRun });
+  } else if (task.schedule_type === 'interval') {
+    const ms = parseInt(task.schedule_value, 10);
+    const nextRun = new Date(Date.now() + ms).toISOString();
+    updateTask(taskId, { next_run: nextRun });
+  } else {
+    // 'once' tasks — set next_run to null so scheduler ignores it
+    updateTask(taskId, { next_run: null });
+  }
+
   const deps = schedulerDeps;
   deps.queue.enqueueTask(
     task.chat_jid,

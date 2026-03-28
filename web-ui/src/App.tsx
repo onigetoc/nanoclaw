@@ -1,12 +1,24 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { ArrowDown, Bug, MessageCircle, Moon, Sun } from 'lucide-react';
-import { apiService, type ChatInfo, type Message, type ApiToken, type ConnectionStatus, type StatusEvent } from './api';
+import { ArrowDown, Bot, Bug, MessageCircle, Moon, Sun } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import {
+  apiService,
+  type ChatInfo,
+  type Message,
+  type ApiToken,
+  type ConnectionStatus,
+  type StatusEvent,
+} from './api';
 import { useSettings } from './useSettings';
 import { getUiModelsSync, type UiModel } from './utils/models';
 import { formatDate } from './types';
 import type { ChatState } from './types';
 import { LoginScreen } from './components/LoginScreens';
-import { CreateTokenScreen, TokenCreatedScreen } from './components/TokenSetupScreens';
+import {
+  CreateTokenScreen,
+  TokenCreatedScreen,
+} from './components/TokenSetupScreens';
 import ChatSidebar from './components/ChatSidebar';
 import MessageBubble from './components/MessageBubble';
 import ComposerBar from './components/ComposerBar';
@@ -22,7 +34,12 @@ const PAGE_SIZE = 30;
 
 function App() {
   const [state, setState] = useState<ChatState>({
-    chats: [], selectedChat: null, messages: [], connected: false, loading: false, error: null,
+    chats: [],
+    selectedChat: null,
+    messages: [],
+    connected: false,
+    loading: false,
+    error: null,
   });
   const [token, setToken] = useState<string | null>(null);
   const [tokenInput, setTokenInput] = useState('');
@@ -32,7 +49,10 @@ function App() {
     const saved = localStorage.getItem(THEME_STORAGE_KEY);
     return saved === 'light' ? 'light' : 'dark';
   });
-  const [serverStatus, setServerStatus] = useState<ConnectionStatus>({ serverOnline: false, sseConnected: false });
+  const [serverStatus, setServerStatus] = useState<ConnectionStatus>({
+    serverOnline: false,
+    sseConnected: false,
+  });
   const [, forceUpdate] = useState(0);
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
   const [isNearBottom, setIsNearBottom] = useState(true);
@@ -44,9 +64,17 @@ function App() {
   const [showSettingsPage, setShowSettingsPage] = useState(false);
   const [unreadChats, setUnreadChats] = useState<Set<string>>(new Set());
   const [agentStatus, setAgentStatus] = useState<StatusEvent | null>(null);
-  const [chatStatuses, setChatStatuses] = useState<Map<string, StatusEvent>>(new Map());
+  const [chatStatuses, setChatStatuses] = useState<Map<string, StatusEvent>>(
+    new Map(),
+  );
+  const [streamingContent, setStreamingContent] = useState('');
+  const [thinkingContent, setThinkingContent] = useState('');
+  const streamPartOrderRef = useRef<string[]>([]);
+  const streamPartTextsRef = useRef<Map<string, string>>(new Map());
   const processingStartRef = useRef<string | null>(null);
   const { settings, updateSetting, resetSettings } = useSettings();
+  const settingsRef = useRef(settings);
+  settingsRef.current = settings;
   const { setSelectedModel } = useModelStore();
 
   const messagesContainerRef = useRef<HTMLDivElement>(null);
@@ -54,6 +82,7 @@ function App() {
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const scrollRafRef = useRef<number | null>(null);
   const loadOlderRef = useRef<() => void>(() => {});
+  const streamingMessageIdRef = useRef<string | null>(null);
 
   const isDark = theme === 'dark';
 
@@ -63,9 +92,10 @@ function App() {
     setAvailableModels(models);
     if (models.length > 0) {
       const persisted = getPersistedModel();
-      const initialModel = persisted && models.find(m => m.id === persisted)
-        ? persisted
-        : models[0].id;
+      const initialModel =
+        persisted && models.find((m) => m.id === persisted)
+          ? persisted
+          : models[0].id;
       setSelectedModelId(initialModel);
       setSelectedModel(initialModel);
     }
@@ -80,10 +110,10 @@ function App() {
     }
     if (!settingsReturnRef.current) return;
     settingsReturnRef.current = false;
-    
+
     const models = getUiModelsSync();
     setAvailableModels(models);
-    if (models.length > 0 && !models.find(m => m.id === selectedModelId)) {
+    if (models.length > 0 && !models.find((m) => m.id === selectedModelId)) {
       setSelectedModelId(models[0].id);
     } else if (models.length === 0) {
       setSelectedModelId('');
@@ -96,7 +126,7 @@ function App() {
       const models = getUiModelsSync();
       setAvailableModels(models);
       // Update selected model if it's no longer available
-      if (models.length > 0 && !models.find(m => m.id === selectedModelId)) {
+      if (models.length > 0 && !models.find((m) => m.id === selectedModelId)) {
         setSelectedModelId(models[0].id);
       } else if (models.length === 0) {
         setSelectedModelId('');
@@ -105,7 +135,11 @@ function App() {
 
     // Listen for custom event from ModelsSection
     window.addEventListener('eureclaw-models-changed', handleStorageChange);
-    return () => window.removeEventListener('eureclaw-models-changed', handleStorageChange);
+    return () =>
+      window.removeEventListener(
+        'eureclaw-models-changed',
+        handleStorageChange,
+      );
   }, [selectedModelId]);
 
   // --- Data loading ---
@@ -114,15 +148,29 @@ function App() {
       const chats = await apiService.getChats();
       const rememberedJid = localStorage.getItem(SELECTED_CHAT_STORAGE_KEY);
       setState((s) => {
-        const current = s.selectedChat ? chats.find((c) => c.jid === s.selectedChat?.jid) || null : null;
-        const remembered = rememberedJid ? chats.find((c) => c.jid === rememberedJid) || null : null;
+        const current = s.selectedChat
+          ? chats.find((c) => c.jid === s.selectedChat?.jid) || null
+          : null;
+        const remembered = rememberedJid
+          ? chats.find((c) => c.jid === rememberedJid) || null
+          : null;
         const selectedChat = current || remembered || chats[0] || null;
-        return { ...s, chats, selectedChat, messages: selectedChat?.jid === s.selectedChat?.jid ? s.messages : [], connected: true, error: null };
+        return {
+          ...s,
+          chats,
+          selectedChat,
+          messages: selectedChat?.jid === s.selectedChat?.jid ? s.messages : [],
+          connected: true,
+          error: null,
+        };
       });
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : 'Failed to connect';
       console.error('Failed to load chats:', err);
-      if (errorMsg.includes('Invalid or inactive token') || errorMsg.includes('Not authenticated')) {
+      if (
+        errorMsg.includes('Invalid or inactive token') ||
+        errorMsg.includes('Not authenticated')
+      ) {
         apiService.clearToken();
         setToken(null);
         return;
@@ -133,10 +181,18 @@ function App() {
 
   const loadMessages = async (chatJid: string) => {
     try {
-      const { messages, hasMore } = await apiService.getMessages(chatJid, { limit: PAGE_SIZE });
+      const { messages, hasMore } = await apiService.getMessages(chatJid, {
+        limit: PAGE_SIZE,
+      });
       setHasMoreMessages(!!hasMore);
-      setState((s) => (s.selectedChat?.jid === chatJid ? { ...s, messages } : s));
-      requestAnimationFrame(() => { requestAnimationFrame(() => { messagesEndRef.current?.scrollIntoView({ behavior: 'auto' }); }); });
+      setState((s) =>
+        s.selectedChat?.jid === chatJid ? { ...s, messages } : s,
+      );
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
+        });
+      });
     } catch (err) {
       console.error('Failed to load messages:', err);
     }
@@ -148,13 +204,19 @@ function App() {
     if (!oldest) return;
     setIsLoadingOlder(true);
     try {
-      const { messages: older, hasMore } = await apiService.getMessages(state.selectedChat.jid, { limit: PAGE_SIZE, before: oldest.timestamp });
+      const { messages: older, hasMore } = await apiService.getMessages(
+        state.selectedChat.jid,
+        { limit: PAGE_SIZE, before: oldest.timestamp },
+      );
       setHasMoreMessages(!!hasMore);
       if (older.length > 0) {
         const container = messagesContainerRef.current;
         const prevScrollHeight = container?.scrollHeight ?? 0;
         setState((s) => ({ ...s, messages: [...older, ...s.messages] }));
-        requestAnimationFrame(() => { if (container) container.scrollTop += container.scrollHeight - prevScrollHeight; });
+        requestAnimationFrame(() => {
+          if (container)
+            container.scrollTop += container.scrollHeight - prevScrollHeight;
+        });
       }
     } catch (err) {
       console.error('Failed to load older messages:', err);
@@ -167,7 +229,10 @@ function App() {
   // --- Effects ---
   useEffect(() => {
     const savedToken = apiService.getToken();
-    if (savedToken) { setToken(savedToken); apiService.setToken(savedToken); }
+    if (savedToken) {
+      setToken(savedToken);
+      apiService.setToken(savedToken);
+    }
   }, []);
 
   useEffect(() => {
@@ -197,24 +262,51 @@ function App() {
         // Can't easily trim a Set, just let it grow to 200 then clear old half
       }
 
+      // Preserve thinking content in metadata (not in content — avoids token bloat).
+      // The streaming partID logic accumulates thinking separately; attach it to
+      // the message's metadata so MessageBubble can render the accordion.
+      let enrichedMessage = message;
+      if (message.is_bot_message && settingsRef.current.saveThinking) {
+        const order = streamPartOrderRef.current;
+        const texts = streamPartTextsRef.current;
+        if (order.length >= 2) {
+          const thinkingPid = order[0];
+          const thinkingText = (texts.get(thinkingPid) || '')
+            .replace(/<internal>[\s\S]*?<\/internal>/g, '')
+            .replace(/<internal>[\s\S]*$/g, '')
+            .trim();
+          if (thinkingText) {
+            enrichedMessage = {
+              ...message,
+              metadata: { ...message.metadata, reasoning: thinkingText },
+            };
+            // Persist reasoning to backend so it survives page reloads
+            void apiService.saveMessageReasoning(message.id, thinkingText);
+          }
+        }
+      }
+
       setState((s) => {
-        if (s.selectedChat?.jid === message.chat_jid) {
-          if (s.messages.some((m) => m.id === message.id)) return s;
-          
+        if (s.selectedChat?.jid === enrichedMessage.chat_jid) {
+          if (s.messages.some((m) => m.id === enrichedMessage.id)) return s;
+
           // Detect /new command response - clear message history for fresh session
-          const isNewSessionMessage = message.is_bot_message && 
-            message.content.includes('New session created');
-          
+          const isNewSessionMessage =
+            enrichedMessage.is_bot_message &&
+            enrichedMessage.content.includes('New session created');
+
           if (isNewSessionMessage) {
-            console.log('🆕 New session detected - reloading messages from backend');
-            void loadMessages(message.chat_jid);
+            console.log(
+              '🆕 New session detected - reloading messages from backend',
+            );
+            void loadMessages(enrichedMessage.chat_jid);
             return s;
           }
-          
-          return { ...s, messages: [...s.messages, message] };
+
+          return { ...s, messages: [...s.messages, enrichedMessage] };
         }
         // Message for a different chat - mark as unread
-        setUnreadChats((prev) => new Set(prev).add(message.chat_jid));
+        setUnreadChats((prev) => new Set(prev).add(enrichedMessage.chat_jid));
         return s;
       });
     });
@@ -247,17 +339,98 @@ function App() {
 
     const unsubscribeConn = apiService.onConnectionChange((status) => {
       setServerStatus(status);
-      if (status.serverOnline && !status.sseConnected) { void loadChats(); apiService.connectToEvents(); }
-      setState((s) => ({ ...s, connected: status.serverOnline, error: status.serverOnline ? null : s.error }));
+      if (status.serverOnline && !status.sseConnected) {
+        void loadChats();
+        apiService.connectToEvents();
+      }
+      setState((s) => ({
+        ...s,
+        connected: status.serverOnline,
+        error: status.serverOnline ? null : s.error,
+      }));
     });
 
-    return () => { unsubscribeMsg(); unsubscribeStatus(); unsubscribeConn(); apiService.disconnectFromEvents(); apiService.stopHealthMonitor(); };
+    // Listen for streaming token deltas from /chat/stream
+    // Frontend separates thinking vs response by partID order:
+    // - If only 1 partID seen so far → it's thinking (or response if model has no thinking)
+    // - Once 2+ partIDs seen → first was thinking, last is response
+    const unsubscribeDelta = apiService.onDelta((content, partID) => {
+      const order = streamPartOrderRef.current;
+      const texts = streamPartTextsRef.current;
+
+      if (partID && !order.includes(partID)) {
+        order.push(partID);
+      }
+
+      // Accumulate text for this partID
+      const pid = partID || order[order.length - 1] || '_default';
+      texts.set(pid, (texts.get(pid) || '') + content);
+
+      if (order.length <= 1) {
+        // Only 1 part so far — show as thinking (will become response if no 2nd part arrives)
+        setThinkingContent(texts.get(pid) || '');
+        setStreamingContent('');
+      } else {
+        // 2+ parts — first is thinking, last is response
+        const thinkingPid = order[0];
+        setThinkingContent(texts.get(thinkingPid) || '');
+        // Combine all non-first parts as response
+        const responseParts = order.slice(1).map(p => texts.get(p) || '').join('');
+        setStreamingContent(responseParts);
+      }
+    });
+
+    // Also track bot messages to clear streaming content
+    const unsubscribeBotMsg = apiService.onMessage((message) => {
+      if (message.is_bot_message) {
+        setStreamingContent('');
+        setThinkingContent('');
+        streamingMessageIdRef.current = null;
+        streamPartOrderRef.current = [];
+        streamPartTextsRef.current = new Map();
+        apiService.disconnectFromChatStream();
+      }
+    });
+
+    return () => {
+      unsubscribeMsg();
+      unsubscribeStatus();
+      unsubscribeConn();
+      unsubscribeDelta();
+      unsubscribeBotMsg();
+      apiService.disconnectFromEvents();
+      apiService.disconnectFromChatStream();
+      apiService.stopHealthMonitor();
+    };
   }, [token]);
 
-  useEffect(() => { if (state.selectedChat) void loadMessages(state.selectedChat.jid); }, [state.selectedChat]);
+  useEffect(() => {
+    if (state.selectedChat) void loadMessages(state.selectedChat.jid);
+  }, [state.selectedChat]);
+
+  // Auto-scroll when streaming response (not thinking) updates
+  useEffect(() => {
+    if (streamingContent) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
+    }
+  }, [streamingContent]);
+
+  // Scroll once when thinking first appears (to show the accordion)
+  const thinkingScrolledRef = useRef(false);
+  useEffect(() => {
+    if (thinkingContent && !thinkingScrolledRef.current) {
+      thinkingScrolledRef.current = true;
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+    if (!thinkingContent) {
+      thinkingScrolledRef.current = false;
+    }
+  }, [thinkingContent]);
 
   // --- Scroll ---
-  const scrollToBottom = (behavior: ScrollBehavior = 'smooth') => { messagesEndRef.current?.scrollIntoView({ behavior }); };
+  const scrollToBottom = (behavior: ScrollBehavior = 'smooth') => {
+    messagesEndRef.current?.scrollIntoView({ behavior });
+  };
 
   const scrollToBottomFast = () => {
     const container = messagesContainerRef.current;
@@ -284,7 +457,8 @@ function App() {
       scrollRafRef.current = null;
       const container = messagesContainerRef.current;
       if (!container) return;
-      const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
+      const distanceFromBottom =
+        container.scrollHeight - container.scrollTop - container.clientHeight;
       const nearBottom = distanceFromBottom < 140;
       setIsNearBottom(nearBottom);
       setShowScrollToBottom(!nearBottom);
@@ -297,8 +471,17 @@ function App() {
     updateScrollState();
   }, [updateScrollState]);
 
-  useEffect(() => { if (isNearBottom) scrollToBottom(); else setShowScrollToBottom(true); }, [state.messages, isNearBottom]);
-  useEffect(() => () => { if (scrollRafRef.current !== null) window.cancelAnimationFrame(scrollRafRef.current); }, []);
+  useEffect(() => {
+    if (isNearBottom) scrollToBottom();
+    else setShowScrollToBottom(true);
+  }, [state.messages, isNearBottom]);
+  useEffect(
+    () => () => {
+      if (scrollRafRef.current !== null)
+        window.cancelAnimationFrame(scrollRafRef.current);
+    },
+    [],
+  );
 
   // --- Chat actions ---
   const selectChat = (chat: ChatInfo) => {
@@ -325,92 +508,148 @@ function App() {
     inputRef.current?.focus();
   };
 
-  const sendMessage = useCallback(async (content: string, fileAttachments?: File[], mode?: 'analyze' | 'transfer', agent?: string, model?: string) => {
-    if (!state.selectedChat) return;
-    const trimmed = content.trim();
-    if (!trimmed && (!fileAttachments || fileAttachments.length === 0)) return;
+  const sendMessage = useCallback(
+    async (
+      content: string,
+      fileAttachments?: File[],
+      mode?: 'analyze' | 'transfer',
+      agent?: string,
+      model?: string,
+    ) => {
+      if (!state.selectedChat) return;
+      const trimmed = content.trim();
+      if (!trimmed && (!fileAttachments || fileAttachments.length === 0))
+        return;
 
-    let finalContent = trimmed;
-    if (fileAttachments && fileAttachments.length > 0) {
-      const descriptions: string[] = [];
-      const attachMode = mode || 'analyze';
+      let finalContent = trimmed;
+      if (fileAttachments && fileAttachments.length > 0) {
+        const descriptions: string[] = [];
+        const attachMode = mode || 'analyze';
 
-      if (attachMode === 'transfer') {
-        // File Transfer mode — save all files to workspace uploads
-        try {
-          const uploadResult = await apiService.uploadFiles(state.selectedChat.jid, fileAttachments);
-          for (const f of uploadResult.files) {
-            descriptions.push(`[Attached file: ${f.path}]`);
+        if (attachMode === 'transfer') {
+          // File Transfer mode — save all files to workspace uploads
+          try {
+            const uploadResult = await apiService.uploadFiles(
+              state.selectedChat.jid,
+              fileAttachments,
+            );
+            for (const f of uploadResult.files) {
+              descriptions.push(`[Attached file: ${f.path}]`);
+            }
+          } catch (err) {
+            console.error('Failed to upload files:', err);
+            descriptions.push(
+              `[File transfer failed: ${err instanceof Error ? err.message : 'Unknown error'}]`,
+            );
           }
-        } catch (err) {
-          console.error('Failed to upload files:', err);
-          descriptions.push(`[File transfer failed: ${err instanceof Error ? err.message : 'Unknown error'}]`);
-        }
-      } else {
-        // Read Media mode — analyze images/audio via vision/transcription (same as Telegram)
-        for (const file of fileAttachments) {
-          if (file.type.startsWith('image/') || file.type.startsWith('audio/')) {
-            try {
-              const result = await apiService.analyzeMedia(state.selectedChat.jid, file);
-              if (result.type === 'image') {
-                descriptions.push(`[Photo: ${result.description}]`);
-              } else if (result.type === 'audio') {
-                descriptions.push(`[Audio: ${result.description}]`);
-              } else {
-                descriptions.push(result.description);
+        } else {
+          // Read Media mode — analyze images/audio via vision/transcription (same as Telegram)
+          for (const file of fileAttachments) {
+            if (
+              file.type.startsWith('image/') ||
+              file.type.startsWith('audio/')
+            ) {
+              try {
+                const result = await apiService.analyzeMedia(
+                  state.selectedChat.jid,
+                  file,
+                );
+                if (result.type === 'image') {
+                  descriptions.push(`[Photo: ${result.description}]`);
+                } else if (result.type === 'audio') {
+                  descriptions.push(`[Audio: ${result.description}]`);
+                } else {
+                  descriptions.push(result.description);
+                }
+              } catch (err) {
+                const errMsg = err instanceof Error ? err.message : String(err);
+                console.error('Failed to analyze media:', errMsg);
+                descriptions.push(
+                  `[${file.type.startsWith('image/') ? 'Photo' : 'Audio'}: ${errMsg}]`,
+                );
               }
-            } catch (err) {
-              const errMsg = err instanceof Error ? err.message : String(err);
-              console.error('Failed to analyze media:', errMsg);
-              descriptions.push(`[${file.type.startsWith('image/') ? 'Photo' : 'Audio'}: ${errMsg}]`);
-            }
-          } else {
-            // Non-media files in Read Media mode → still analyze (returns [File: name])
-            try {
-              const result = await apiService.analyzeMedia(state.selectedChat.jid, file);
-              descriptions.push(result.description);
-            } catch (err) {
-              descriptions.push(`[File: ${file.name}]`);
+            } else {
+              // Non-media files in Read Media mode → still analyze (returns [File: name])
+              try {
+                const result = await apiService.analyzeMedia(
+                  state.selectedChat.jid,
+                  file,
+                );
+                descriptions.push(result.description);
+              } catch (err) {
+                descriptions.push(`[File: ${file.name}]`);
+              }
             }
           }
         }
+
+        if (descriptions.length > 0) {
+          const mediaText = descriptions.join('\n');
+          finalContent = trimmed ? `${trimmed}\n\n${mediaText}` : mediaText;
+        }
       }
 
-      if (descriptions.length > 0) {
-        const mediaText = descriptions.join('\n');
-        finalContent = trimmed ? `${trimmed}\n\n${mediaText}` : mediaText;
+      if (!finalContent) return;
+
+      const optimisticMsg: Message = {
+        id: `local_${Date.now()}`,
+        chat_jid: state.selectedChat.jid,
+        sender: 'me',
+        sender_name: 'You',
+        content: finalContent,
+        timestamp: new Date().toISOString(),
+        is_from_me: false,
+        is_bot_message: false,
+        attachments: fileAttachments?.map((f) => ({
+          name: f.name,
+          type: f.type,
+          size: f.size,
+        })),
+      };
+      setState((s) => ({ ...s, messages: [...s.messages, optimisticMsg] }));
+
+      // Start streaming token deltas for real-time display
+      const streamId = `stream_${Date.now()}`;
+      streamingMessageIdRef.current = streamId;
+      setStreamingContent('');
+      setThinkingContent('');
+      streamPartOrderRef.current = [];
+      streamPartTextsRef.current = new Map();
+      apiService.connectToChatStream();
+
+      try {
+        // Use provided agent/model from slash commands or dropdown, otherwise use defaults
+        const finalAgent = agent || undefined; // undefined means use opencode.json default
+        const finalModel = model || undefined; // undefined means use opencode.json default
+
+        console.log('📤 Sending message with:', {
+          agent: finalAgent || '(default from opencode.json)',
+          model: finalModel || '(default from opencode.json)',
+          hasSlashCommand: !!(agent || model),
+        });
+
+        await apiService.sendMessage(
+          state.selectedChat.jid,
+          finalContent,
+          finalModel,
+          finalAgent,
+        );
+      } catch (err) {
+        console.error('Failed to send message:', err);
       }
-    }
-
-    if (!finalContent) return;
-
-    const optimisticMsg: Message = {
-      id: `local_${Date.now()}`, chat_jid: state.selectedChat.jid, sender: 'me', sender_name: 'You',
-      content: finalContent, timestamp: new Date().toISOString(), is_from_me: false, is_bot_message: false,
-      attachments: fileAttachments?.map(f => ({ name: f.name, type: f.type, size: f.size })),
-    };
-    setState((s) => ({ ...s, messages: [...s.messages, optimisticMsg] }));
-    try { 
-      // Use provided agent/model from slash commands or dropdown, otherwise use defaults
-      const finalAgent = agent || undefined; // undefined means use opencode.json default
-      const finalModel = model || undefined; // undefined means use opencode.json default
-      
-      console.log('📤 Sending message with:', { 
-        agent: finalAgent || '(default from opencode.json)', 
-        model: finalModel || '(default from opencode.json)',
-        hasSlashCommand: !!(agent || model)
-      });
-      
-      await apiService.sendMessage(state.selectedChat.jid, finalContent, finalModel, finalAgent); 
-    } catch (err) { console.error('Failed to send message:', err); }
-  }, [state.selectedChat]);
+    },
+    [state.selectedChat],
+  );
 
   const handleOptimisticMessage = useCallback((msg: Message) => {
     setState((s) => ({ ...s, messages: [...s.messages, msg] }));
   }, []);
 
   const handleRemoveOptimisticMessage = useCallback((id: string) => {
-    setState((s) => ({ ...s, messages: s.messages.filter(m => m.id !== id) }));
+    setState((s) => ({
+      ...s,
+      messages: s.messages.filter((m) => m.id !== id),
+    }));
   }, []);
 
   // --- Grouped messages ---
@@ -419,8 +658,12 @@ function App() {
     let dateCursor = '';
     for (const msg of state.messages) {
       const msgDate = formatDate(msg.timestamp);
-      if (msgDate !== dateCursor) { dateCursor = msgDate; groups.push({ date: msgDate, messages: [msg] }); }
-      else { groups[groups.length - 1].messages.push(msg); }
+      if (msgDate !== dateCursor) {
+        dateCursor = msgDate;
+        groups.push({ date: msgDate, messages: [msg] });
+      } else {
+        groups[groups.length - 1].messages.push(msg);
+      }
     }
     return groups;
   }, [state.messages]);
@@ -429,24 +672,43 @@ function App() {
   if (!token && !showTokenSetup) {
     return (
       <LoginScreen
-        isDark={isDark} tokenInput={tokenInput} setTokenInput={setTokenInput}
-        setToken={setToken} setShowTokenSetup={setShowTokenSetup}
+        isDark={isDark}
+        tokenInput={tokenInput}
+        setTokenInput={setTokenInput}
+        setToken={setToken}
+        setShowTokenSetup={setShowTokenSetup}
         forceUpdate={() => forceUpdate((n) => n + 1)}
       />
     );
   }
 
   if (showTokenSetup && !newToken) {
-    return <CreateTokenScreen isDark={isDark} setNewToken={setNewToken} setToken={setToken} setShowTokenSetup={setShowTokenSetup} />;
+    return (
+      <CreateTokenScreen
+        isDark={isDark}
+        setNewToken={setNewToken}
+        setToken={setToken}
+        setShowTokenSetup={setShowTokenSetup}
+      />
+    );
   }
 
   if (newToken && !token) {
-    return <TokenCreatedScreen isDark={isDark} newToken={newToken} setToken={setToken} setNewToken={setNewToken} />;
+    return (
+      <TokenCreatedScreen
+        isDark={isDark}
+        newToken={newToken}
+        setToken={setToken}
+        setNewToken={setNewToken}
+      />
+    );
   }
 
   // --- Render: Main app ---
   return (
-    <div className={`flex h-screen ${isDark ? 'bg-zinc-950 text-zinc-100' : 'bg-zinc-50 text-zinc-900'}`}>
+    <div
+      className={`flex h-screen ${isDark ? 'bg-zinc-950 text-zinc-100' : 'bg-zinc-50 text-zinc-900'}`}
+    >
       {/* Settings page overlay */}
       {showSettingsPage && (
         <div className="absolute inset-0 z-50">
@@ -462,80 +724,204 @@ function App() {
       )}
 
       {/* Main chat interface - hidden when settings are open */}
-      <div className={`flex h-screen w-full ${showSettingsPage ? 'hidden' : ''}`}>
+      <div
+        className={`flex h-screen w-full ${showSettingsPage ? 'hidden' : ''}`}
+      >
         <ChatSidebar
-          isDark={isDark} chats={state.chats} selectedChat={state.selectedChat}
-          connected={state.connected} error={state.error} serverOnline={serverStatus.serverOnline}
+          isDark={isDark}
+          chats={state.chats}
+          selectedChat={state.selectedChat}
+          connected={state.connected}
+          error={state.error}
+          serverOnline={serverStatus.serverOnline}
           unreadChats={unreadChats}
           chatStatuses={chatStatuses}
           availableModels={[]}
-          onSelectChat={selectChat} onOpenSettings={() => setShowSettingsPage(true)}
+          onSelectChat={selectChat}
+          onOpenSettings={() => setShowSettingsPage(true)}
           onDisconnect={() => setToken(null)}
         />
 
-        <main className={`relative flex min-w-0 flex-1 flex-col ${isDark ? 'bg-zinc-900' : 'bg-zinc-100'}`}>
+        <main
+          className={`relative flex min-w-0 flex-1 flex-col ${isDark ? 'bg-zinc-900' : 'bg-zinc-100'}`}
+        >
           {state.selectedChat ? (
             <>
-              <header className={`flex h-16 items-center justify-between border-b px-4 md:px-6 ${isDark ? 'border-zinc-800 bg-zinc-950/90' : 'border-zinc-300 bg-zinc-200/95'}`}>
+              <header
+                className={`flex h-16 items-center justify-between border-b px-4 md:px-6 ${isDark ? 'border-zinc-800 bg-zinc-950/90' : 'border-zinc-300 bg-zinc-200/95'}`}
+              >
                 <div className="min-w-0">
-                  <h2 className="truncate text-base font-semibold md:text-lg">{state.selectedChat.name || state.selectedChat.jid}</h2>
-                  <p className={`truncate text-xs ${isDark ? 'text-zinc-400' : 'text-zinc-500'}`}>{state.selectedChat.jid}</p>
+                  <h2 className="truncate text-base font-semibold md:text-lg">
+                    {state.selectedChat.name || state.selectedChat.jid}
+                  </h2>
+                  <p
+                    className={`truncate text-xs ${isDark ? 'text-zinc-400' : 'text-zinc-500'}`}
+                  >
+                    {state.selectedChat.jid}
+                  </p>
                 </div>
                 <div className="ml-4 flex items-center gap-2">
                   <button
-                    type="button" onClick={() => updateSetting('debugPanel', !settings.debugPanel)}
+                    type="button"
+                    onClick={() =>
+                      updateSetting('debugPanel', !settings.debugPanel)
+                    }
                     className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border ${
                       settings.debugPanel
-                        ? isDark ? 'border-amber-700/50 bg-amber-500/15 text-amber-300 hover:bg-amber-500/25' : 'border-amber-300 bg-amber-50 text-amber-600 hover:bg-amber-100'
-                        : isDark ? 'border-zinc-700 bg-zinc-800 text-zinc-400 hover:bg-zinc-700' : 'border-zinc-300 bg-white text-zinc-600 hover:bg-zinc-100 shadow-sm'
+                        ? isDark
+                          ? 'border-amber-700/50 bg-amber-500/15 text-amber-300 hover:bg-amber-500/25'
+                          : 'border-amber-300 bg-amber-50 text-amber-600 hover:bg-amber-100'
+                        : isDark
+                          ? 'border-zinc-700 bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
+                          : 'border-zinc-300 bg-white text-zinc-600 hover:bg-zinc-100 shadow-sm'
                     }`}
-                    title={settings.debugPanel ? 'Hide debug panel' : 'Show debug panel'}
+                    title={
+                      settings.debugPanel
+                        ? 'Hide debug panel'
+                        : 'Show debug panel'
+                    }
                   >
                     <Bug className="h-4 w-4" />
                   </button>
                   <button
-                    type="button" onClick={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))}
+                    type="button"
+                    onClick={() =>
+                      setTheme((t) => (t === 'dark' ? 'light' : 'dark'))
+                    }
                     className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border ${isDark ? 'border-zinc-700 bg-zinc-800 text-zinc-200 hover:bg-zinc-700' : 'border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-100 shadow-sm'}`}
-                    title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+                    title={
+                      theme === 'dark'
+                        ? 'Switch to light mode'
+                        : 'Switch to dark mode'
+                    }
                   >
-                    {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+                    {theme === 'dark' ? (
+                      <Sun className="h-4 w-4" />
+                    ) : (
+                      <Moon className="h-4 w-4" />
+                    )}
                   </button>
                 </div>
               </header>
 
-              <div ref={messagesContainerRef} onScroll={throttledUpdateScrollState} className="flex-1 overflow-y-auto px-3 py-4 md:px-6" style={{ willChange: 'scroll-position' }}>
+              <div
+                ref={messagesContainerRef}
+                onScroll={throttledUpdateScrollState}
+                className="flex-1 overflow-y-auto px-3 py-4 md:px-6"
+                style={{ willChange: 'scroll-position' }}
+              >
                 <div className="mx-auto w-full max-w-4xl">
                   {isLoadingOlder && (
-                    <div className="flex justify-center py-3"><div className="h-5 w-5 animate-spin rounded-full border-2 border-zinc-400 border-t-transparent" /></div>
+                    <div className="flex justify-center py-3">
+                      <div className="h-5 w-5 animate-spin rounded-full border-2 border-zinc-400 border-t-transparent" />
+                    </div>
                   )}
                   {groupedMessages.map((group) => (
                     <div key={group.date} className="mb-6">
-                      <div className="my-5 text-center text-xs text-zinc-500">{group.date}</div>
+                      <div className="my-5 text-center text-xs text-zinc-500">
+                        {group.date}
+                      </div>
                       <div className="space-y-3">
                         {group.messages.map((msg) => (
-                          <MessageBubble 
-                            key={msg.id} 
-                            msg={msg} 
-                            isDark={isDark} 
-                            onSendCommand={(cmd) => { 
+                          <MessageBubble
+                            key={msg.id}
+                            msg={msg}
+                            isDark={isDark}
+                            showThinking={settings.showThinking}
+                            onSendCommand={(cmd) => {
                               scrollToBottomFast();
                               setTimeout(() => {
                                 setIsNearBottom(true);
                                 void sendMessage(`/${cmd}`);
                               }, 250);
-                            }} 
+                            }}
                           />
                         ))}
                       </div>
                     </div>
                   ))}
+                  {/* Streaming message — appears as a real chat bubble */}
+                  {(streamingContent || (thinkingContent && !streamingContent)) && (() => {
+                    // Detect if content is <internal> leak (not real thinking)
+                    const hasInternalLeak = !streamingContent && thinkingContent &&
+                      streamPartOrderRef.current.length <= 1 &&
+                      /<internal>/i.test(thinkingContent);
+                    // Real thinking = 2+ partIDs (first is thinking, rest is response)
+                    const hasRealThinking = streamPartOrderRef.current.length >= 2;
+
+                    return (
+                    <div className="mb-6">
+                      <div className="space-y-3">
+                        <div className="flex w-full justify-start">
+                          <div className="w-full px-4 py-3">
+                            <div className="mb-2">
+                              <div className="flex items-center gap-1.5 text-xs text-emerald-400">
+                                <Bot className="h-3.5 w-3.5" />
+                                <span className="font-medium uppercase tracking-wider">Andy</span>
+                              </div>
+                            </div>
+
+                            {/* Internal thinking indicator — shown when model leaks <internal> tags */}
+                            {hasInternalLeak && (
+                              <div className={`flex items-center gap-2 text-xs italic ${isDark ? 'text-zinc-600' : 'text-zinc-400'}`}>
+                                <span>Internal thinking</span>
+                                <span className="flex gap-0.5">
+                                  <span className="h-1 w-1 animate-bounce rounded-full bg-zinc-500 [animation-delay:-0.3s]" />
+                                  <span className="h-1 w-1 animate-bounce rounded-full bg-zinc-500 [animation-delay:-0.15s]" />
+                                  <span className="h-1 w-1 animate-bounce rounded-full bg-zinc-500" />
+                                </span>
+                              </div>
+                            )}
+
+                            {/* Thinking accordion — closed by default, clickable to watch live (real thinking only) */}
+                            {settings.showThinking && !hasInternalLeak && thinkingContent && !streamingContent && (
+                              <details className="mb-2 text-xs">
+                                <summary className={`cursor-pointer select-none italic flex items-center gap-2 ${isDark ? 'text-zinc-500' : 'text-zinc-400'}`}>
+                                  <span>Thinking</span>
+                                  <span className="flex gap-0.5">
+                                    <span className="h-1 w-1 animate-bounce rounded-full bg-emerald-500 [animation-delay:-0.3s]" />
+                                    <span className="h-1 w-1 animate-bounce rounded-full bg-emerald-500 [animation-delay:-0.15s]" />
+                                    <span className="h-1 w-1 animate-bounce rounded-full bg-emerald-500" />
+                                  </span>
+                                </summary>
+                                <pre className={`mt-2 whitespace-pre-wrap font-sans leading-relaxed ${isDark ? 'text-zinc-500' : 'text-zinc-400'}`}>{thinkingContent.replace(/<internal>[\s\S]*?<\/internal>/g, '').replace(/<internal>[\s\S]*$/g, '').trim()}</pre>
+                              </details>
+                            )}
+
+                            {/* Thinking accordion — shown once response starts streaming (real thinking only) */}
+                            {settings.showThinking && hasRealThinking && thinkingContent && streamingContent && (
+                              <details className="mb-2 text-xs">
+                                <summary className={`cursor-pointer select-none italic ${isDark ? 'text-zinc-500' : 'text-zinc-400'}`}>Thinking</summary>
+                                <pre className={`mt-2 whitespace-pre-wrap font-sans leading-relaxed ${isDark ? 'text-zinc-500' : 'text-zinc-400'}`}>{thinkingContent.replace(/<internal>[\s\S]*?<\/internal>/g, '').replace(/<internal>[\s\S]*$/g, '').trim()}</pre>
+                              </details>
+                            )}
+
+                            {/* Streaming response text */}
+                            {streamingContent && (
+                              <div className={`prose max-w-none break-words text-base leading-relaxed [&_p:last-child]:inline ${isDark ? 'prose-invert text-zinc-300' : 'text-zinc-800'}`}>
+                                <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                                  {streamingContent.replace(/<internal>[\s\S]*?<\/internal>/g, '').trim()}
+                                </ReactMarkdown>
+                                <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-emerald-400 align-middle ml-1" />
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    );
+                  })()}
                   <div ref={messagesEndRef} />
                 </div>
               </div>
 
               {showScrollToBottom && (
                 <button
-                  type="button" onClick={() => { scrollToBottom(); setShowScrollToBottom(false); }}
+                  type="button"
+                  onClick={() => {
+                    scrollToBottom();
+                    setShowScrollToBottom(false);
+                  }}
                   style={{ bottom: composerHeight + 10 }}
                   className={`absolute left-1/2 z-20 -translate-x-1/2 rounded-full border p-3 shadow-lg backdrop-blur transition ${isDark ? 'border-zinc-700 bg-zinc-800/90 text-zinc-200 hover:bg-zinc-700' : 'border-zinc-300 bg-white/95 text-zinc-700 hover:bg-zinc-100'}`}
                   title="Scroll to bottom"
@@ -544,53 +930,88 @@ function App() {
                 </button>
               )}
 
-              {agentStatus && agentStatus.status !== 'done' && agentStatus.chatJid === state.selectedChat.jid && (
-                <div className={`flex items-center gap-2 px-4 py-2 text-xs ${
-                  agentStatus.status === 'error'
-                    ? isDark ? 'bg-red-950/40 text-red-400' : 'bg-red-50 text-red-600'
-                    : agentStatus.status === 'queued'
-                    ? isDark ? 'bg-amber-950/40 text-amber-400' : 'bg-amber-50 text-amber-700'
-                    : isDark ? 'bg-zinc-800/80 text-emerald-400' : 'bg-zinc-100 text-emerald-600'
-                }`}>
-                  {agentStatus.status === 'queued' ? (
-                    <span className={`rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase ${isDark ? 'bg-amber-500/20' : 'bg-amber-200/60'}`}>
-                      Queue
-                    </span>
-                  ) : agentStatus.status !== 'error' ? (
-                    <span className="flex gap-1">
-                      <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-current [animation-delay:-0.3s]" />
-                      <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-current [animation-delay:-0.15s]" />
-                      <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-current" />
-                    </span>
-                  ) : null}
-                  <span>{agentStatus.detail || agentStatus.status}</span>
-                  <ElapsedTimer startTime={agentStatus.timestamp} isDark={isDark} />
-                </div>
-              )}
+              {agentStatus &&
+                agentStatus.status !== 'done' &&
+                agentStatus.chatJid === state.selectedChat.jid && (
+                  <div
+                    className={`flex items-center gap-2 px-4 py-2 text-xs ${
+                      agentStatus.status === 'error'
+                        ? isDark
+                          ? 'bg-red-950/40 text-red-400'
+                          : 'bg-red-50 text-red-600'
+                        : agentStatus.status === 'queued'
+                          ? isDark
+                            ? 'bg-amber-950/40 text-amber-400'
+                            : 'bg-amber-50 text-amber-700'
+                          : isDark
+                            ? 'bg-zinc-800/80 text-emerald-400'
+                            : 'bg-zinc-100 text-emerald-600'
+                    }`}
+                  >
+                    {agentStatus.status === 'queued' ? (
+                      <span
+                        className={`rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase ${isDark ? 'bg-amber-500/20' : 'bg-amber-200/60'}`}
+                      >
+                        Queue
+                      </span>
+                    ) : agentStatus.status !== 'error' ? (
+                      <span className="flex gap-1">
+                        <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-current [animation-delay:-0.3s]" />
+                        <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-current [animation-delay:-0.15s]" />
+                        <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-current" />
+                      </span>
+                    ) : null}
+                    <span>{agentStatus.detail || agentStatus.status}</span>
+                    <ElapsedTimer
+                      startTime={agentStatus.timestamp}
+                      isDark={isDark}
+                    />
+                  </div>
+                )}
 
               <ComposerBar
-                isDark={isDark} connected={state.connected} selectedChatJid={state.selectedChat.jid}
-                selectedModelId={selectedModelId} onSelectModel={(modelId) => {
+                isDark={isDark}
+                connected={state.connected}
+                selectedChatJid={state.selectedChat.jid}
+                selectedModelId={selectedModelId}
+                onSelectModel={(modelId) => {
                   setSelectedModelId(modelId);
                   setSelectedModel(modelId);
                 }}
                 availableModels={availableModels}
-                onSendMessage={sendMessage} onOptimisticMessage={handleOptimisticMessage}
+                onSendMessage={sendMessage}
+                onOptimisticMessage={handleOptimisticMessage}
                 onRemoveOptimisticMessage={handleRemoveOptimisticMessage}
-                onComposerResize={setComposerHeight} inputRef={inputRef}
+                onComposerResize={setComposerHeight}
+                inputRef={inputRef}
               />
             </>
           ) : (
-            <div className={`flex flex-1 flex-col items-center justify-center ${isDark ? 'text-zinc-400' : 'text-zinc-600'}`}>
-              <MessageCircle className={`mb-2 h-10 w-10 ${isDark ? 'text-zinc-500' : 'text-zinc-400'}`} />
-              <h2 className={`text-xl font-medium ${isDark ? 'text-zinc-200' : 'text-zinc-800'}`}>Select a chat to start</h2>
-              <p className="mt-1 text-sm">Choose a conversation from the sidebar</p>
+            <div
+              className={`flex flex-1 flex-col items-center justify-center ${isDark ? 'text-zinc-400' : 'text-zinc-600'}`}
+            >
+              <MessageCircle
+                className={`mb-2 h-10 w-10 ${isDark ? 'text-zinc-500' : 'text-zinc-400'}`}
+              />
+              <h2
+                className={`text-xl font-medium ${isDark ? 'text-zinc-200' : 'text-zinc-800'}`}
+              >
+                Select a chat to start
+              </h2>
+              <p className="mt-1 text-sm">
+                Choose a conversation from the sidebar
+              </p>
             </div>
           )}
         </main>
 
         {settings.debugPanel && state.selectedChat && (
-          <DebugPanel messages={state.messages} onClose={() => updateSetting('debugPanel', false)} isDark={isDark} chatFolder={state.selectedChat?.workspaceInfo?.folder} />
+          <DebugPanel
+            messages={state.messages}
+            onClose={() => updateSetting('debugPanel', false)}
+            isDark={isDark}
+            chatFolder={state.selectedChat?.workspaceInfo?.folder}
+          />
         )}
       </div>
     </div>

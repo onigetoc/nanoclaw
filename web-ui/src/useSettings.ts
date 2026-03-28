@@ -3,30 +3,27 @@ import { useState, useCallback, useMemo } from 'react';
 const SETTINGS_STORAGE_KEY = 'eureclaw_settings';
 
 export interface Settings {
-  /** Show the debug panel for agent metadata (default: false) */
+  /** Show the debug panel for agent metadata (default: true) */
   debugPanel: boolean;
   /** Enable desktop notifications for new messages */
   notifications: boolean;
   /** Auto-scroll to bottom on new messages */
   autoScroll: boolean;
-  /** Show timestamps on every message (vs. only on hover) */
-  showTimestamps: boolean;
-  /** Show token counts inline on bot messages */
-  showTokenCounts: boolean;
-  /** Compact message layout */
-  compactMode: boolean;
   /** Enable sound effects */
   soundEffects: boolean;
+  /** Show thinking/reasoning accordion in chat messages (default: true) */
+  showThinking: boolean;
+  /** Persist LLM thinking/reasoning to DB for later review (default: true) */
+  saveThinking: boolean;
 }
 
 const DEFAULT_SETTINGS: Settings = {
-  debugPanel: false,
+  debugPanel: true,
   notifications: true,
   autoScroll: true,
-  showTimestamps: false,
-  showTokenCounts: false,
-  compactMode: false,
   soundEffects: false,
+  showThinking: true,
+  saveThinking: true,
 };
 
 function loadSettings(): Settings {

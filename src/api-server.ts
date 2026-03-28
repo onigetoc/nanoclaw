@@ -14,7 +14,7 @@ import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import { logger } from './logger.js';
-import { getAllChats, getMessagesSince, getAllMessagesSinceLinked, getMessagesPage, getLinkedChatJids, storeMessageDirect, storeChatMetadata, setRegisteredWorkspace, insertApiToken, getAllApiTokens, updateApiTokenLastUsed, deactivateApiToken, getApiTokenChatMappings, addApiTokenChat, deleteApiTokenChats } from './db.js';
+import { getAllChats, getMessagesSince, getAllMessagesSinceLinked, getMessagesPage, getLinkedChatJids, storeMessageDirect, storeChatMetadata, setRegisteredWorkspace, insertApiToken, getAllApiTokens, updateApiTokenLastUsed, deactivateApiToken, getApiTokenChatMappings, addApiTokenChat, deleteApiTokenChats, updateMessageReasoning } from './db.js';
 import { getRegisteredWorkspaces, reloadRegisteredWorkspaces, getSessions, setLastAgentTimestampForJid, saveState } from './state.js';
 import { ASSISTANT_NAME, WORKSPACES_DIR, TRIGGER_PATTERN } from './config.js';
 import { NewMessage, RegisteredWorkspace } from './types.js';
@@ -151,6 +151,94 @@ fastify.get(
     request.raw.on('close', () => {
       connections.delete(sendEvent);
     });
+  },
+);
+
+/**
+ * SSE streaming route for web UI.
+ * Connects to OpenCode's /event SSE endpoint and forwards text deltas to the browser.
+ * The browser opens this when sending a message to get real-time token streaming.
+ * Telegram/WhatsApp are NOT affected — they use the normal message flow.
+ */
+fastify.get(
+  '/chat/stream',
+  { preHandler: authenticate },
+  async (request: FastifyRequest, reply: FastifyReply) => {
+    const query = request.query as Record<string, string>;
+    const sessionId = query.sessionId || '';
+
+    const origin = request.headers.origin || '*';
+    reply.raw.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache, no-transform',
+      Connection: 'keep-alive',
+      'Access-Control-Allow-Origin': origin,
+      'Access-Control-Allow-Credentials': 'true',
+    });
+
+    const opencodePort = getOpenCodePort();
+    const opencodeHost = getOpenCodeHost();
+    const baseURL = `http://${opencodeHost}:${opencodePort}`;
+    const abortController = new AbortController();
+
+    request.raw.on('close', () => {
+      abortController.abort();
+    });
+
+    try {
+      const resp = await fetch(`${baseURL}/event`, {
+        headers: { 'Accept': 'text/event-stream' },
+        signal: abortController.signal,
+      });
+
+      if (!resp.ok || !resp.body) {
+        reply.raw.write(`data: ${JSON.stringify({ type: 'error', message: 'Failed to connect to OpenCode event stream' })}\n\n`);
+        reply.raw.end();
+        return;
+      }
+
+      const reader = resp.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          try {
+            const data = JSON.parse(line.slice(6));
+
+            if (data.type === 'message.part.delta') {
+              const props = data.properties || {};
+              if (props.field !== 'text') continue;
+              if (sessionId && props.sessionID && props.sessionID !== sessionId) continue;
+              const delta = props.delta || '';
+              if (!delta) continue;
+
+              // Send delta with partID — frontend separates thinking vs response
+              reply.raw.write(`data: ${JSON.stringify({ type: 'delta', content: delta, partID: props.partID || '' })}\n\n`);
+            }
+          } catch {
+            // Ignore malformed SSE lines
+          }
+        }
+      }
+    } catch (err: any) {
+      if (err?.name !== 'AbortError') {
+        logger.warn({ err: err?.message }, 'Chat stream error');
+        try {
+          reply.raw.write(`data: ${JSON.stringify({ type: 'error', message: err?.message || 'Stream error' })}\n\n`);
+        } catch { /* connection already closed */ }
+      }
+    } finally {
+      try { reply.raw.end(); } catch { /* already ended */ }
+    }
   },
 );
 
@@ -322,6 +410,22 @@ fastify.get(
     messages.sort((a, b) => a.timestamp.localeCompare(b.timestamp));
 
     return { messages };
+  },
+);
+
+// Persist reasoning/thinking into message metadata (called by web-ui after streaming)
+fastify.patch(
+  '/messages/:id/reasoning',
+  { preHandler: authenticate },
+  async (request: FastifyRequest, reply: FastifyReply) => {
+    const { id } = request.params as { id: string };
+    const body = request.body as { reasoning?: string } | undefined;
+    const reasoning = body?.reasoning;
+    if (!reasoning || typeof reasoning !== 'string') {
+      return reply.code(400).send({ error: 'reasoning is required' });
+    }
+    updateMessageReasoning(id, reasoning);
+    return { ok: true };
   },
 );
 

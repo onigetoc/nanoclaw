@@ -10,14 +10,22 @@ import { sanitizeMessageContent, formatTime, openExternalLink } from '../types';
 interface MessageBubbleProps {
   msg: Message;
   isDark: boolean;
+  showThinking?: boolean;
   onSendCommand?: (cmd: string) => void;
 }
 
-function MessageBubble({ msg, isDark, onSendCommand }: MessageBubbleProps) {
+function MessageBubble({ msg, isDark, showThinking = true, onSendCommand }: MessageBubbleProps) {
   const sanitizedContent = sanitizeMessageContent(msg.content);
-  const { visibleContent, reasoning } = extractReasoning(sanitizedContent);
+  const { visibleContent, reasoning: extractedReasoning } = extractReasoning(sanitizedContent);
+  // Prefer reasoning stored in metadata (doesn't pollute context tokens)
+  const reasoning = (msg.metadata as any)?.reasoning || extractedReasoning;
   const isAssistant = Boolean(msg.is_bot_message);
   const sources = isAssistant ? extractSources(visibleContent) : [];
+
+  // Extract fallback model notice (e.g. "⚡ _Answered by fallback model: xxx_")
+  const fallbackMatch = visibleContent.match(/^⚡\s*_([^_]+)_\s*\n*/);
+  const fallbackNotice = fallbackMatch ? fallbackMatch[1] : null;
+  const contentWithoutFallback = fallbackMatch ? visibleContent.slice(fallbackMatch[0].length) : visibleContent;
 
   return (
     <div className={`flex w-full ${isAssistant ? 'justify-start' : 'justify-end'}`}>
@@ -54,11 +62,15 @@ function MessageBubble({ msg, isDark, onSendCommand }: MessageBubbleProps) {
           </div>
         )}
 
-        {reasoning && (
-          <details className={`mb-2 rounded-lg border p-2 text-xs ${isDark ? 'border-zinc-700 bg-zinc-800/80 text-zinc-300' : 'border-zinc-200 bg-zinc-100 text-zinc-700'}`}>
-            <summary className="cursor-pointer select-none font-medium">Reasoning</summary>
-            <pre className="mt-2 whitespace-pre-wrap font-sans leading-relaxed">{reasoning}</pre>
+        {showThinking && reasoning && (
+          <details className="mb-2 text-xs">
+            <summary className={`cursor-pointer select-none italic ${isDark ? 'text-zinc-500' : 'text-zinc-400'}`}>Thinking</summary>
+            <pre className={`mt-2 whitespace-pre-wrap font-sans leading-relaxed ${isDark ? 'text-zinc-500' : 'text-zinc-400'}`}>{reasoning}</pre>
           </details>
+        )}
+
+        {fallbackNotice && (
+          <div className={`mb-1.5 text-[11px] italic ${isDark ? 'text-amber-500/70' : 'text-amber-700'}`}>⚡ {fallbackNotice}</div>
         )}
 
         {sources.length > 0 && (
@@ -149,7 +161,7 @@ function MessageBubble({ msg, isDark, onSendCommand }: MessageBubbleProps) {
               },
             }}
           >
-            {preserveParagraphBreaks(linkifyMentionsAndCommands(visibleContent))}
+            {preserveParagraphBreaks(linkifyMentionsAndCommands(contentWithoutFallback))}
           </ReactMarkdown>
         </div>
 
@@ -165,6 +177,7 @@ export default memo(MessageBubble, (prev, next) => {
   return (
     prev.msg.id === next.msg.id &&
     prev.msg.content === next.msg.content &&
-    prev.isDark === next.isDark
+    prev.isDark === next.isDark &&
+    prev.showThinking === next.showThinking
   );
 });

@@ -20,8 +20,16 @@ export interface MessageMetadata {
   providerID?: string;
   mode?: string;
   agent?: string;
-  tokens?: { total: number; input: number; output: number; reasoning: number; cacheRead?: number; cacheWrite?: number };
+  tokens?: {
+    total: number;
+    input: number;
+    output: number;
+    reasoning: number;
+    cacheRead?: number;
+    cacheWrite?: number;
+  };
   cost?: number;
+  reasoning?: string;
 }
 
 export interface Message {
@@ -73,7 +81,15 @@ export interface AgentExecution {
 
 export interface ExecutionStep {
   timestamp: string;
-  phase: 'queue' | 'init' | 'context' | 'model' | 'fallback' | 'response' | 'error' | 'done';
+  phase:
+    | 'queue'
+    | 'init'
+    | 'context'
+    | 'model'
+    | 'fallback'
+    | 'response'
+    | 'error'
+    | 'done';
   message: string;
   durationMs?: number;
   metadata?: Record<string, unknown>;
@@ -166,7 +182,14 @@ export interface EnvVarEntry {
 
 export interface StatusEvent {
   chatJid: string;
-  status: 'processing' | 'connecting' | 'waiting' | 'responding' | 'error' | 'done' | 'queued';
+  status:
+    | 'processing'
+    | 'connecting'
+    | 'waiting'
+    | 'responding'
+    | 'error'
+    | 'done'
+    | 'queued';
   detail?: string;
   timestamp: string;
 }
@@ -301,9 +324,10 @@ class ApiService {
     if (options?.limit) params.set('limit', String(options.limit));
     if (options?.before) params.set('before', options.before);
     const query = params.toString() ? `?${params.toString()}` : '';
-    const result = await this.request<{ messages: Message[]; hasMore?: boolean }>(
-      `/chats/${encodeURIComponent(chatJid)}/messages${query}`,
-    );
+    const result = await this.request<{
+      messages: Message[];
+      hasMore?: boolean;
+    }>(`/chats/${encodeURIComponent(chatJid)}/messages${query}`);
     const messages = result.messages.map((m) => ({
       ...m,
       is_from_me: !!m.is_from_me,
@@ -319,14 +343,14 @@ class ApiService {
     model?: string,
     agent?: string,
   ): Promise<{ success: boolean; messageId: string; timestamp: string }> {
-    const body: Record<string, unknown> = { 
-      content, 
-      channel: 'web' 
+    const body: Record<string, unknown> = {
+      content,
+      channel: 'web',
     };
-    
+
     if (model) body.model = model;
     if (agent) body.agent = agent;
-    
+
     const result = await this.request<{
       success: boolean;
       messageId: string;
@@ -341,7 +365,10 @@ class ApiService {
   async uploadFiles(
     chatJid: string,
     files: File[],
-  ): Promise<{ success: boolean; files: Array<{ name: string; path: string }> }> {
+  ): Promise<{
+    success: boolean;
+    files: Array<{ name: string; path: string }>;
+  }> {
     const token = this.getToken();
     if (!token) throw new Error('Not authenticated');
 
@@ -350,14 +377,19 @@ class ApiService {
       formData.append('files', file);
     }
 
-    const response = await fetch(`${API_BASE}/chats/${encodeURIComponent(chatJid)}/upload`, {
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${token}` },
-      body: formData,
-    });
+    const response = await fetch(
+      `${API_BASE}/chats/${encodeURIComponent(chatJid)}/upload`,
+      {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData,
+      },
+    );
 
     if (!response.ok) {
-      const error = await response.json().catch(() => ({ error: 'Upload failed' }));
+      const error = await response
+        .json()
+        .catch(() => ({ error: 'Upload failed' }));
       throw new Error(error.error || `HTTP ${response.status}`);
     }
 
@@ -374,24 +406,52 @@ class ApiService {
     const formData = new FormData();
     formData.append('file', file);
 
-    const response = await fetch(`${API_BASE}/chats/${encodeURIComponent(chatJid)}/analyze`, {
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${token}` },
-      body: formData,
-    });
+    const response = await fetch(
+      `${API_BASE}/chats/${encodeURIComponent(chatJid)}/analyze`,
+      {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData,
+      },
+    );
 
     if (!response.ok) {
-      const error = await response.json().catch(() => ({ error: 'Analysis failed' }));
+      const error = await response
+        .json()
+        .catch(() => ({ error: 'Analysis failed' }));
       throw new Error(error.error || `HTTP ${response.status}`);
     }
 
     return response.json();
   }
 
+  /** Persist reasoning/thinking text into the message's metadata in SQLite */
+  async saveMessageReasoning(messageId: string, reasoning: string): Promise<void> {
+    const token = this.getToken();
+    if (!token) return;
+    try {
+      await fetch(`${API_BASE}/messages/${encodeURIComponent(messageId)}/reasoning`, {
+        method: 'PATCH',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ reasoning }),
+      });
+    } catch {
+      // Best-effort — don't break the UI if this fails
+    }
+  }
+
   async sendAudio(
     chatJid: string,
     audioFile: File,
-  ): Promise<{ success: boolean; messageId: string; timestamp: string; transcribedText: string }> {
+  ): Promise<{
+    success: boolean;
+    messageId: string;
+    timestamp: string;
+    transcribedText: string;
+  }> {
     const token = this.getToken();
     if (!token) {
       throw new Error('Not authenticated');
@@ -400,16 +460,21 @@ class ApiService {
     const formData = new FormData();
     formData.append('file', audioFile);
 
-    const response = await fetch(`${API_BASE}/chats/${encodeURIComponent(chatJid)}/audio`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`,
+    const response = await fetch(
+      `${API_BASE}/chats/${encodeURIComponent(chatJid)}/audio`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+        body: formData,
       },
-      body: formData,
-    });
+    );
 
     if (!response.ok) {
-      const error = await response.json().catch(() => ({ error: 'Request failed' }));
+      const error = await response
+        .json()
+        .catch(() => ({ error: 'Request failed' }));
       throw new Error(error.error || `HTTP ${response.status}`);
     }
 
@@ -451,8 +516,12 @@ class ApiService {
     return result;
   }
 
-  async getAvailableAgents(): Promise<{ agents: Array<{ id: string; name: string; description: string }> }> {
-    const result = await this.request<{ agents: Array<{ id: string; name: string; description: string }> }>('/agents');
+  async getAvailableAgents(): Promise<{
+    agents: Array<{ id: string; name: string; description: string }>;
+  }> {
+    const result = await this.request<{
+      agents: Array<{ id: string; name: string; description: string }>;
+    }>('/agents');
     return result;
   }
 
@@ -463,7 +532,9 @@ class ApiService {
 
   async getExecutionDetail(id: string): Promise<AgentExecution | null> {
     try {
-      const result = await this.request<AgentExecution>(`/monitoring/executions/${id}`);
+      const result = await this.request<AgentExecution>(
+        `/monitoring/executions/${id}`,
+      );
       return result;
     } catch {
       return null;
@@ -476,7 +547,9 @@ class ApiService {
   }
 
   async getAuthProviders(): Promise<ProviderInfo[]> {
-    const result = await this.request<{ providers: ProviderInfo[] }>('/auth/providers');
+    const result = await this.request<{ providers: ProviderInfo[] }>(
+      '/auth/providers',
+    );
     return result.providers;
   }
 
@@ -485,21 +558,28 @@ class ApiService {
     return result.keys;
   }
 
-  async addScannedKey(envVar: string): Promise<{ success: boolean; message: string }> {
+  async addScannedKey(
+    envVar: string,
+  ): Promise<{ success: boolean; message: string }> {
     return this.request('/auth/scan/add', {
       method: 'POST',
       body: JSON.stringify({ envVar }),
     });
   }
 
-  async setAuthProvider(provider: string, key: string): Promise<{ success: boolean; message: string }> {
+  async setAuthProvider(
+    provider: string,
+    key: string,
+  ): Promise<{ success: boolean; message: string }> {
     return this.request('/auth/provider', {
       method: 'POST',
       body: JSON.stringify({ provider, key }),
     });
   }
 
-  async removeAuthProvider(provider: string): Promise<{ success: boolean; message: string }> {
+  async removeAuthProvider(
+    provider: string,
+  ): Promise<{ success: boolean; message: string }> {
     return this.request('/auth/provider/remove', {
       method: 'POST',
       body: JSON.stringify({ provider }),
@@ -509,30 +589,65 @@ class ApiService {
   // --- Environment Variables ---
 
   async getEnvVars(): Promise<EnvVarEntry[]> {
-    const result = await this.request<{ variables: EnvVarEntry[] }>('/envvar/list');
+    const result = await this.request<{ variables: EnvVarEntry[] }>(
+      '/envvar/list',
+    );
     return result.variables;
   }
 
-  async setEnvVar(name: string, value: string, label?: string): Promise<{ success: boolean; name: string; message: string }> {
+  async setEnvVar(
+    name: string,
+    value: string,
+    label?: string,
+  ): Promise<{ success: boolean; name: string; message: string }> {
     return this.request('/envvar/set', {
       method: 'POST',
       body: JSON.stringify({ name, value, label }),
     });
   }
 
-  async removeEnvVar(name: string): Promise<{ success: boolean; message: string }> {
+  async removeEnvVar(
+    name: string,
+  ): Promise<{ success: boolean; message: string }> {
     return this.request('/envvar/remove', {
       method: 'POST',
       body: JSON.stringify({ name }),
     });
   }
 
-  async getProviders(): Promise<{ providers: Array<{ id: string; name: string; models: Array<{ id: string; name: string; provider: string; context_length?: number; pricing?: { prompt?: number; completion?: number } }> }>; popular: string[] }> {
+  async getProviders(): Promise<{
+    providers: Array<{
+      id: string;
+      name: string;
+      models: Array<{
+        id: string;
+        name: string;
+        provider: string;
+        context_length?: number;
+        pricing?: { prompt?: number; completion?: number };
+      }>;
+    }>;
+    popular: string[];
+  }> {
     return this.request('/models/providers');
   }
 
   /** Fetch real providers/models from the running OpenCode server (proxied via EureClaw API). */
-  async getOpenCodeProviders(): Promise<{ providers: Array<{ id: string; name: string; models: Record<string, { id: string; name: string; cost: { input: number; output: number }; limit: { context: number; output: number } }> }> }> {
+  async getOpenCodeProviders(): Promise<{
+    providers: Array<{
+      id: string;
+      name: string;
+      models: Record<
+        string,
+        {
+          id: string;
+          name: string;
+          cost: { input: number; output: number };
+          limit: { context: number; output: number };
+        }
+      >;
+    }>;
+  }> {
     return this.request('/opencode/providers');
   }
 
@@ -543,16 +658,29 @@ class ApiService {
   // === Scheduled Tasks / Cron Jobs ===
 
   async getTasks(workspace?: string): Promise<ScheduledTaskInfo[]> {
-    const query = workspace ? `?workspace=${encodeURIComponent(workspace)}` : '';
-    const result = await this.request<{ tasks: ScheduledTaskInfo[] }>(`/tasks${query}`);
+    const query = workspace
+      ? `?workspace=${encodeURIComponent(workspace)}`
+      : '';
+    const result = await this.request<{ tasks: ScheduledTaskInfo[] }>(
+      `/tasks${query}`,
+    );
     return result.tasks;
   }
 
-  async getTask(id: string): Promise<{ task: ScheduledTaskInfo; logs: TaskRunLogEntry[] }> {
+  async getTask(
+    id: string,
+  ): Promise<{ task: ScheduledTaskInfo; logs: TaskRunLogEntry[] }> {
     return this.request(`/tasks/${encodeURIComponent(id)}`);
   }
 
-  async getRunLog(runId: number): Promise<{ content: string | null; truncated?: boolean; path?: string; message?: string }> {
+  async getRunLog(
+    runId: number,
+  ): Promise<{
+    content: string | null;
+    truncated?: boolean;
+    path?: string;
+    message?: string;
+  }> {
     return this.request(`/tasks/run-log/${runId}`);
   }
 
@@ -564,32 +692,51 @@ class ApiService {
     schedule_value: string;
     context_mode?: string;
   }): Promise<{ success: boolean; id: string }> {
-    return this.request('/tasks', { method: 'POST', body: JSON.stringify(data) });
+    return this.request('/tasks', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
   }
 
-  async updateTask(id: string, data: {
-    prompt?: string;
-    schedule_type?: string;
-    schedule_value?: string;
-    workspace_folder?: string;
-  }): Promise<{ success: boolean }> {
-    return this.request(`/tasks/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify(data) });
+  async updateTask(
+    id: string,
+    data: {
+      prompt?: string;
+      schedule_type?: string;
+      schedule_value?: string;
+      workspace_folder?: string;
+    },
+  ): Promise<{ success: boolean }> {
+    return this.request(`/tasks/${encodeURIComponent(id)}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
   }
 
   async deleteTask(id: string): Promise<{ success: boolean }> {
-    return this.request(`/tasks/${encodeURIComponent(id)}`, { method: 'DELETE' });
+    return this.request(`/tasks/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    });
   }
 
   async pauseTask(id: string): Promise<{ success: boolean }> {
-    return this.request(`/tasks/${encodeURIComponent(id)}/pause`, { method: 'POST' });
+    return this.request(`/tasks/${encodeURIComponent(id)}/pause`, {
+      method: 'POST',
+    });
   }
 
   async resumeTask(id: string): Promise<{ success: boolean }> {
-    return this.request(`/tasks/${encodeURIComponent(id)}/resume`, { method: 'POST' });
+    return this.request(`/tasks/${encodeURIComponent(id)}/resume`, {
+      method: 'POST',
+    });
   }
 
-  async triggerTask(id: string): Promise<{ success: boolean; message: string }> {
-    return this.request(`/tasks/${encodeURIComponent(id)}/run`, { method: 'POST' });
+  async triggerTask(
+    id: string,
+  ): Promise<{ success: boolean; message: string }> {
+    return this.request(`/tasks/${encodeURIComponent(id)}/run`, {
+      method: 'POST',
+    });
   }
 
   async checkHealth(): Promise<{ status: string; timestamp: string }> {
@@ -597,29 +744,53 @@ class ApiService {
     return response.json();
   }
 
-  async restartOpenCodeServer(): Promise<{ success: boolean; message: string }> {
+  async restartOpenCodeServer(): Promise<{
+    success: boolean;
+    message: string;
+  }> {
     return this.request('/system/restart-opencode', { method: 'GET' });
   }
 
   // === Markdown File Browser ===
 
-  async getMdWorkspaces(): Promise<{ workspaces: Array<{ name: string; folders: string[] }> }> {
+  async getMdWorkspaces(): Promise<{
+    workspaces: Array<{ name: string; folders: string[] }>;
+  }> {
     return this.request('/md/workspaces');
   }
 
-  async getMdTree(workspace: string): Promise<{ workspace: string; tree: MdFileEntry[] }> {
+  async getMdTree(
+    workspace: string,
+  ): Promise<{ workspace: string; tree: MdFileEntry[] }> {
     return this.request(`/md/workspaces/${encodeURIComponent(workspace)}/tree`);
   }
 
-  async getMdFile(workspace: string, filePath: string): Promise<{ path: string; content: string; size: number; modified: string }> {
-    return this.request(`/md/workspaces/${encodeURIComponent(workspace)}/file?path=${encodeURIComponent(filePath)}`);
+  async getMdFile(
+    workspace: string,
+    filePath: string,
+  ): Promise<{
+    path: string;
+    content: string;
+    size: number;
+    modified: string;
+  }> {
+    return this.request(
+      `/md/workspaces/${encodeURIComponent(workspace)}/file?path=${encodeURIComponent(filePath)}`,
+    );
   }
 
-  async saveMdFile(workspace: string, filePath: string, content: string): Promise<{ success: boolean; size: number; modified: string }> {
-    return this.request(`/md/workspaces/${encodeURIComponent(workspace)}/file?path=${encodeURIComponent(filePath)}`, {
-      method: 'PUT',
-      body: JSON.stringify({ content }),
-    });
+  async saveMdFile(
+    workspace: string,
+    filePath: string,
+    content: string,
+  ): Promise<{ success: boolean; size: number; modified: string }> {
+    return this.request(
+      `/md/workspaces/${encodeURIComponent(workspace)}/file?path=${encodeURIComponent(filePath)}`,
+      {
+        method: 'PUT',
+        body: JSON.stringify({ content }),
+      },
+    );
   }
 
   async getMdFileBlob(workspace: string, filePath: string): Promise<Blob> {
@@ -647,7 +818,9 @@ class ApiService {
     const token = this.getToken();
     if (!token) throw new Error('Not authenticated');
 
-    const normalized = relativeUrl.startsWith('/') ? relativeUrl : `/${relativeUrl}`;
+    const normalized = relativeUrl.startsWith('/')
+      ? relativeUrl
+      : `/${relativeUrl}`;
     const response = await fetch(`${API_BASE}${normalized}`, {
       headers: { Authorization: `Bearer ${token}` },
     });
@@ -662,8 +835,13 @@ class ApiService {
     return response.blob();
   }
 
-  async getWorkspaceDownloadBlob(workspaceFolder: string, fileId: string): Promise<Blob> {
-    return this.getFileBlobByRelativeUrl(`/files/${encodeURIComponent(workspaceFolder)}/${encodeURIComponent(fileId)}`);
+  async getWorkspaceDownloadBlob(
+    workspaceFolder: string,
+    fileId: string,
+  ): Promise<Blob> {
+    return this.getFileBlobByRelativeUrl(
+      `/files/${encodeURIComponent(workspaceFolder)}/${encodeURIComponent(fileId)}`,
+    );
   }
 
   private abortController: AbortController | null = null;
@@ -685,7 +863,10 @@ class ApiService {
     // Immediate first check
     void this.performHealthCheck();
     // Poll every 5 seconds
-    this.healthInterval = setInterval(() => void this.performHealthCheck(), 5000);
+    this.healthInterval = setInterval(
+      () => void this.performHealthCheck(),
+      5000,
+    );
   }
 
   stopHealthMonitor(): void {
@@ -697,7 +878,9 @@ class ApiService {
 
   private async performHealthCheck(): Promise<void> {
     try {
-      const resp = await fetch(`${API_BASE}/health`, { signal: AbortSignal.timeout(4000) });
+      const resp = await fetch(`${API_BASE}/health`, {
+        signal: AbortSignal.timeout(4000),
+      });
       if (resp.ok) {
         this.setServerOnline(true);
       } else {
@@ -735,7 +918,10 @@ class ApiService {
   onConnectionChange(callback: (status: ConnectionStatus) => void): () => void {
     this.connectionListeners.push(callback);
     // Immediately emit current status
-    callback({ serverOnline: this._serverOnline, sseConnected: this._sseConnected });
+    callback({
+      serverOnline: this._serverOnline,
+      sseConnected: this._sseConnected,
+    });
     return () => {
       const idx = this.connectionListeners.indexOf(callback);
       if (idx > -1) this.connectionListeners.splice(idx, 1);
@@ -781,12 +967,18 @@ class ApiService {
                     detail: data.detail,
                     timestamp: data.timestamp,
                   };
-                  this.statusListeners.forEach((listener) => listener(statusEvent));
-                } else if (data.type === 'message' && data.content && !data.id?.startsWith('typing_')) {
+                  this.statusListeners.forEach((listener) =>
+                    listener(statusEvent),
+                  );
+                } else if (
+                  data.type === 'message' &&
+                  data.content &&
+                  !data.id?.startsWith('typing_')
+                ) {
                   const message: Message = {
                     id: data.id,
                     chat_jid: data.chatJid,
-                    sender: data.is_bot_message ? 'bot' : (data.sender || 'user'),
+                    sender: data.is_bot_message ? 'bot' : data.sender || 'user',
                     sender_name: data.sender_name,
                     content: data.content,
                     timestamp: data.timestamp,
@@ -841,6 +1033,78 @@ class ApiService {
     return () => {
       const index = this.statusListeners.indexOf(callback);
       if (index > -1) this.statusListeners.splice(index, 1);
+    };
+  }
+
+  private chatStreamController: AbortController | null = null;
+  private deltaListeners: ((content: string, partID: string) => void)[] = [];
+
+  connectToChatStream(sessionId?: string): void {
+    const token = this.getToken();
+    if (!token) return;
+
+    this.disconnectFromChatStream();
+
+    this.chatStreamController = new AbortController();
+    const url = sessionId
+      ? `${API_BASE}/chat/stream?sessionId=${encodeURIComponent(sessionId)}`
+      : `${API_BASE}/chat/stream`;
+
+    fetch(url, {
+      headers: { Authorization: `Bearer ${token}` },
+      signal: this.chatStreamController.signal,
+    })
+      .then(async (response) => {
+        if (!response.body) return;
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || '';
+
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              try {
+                const data = JSON.parse(line.slice(6));
+                if (data.type === 'delta' && data.content) {
+                  this.deltaListeners.forEach((cb) => cb(data.content, data.partID || ''));
+                } else if (data.type === 'error') {
+                  console.error('Chat stream error:', data.message);
+                }
+              } catch (e) {
+                console.error('Failed to parse SSE message:', e);
+              }
+            }
+          }
+        }
+        this.chatStreamController = null;
+      })
+      .catch((err) => {
+        if (err.name !== 'AbortError') {
+          console.error('Chat stream error:', err);
+        }
+        this.chatStreamController = null;
+      });
+  }
+
+  disconnectFromChatStream(): void {
+    if (this.chatStreamController) {
+      this.chatStreamController.abort();
+      this.chatStreamController = null;
+    }
+  }
+
+  onDelta(callback: (content: string, partID: string) => void): () => void {
+    this.deltaListeners.push(callback);
+    return () => {
+      const index = this.deltaListeners.indexOf(callback);
+      if (index > -1) this.deltaListeners.splice(index, 1);
     };
   }
 }

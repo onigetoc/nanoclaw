@@ -77,22 +77,8 @@ export default function ConfigSection({ settings, onUpdate, onReset, isDark }: C
             Developer
           </h3>
           <ToggleRow label="Debug Panel" description="Show agent metadata sidebar in chat" checked={settings.debugPanel} onChange={(v) => onUpdate('debugPanel', v)} isDark={isDark} />
-          <ToggleRow label="Show Token Counts" description="Display token counts on bot messages" checked={settings.showTokenCounts} onChange={(v) => onUpdate('showTokenCounts', v)} isDark={isDark} />
-        </div>
-
-        <div className={`border-t ${isDark ? 'border-zinc-800' : 'border-zinc-100'}`} />
-
-        {/* Display */}
-        <div className="p-2">
-          <h3
-            className={`mb-1 px-4 pt-2 text-[10px] font-semibold uppercase tracking-wider ${
-              isDark ? 'text-zinc-500' : 'text-zinc-400'
-            }`}
-          >
-            Display
-          </h3>
-          <ToggleRow label="Show Timestamps" description="Always show timestamps on messages" checked={settings.showTimestamps} onChange={(v) => onUpdate('showTimestamps', v)} isDark={isDark} />
-          <ToggleRow label="Compact Mode" description="Reduce spacing between messages" checked={settings.compactMode} onChange={(v) => onUpdate('compactMode', v)} isDark={isDark} />
+          <ToggleRow label="Show Thinking" description="Display LLM reasoning accordion in chat messages" checked={settings.showThinking} onChange={(v) => onUpdate('showThinking', v)} isDark={isDark} />
+          <ToggleRow label="Save Thinking" description="Persist LLM reasoning to DB for review and debugging" checked={settings.saveThinking} onChange={(v) => onUpdate('saveThinking', v)} isDark={isDark} />
         </div>
 
         <div className={`border-t ${isDark ? 'border-zinc-800' : 'border-zinc-100'}`} />
