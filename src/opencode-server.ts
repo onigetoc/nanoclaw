@@ -571,6 +571,17 @@ export function startHealthChecks(): void {
       lastHealthy = Date.now();
       restartCount = 0;
     } else {
+      if (restartCount >= MAX_RESTART_ATTEMPTS) {
+        logger.error(
+          { restartCount, component: 'opencode-server' },
+          'OpenCode server down but max restart attempts reached. Stopping health checks. Manual restart required.',
+        );
+        if (healthInterval) {
+          clearInterval(healthInterval);
+          healthInterval = null;
+        }
+        return;
+      }
       const downFor = Date.now() - lastHealthy;
       logger.warn(
         { downForMs: downFor, component: 'opencode-server' },
