@@ -124,8 +124,11 @@ export async function processWorkspaceMessages(
   // Separate UI status timer: emit 'done' shortly after last output
   // so the green dots disappear quickly, even though the container
   // stays alive for follow-up messages (IDLE_TIMEOUT).
+  // Also marks the execution as completed in monitoring so the Activity
+  // timeline updates immediately instead of waiting for IDLE_TIMEOUT.
   let uiDoneTimer: ReturnType<typeof setTimeout> | null = null;
   let uiDoneEmitted = false;
+  let executionCompleted = false;
   const UI_DONE_DELAY = 3000; // 3 seconds after last output
   const scheduleUiDone = () => {
     if (uiDoneTimer) clearTimeout(uiDoneTimer);
@@ -133,6 +136,12 @@ export async function processWorkspaceMessages(
     uiDoneTimer = setTimeout(() => {
       broadcastStatus(chatJid, 'done');
       uiDoneEmitted = true;
+      // Mark execution completed now — don't wait for IDLE_TIMEOUT / process exit
+      if (!executionCompleted && !hadError) {
+        executionCompleted = true;
+        monitoring.addStep(executionId, 'done', actualModel ? `Completed with ${actualModel}` : 'Completed');
+        monitoring.updateExecution(executionId, { status: 'completed', model: actualModel });
+      }
     }, UI_DONE_DELAY);
   };
 
@@ -289,15 +298,20 @@ export async function processWorkspaceMessages(
       { workspace: workspace.name, error: errorDetail },
       'Agent error — cursor kept advanced, user notified',
     );
-    monitoring.updateExecution(executionId, {
-      status: 'error',
-      error: errorDetail,
-    });
+    if (!executionCompleted) {
+      monitoring.updateExecution(executionId, {
+        status: 'error',
+        error: errorDetail,
+      });
+    }
     return true; // Return true so the queue doesn't retry automatically
   }
 
-  monitoring.addStep(executionId, 'done', actualModel ? `Completed with ${actualModel}` : 'Completed');
-  monitoring.updateExecution(executionId, { status: 'completed', model: actualModel });
+  // Final completion — only if not already marked by scheduleUiDone timer
+  if (!executionCompleted) {
+    monitoring.addStep(executionId, 'done', actualModel ? `Completed with ${actualModel}` : 'Completed');
+    monitoring.updateExecution(executionId, { status: 'completed', model: actualModel });
+  }
   return true;
 }
 

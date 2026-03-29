@@ -45,7 +45,9 @@ interface ApiToken {
   active: boolean;
 }
 
-const sseConnections: Map<string, Set<(data: string) => void>> = new Map();
+// WebSocket broadcast functions — re-exported from api-websocket.ts for backward compatibility
+import { setupWebSocket, broadcastToToken, broadcastStatus, broadcastStep, broadcastExecutionUpdate, getWsConnectionCount } from './api-websocket.js';
+export { broadcastToToken, broadcastStatus, broadcastStep, broadcastExecutionUpdate, getWsConnectionCount };
 
 function generateToken(): string {
   return crypto.randomBytes(16).toString('hex');
@@ -120,39 +122,6 @@ async function authenticate(
 fastify.get('/health', async () => {
   return { status: 'ok', timestamp: new Date().toISOString() };
 });
-
-fastify.get(
-  '/events',
-  { preHandler: authenticate },
-  async (request: FastifyRequest, reply: FastifyReply) => {
-    const tokenId = request.tokenId;
-    if (!tokenId) {
-      reply.code(401).send({ error: 'Not authenticated' });
-      return;
-    }
-
-    const origin = request.headers.origin || '*';
-    reply.raw.writeHead(200, {
-      'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache',
-      Connection: 'keep-alive',
-      'Access-Control-Allow-Origin': origin,
-      'Access-Control-Allow-Credentials': 'true',
-    });
-
-    const sendEvent = (data: string) => {
-      reply.raw.write(`data: ${data}\n\n`);
-    };
-
-    const connections = sseConnections.get(tokenId) || new Set();
-    connections.add(sendEvent);
-    sseConnections.set(tokenId, connections);
-
-    request.raw.on('close', () => {
-      connections.delete(sendEvent);
-    });
-  },
-);
 
 /**
  * SSE streaming route for web UI.
@@ -1435,121 +1404,6 @@ export function setSendMessageFunction(
   sendMessageFn = fn;
 }
 
-/**
- * Broadcast a processing status event to web UI clients.
- * Used to show real-time progress indicators (e.g. "Connecting to model...", "Waiting for response...").
- */
-export function broadcastStatus(
-  chatJid: string,
-  status: 'processing' | 'connecting' | 'waiting' | 'responding' | 'error' | 'done' | 'queued',
-  detail?: string,
-): void {
-  const linkedJids = getLinkedChatJids(chatJid);
-  if (!linkedJids.includes(chatJid)) linkedJids.push(chatJid);
-
-  for (const [tokenId, connections] of sseConnections.entries()) {
-    const mappings = getApiTokenChatMappings(tokenId);
-    const hasChat = mappings.length === 0 || linkedJids.some((jid) => mappings.includes(jid));
-
-    if (hasChat) {
-      const sentConnections = new Set<(data: string) => void>();
-      for (const targetJid of linkedJids) {
-        const payload = JSON.stringify({ type: 'status', chatJid: targetJid, status, detail, timestamp: new Date().toISOString() });
-        for (const sendEvent of connections) {
-          if (sentConnections.has(sendEvent)) continue;
-          try {
-            sendEvent(payload);
-            sentConnections.add(sendEvent);
-          } catch (e) {
-            connections.delete(sendEvent);
-          }
-        }
-      }
-    }
-  }
-}
-
-/**
- * Broadcast an execution step event to web UI clients.
- * Used for the real-time execution trace timeline.
- */
-export function broadcastStep(
-  chatJid: string,
-  executionId: string,
-  step: { timestamp: string; phase: string; message: string; metadata?: Record<string, unknown> },
-): void {
-  const linkedJids = getLinkedChatJids(chatJid);
-  if (!linkedJids.includes(chatJid)) linkedJids.push(chatJid);
-
-  for (const [tokenId, connections] of sseConnections.entries()) {
-    const mappings = getApiTokenChatMappings(tokenId);
-    const hasChat = mappings.length === 0 || linkedJids.some((jid) => mappings.includes(jid));
-
-    if (hasChat) {
-      const sentConnections = new Set<(data: string) => void>();
-      const payload = JSON.stringify({ type: 'step', chatJid, executionId, step, timestamp: new Date().toISOString() });
-      for (const sendEvent of connections) {
-        if (sentConnections.has(sendEvent)) continue;
-        try {
-          sendEvent(payload);
-          sentConnections.add(sendEvent);
-        } catch (e) {
-          connections.delete(sendEvent);
-        }
-      }
-    }
-  }
-}
-
-export function broadcastToToken(
-  chatJid: string,
-  message: {
-    id: string;
-    content: string;
-    sender_name: string;
-    timestamp: string;
-    is_from_me: boolean;
-    is_bot_message: boolean;
-    metadata?: Record<string, unknown>;
-  },
-): void {
-  // Resolve linked JIDs so web UI clients watching web:main also see
-  // bot responses sent to tg:1382389542 (same folder).
-  const linkedJids = getLinkedChatJids(chatJid);
-  // If chatJid itself isn't in the linked list (non-web), include it
-  if (!linkedJids.includes(chatJid)) linkedJids.push(chatJid);
-
-  let totalSent = 0;
-  for (const [tokenId, connections] of sseConnections.entries()) {
-    const mappings = getApiTokenChatMappings(tokenId);
-
-    const hasChat = mappings.length === 0 || linkedJids.some((jid) => mappings.includes(jid));
-
-    if (hasChat) {
-      // Send once per linked JID so the web UI can match on its own JID,
-      // but deduplicate: only send once per connection by tracking which
-      // connections already received this message.
-      const sentConnections = new Set<(data: string) => void>();
-      for (const targetJid of linkedJids) {
-        const messageStr = JSON.stringify({ type: 'message', chatJid: targetJid, ...message });
-        for (const sendEvent of connections) {
-          if (sentConnections.has(sendEvent)) continue;
-          try {
-            sendEvent(messageStr);
-            sentConnections.add(sendEvent);
-            totalSent++;
-          } catch (e) {
-            connections.delete(sendEvent);
-          }
-        }
-      }
-    }
-  }
-  if (totalSent === 0 && sseConnections.size === 0) {
-    logger.debug({ chatJid, linkedJids }, 'broadcastToToken: no SSE connections active');
-  }
-}
-
 export async function startApiServer(
   sendMessageFunction?: (jid: string, text: string) => Promise<void>,
 ): Promise<number> {
@@ -1558,6 +1412,9 @@ export async function startApiServer(
   }
 
   try {
+    // Register WebSocket upgrade handler before listening
+    setupWebSocket(fastify);
+
     await fastify.listen({ port: API_PORT, host: '127.0.0.1' });
     logger.info({ port: API_PORT }, 'API server started');
 

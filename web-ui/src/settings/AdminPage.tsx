@@ -1,16 +1,15 @@
 import { useState, useEffect, useCallback } from 'react';
-import { apiService, type MonitoringData } from '../api';
+import { apiService, type MonitoringData, type AgentExecution } from '../api';
+import type { StepEvent, ExecutionUpdateEvent } from '../websocket';
 import type { Settings } from '../useSettings';
 import SettingsNav, { type SettingsSection } from './SettingsNav';
 import OverviewSection from './OverviewSection';
 import SessionsSection from './SessionsSection';
 import CronJobsSection from './CronJobsSection';
-import DebugSection from './DebugSection';
-import LogsSection from './LogsSection';
 import ApiKeysSection from './ApiKeysSection';
 import ModelsSection from './ModelsSection';
 import ConfigSection from './ConfigSection';
-import ExecutionTrace from './ExecutionTrace';
+import ActivityView from './ActivityView';
 import FilesSection from './FilesSection';
 
 interface AdminPageProps {
@@ -36,19 +35,77 @@ export default function AdminPage({
   const fetchMonitoring = useCallback(async () => {
     try {
       const data = await apiService.getMonitoring();
-      // systemInfo is now included in the /monitoring response
       setMonitoringData(data);
     } catch {
       // Server might be offline
     }
   }, []);
 
-  // Fetch on mount and poll every 10s
+  // Fetch on mount and poll every 10s (background refresh for non-activity sections)
   useEffect(() => {
     void fetchMonitoring();
     const interval = setInterval(fetchMonitoring, 10_000);
     return () => clearInterval(interval);
   }, [fetchMonitoring]);
+
+  // Real-time execution updates via WebSocket — instantly reflects start/complete/error
+  useEffect(() => {
+    const unsubExec = apiService.onExecutionUpdate((event: ExecutionUpdateEvent) => {
+      const exec = event.execution as AgentExecution;
+      setMonitoringData((prev) => {
+        if (!prev) return prev;
+        const isTerminal = exec.status === 'completed' || exec.status === 'error';
+
+        // Remove from active if terminal
+        let active = prev.active.filter((e) => e.id !== exec.id);
+        let recent = prev.recent.filter((e) => e.id !== exec.id);
+
+        if (isTerminal) {
+          // Add to recent (front)
+          recent = [exec, ...recent];
+        } else {
+          // Add/update in active
+          active = [exec, ...active.filter((e) => e.id !== exec.id)];
+        }
+
+        return { ...prev, active, recent };
+      });
+    });
+
+    // Real-time step updates — append steps to the matching execution
+    const unsubStep = apiService.onStep((event: StepEvent) => {
+      setMonitoringData((prev) => {
+        if (!prev) return prev;
+        const updateSteps = (list: AgentExecution[]): AgentExecution[] =>
+          list.map((e) => {
+            if (e.id !== event.executionId) return e;
+            const steps = e.steps ? [...e.steps] : [];
+            // Calculate duration on previous step
+            if (steps.length > 0) {
+              const prevStep = steps[steps.length - 1];
+              if (!prevStep.durationMs) {
+                prevStep.durationMs =
+                  new Date(event.step.timestamp).getTime() -
+                  new Date(prevStep.timestamp).getTime();
+              }
+            }
+            steps.push(event.step as AgentExecution['steps'] extends (infer T)[] | undefined ? T : never);
+            return { ...e, steps };
+          });
+
+        return {
+          ...prev,
+          active: updateSteps(prev.active),
+          recent: updateSteps(prev.recent),
+        };
+      });
+    });
+
+    return () => {
+      unsubExec();
+      unsubStep();
+    };
+  }, []);
 
   return (
     <div className={`flex h-screen ${isDark ? 'bg-zinc-950 text-zinc-100' : 'bg-zinc-50 text-zinc-900'}`}>
@@ -88,23 +145,10 @@ export default function AdminPage({
             {section === 'cron' && (
               <CronJobsSection isDark={isDark} />
             )}
-            {section === 'trace' && (
-              <ExecutionTrace
+            {section === 'activity' && (
+              <ActivityView
                 executions={monitoringData?.recent ?? []}
                 activeExecutions={monitoringData?.active ?? []}
-                onRefresh={fetchMonitoring}
-                isDark={isDark}
-              />
-            )}
-            {section === 'debug' && (
-              <DebugSection
-                executions={monitoringData?.recent ?? []}
-                isDark={isDark}
-              />
-            )}
-            {section === 'logs' && (
-              <LogsSection
-                executions={monitoringData?.recent ?? []}
                 onRefresh={fetchMonitoring}
                 isDark={isDark}
               />

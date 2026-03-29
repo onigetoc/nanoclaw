@@ -67,6 +67,7 @@ import {
   broadcastToToken,
   broadcastStatus,
   broadcastStep,
+  broadcastExecutionUpdate,
 } from './api-server.js';
 import { setTriggerTaskFunction } from './api-tasks-routes.js';
 import { processWorkspaceMessages } from './message-processor.js';
@@ -412,6 +413,11 @@ export async function main(): Promise<void> {
   // Wire monitoring step events to SSE broadcast for real-time execution trace
   getMonitoring().onStep((executionId, chatJid, step) => {
     broadcastStep(chatJid, executionId, step);
+  });
+
+  // Wire execution updates to WebSocket for real-time activity view
+  getMonitoring().onExecutionUpdate((execution) => {
+    broadcastExecutionUpdate(execution);
   });
 
   loadState();

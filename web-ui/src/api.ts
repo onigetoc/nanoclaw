@@ -1,3 +1,6 @@
+import { WebSocketClient } from './websocket.js';
+import type { WsConnectionStatus, StepEvent, ExecutionUpdateEvent } from './websocket.js';
+
 const API_BASE = import.meta.env.VITE_API_URL || 'http://127.0.0.1:4300';
 
 export interface ChatInfo {
@@ -844,13 +847,20 @@ class ApiService {
     );
   }
 
-  private abortController: AbortController | null = null;
-  private messageListeners: ((message: Message) => void)[] = [];
-  private statusListeners: ((event: StatusEvent) => void)[] = [];
+  private wsClient: WebSocketClient;
   private connectionListeners: ((status: ConnectionStatus) => void)[] = [];
   private healthInterval: ReturnType<typeof setInterval> | null = null;
   private _serverOnline = false;
-  private _sseConnected = false;
+  private _wsConnected = false;
+
+  constructor() {
+    this.wsClient = new WebSocketClient(API_BASE);
+
+    // Bridge WsConnectionStatus → ConnectionStatus
+    this.wsClient.onConnectionChange((wsStatus: WsConnectionStatus) => {
+      this.setWsConnected(wsStatus.connected);
+    });
+  }
 
   /** Current server online status */
   get serverOnline(): boolean {
@@ -899,9 +909,9 @@ class ApiService {
     }
   }
 
-  private setSseConnected(connected: boolean): void {
-    const changed = this._sseConnected !== connected;
-    this._sseConnected = connected;
+  private setWsConnected(connected: boolean): void {
+    const changed = this._wsConnected !== connected;
+    this._wsConnected = connected;
     if (changed) {
       this.notifyConnectionListeners();
     }
@@ -910,7 +920,7 @@ class ApiService {
   private notifyConnectionListeners(): void {
     const status: ConnectionStatus = {
       serverOnline: this._serverOnline,
-      sseConnected: this._sseConnected,
+      sseConnected: this._wsConnected,
     };
     this.connectionListeners.forEach((cb) => cb(status));
   }
@@ -920,7 +930,7 @@ class ApiService {
     // Immediately emit current status
     callback({
       serverOnline: this._serverOnline,
-      sseConnected: this._sseConnected,
+      sseConnected: this._wsConnected,
     });
     return () => {
       const idx = this.connectionListeners.indexOf(callback);
@@ -932,108 +942,27 @@ class ApiService {
     const token = this.getToken();
     if (!token) return;
 
-    this.disconnectFromEvents();
-
-    this.abortController = new AbortController();
-
-    fetch(`${API_BASE}/events`, {
-      headers: { Authorization: `Bearer ${token}` },
-      signal: this.abortController.signal,
-    })
-      .then(async (response) => {
-        if (!response.body) return;
-        this.setSseConnected(true);
-        this.setServerOnline(true);
-        const reader = response.body.getReader();
-        const decoder = new TextDecoder();
-        let buffer = '';
-
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-
-          buffer += decoder.decode(value, { stream: true });
-          const lines = buffer.split('\n');
-          buffer = lines.pop() || '';
-
-          for (const line of lines) {
-            if (line.startsWith('data: ')) {
-              try {
-                const data = JSON.parse(line.slice(6));
-                if (data.type === 'status') {
-                  const statusEvent: StatusEvent = {
-                    chatJid: data.chatJid,
-                    status: data.status,
-                    detail: data.detail,
-                    timestamp: data.timestamp,
-                  };
-                  this.statusListeners.forEach((listener) =>
-                    listener(statusEvent),
-                  );
-                } else if (
-                  data.type === 'message' &&
-                  data.content &&
-                  !data.id?.startsWith('typing_')
-                ) {
-                  const message: Message = {
-                    id: data.id,
-                    chat_jid: data.chatJid,
-                    sender: data.is_bot_message ? 'bot' : data.sender || 'user',
-                    sender_name: data.sender_name,
-                    content: data.content,
-                    timestamp: data.timestamp,
-                    is_from_me: data.is_from_me ?? false,
-                    is_bot_message: data.is_bot_message ?? false,
-                    metadata: data.metadata,
-                  };
-                  this.messageListeners.forEach((listener) =>
-                    listener(message),
-                  );
-                }
-              } catch (e) {
-                console.error('Failed to parse SSE message:', e);
-              }
-            }
-          }
-        }
-        // Stream ended (server closed connection) — reconnect automatically
-        this.setSseConnected(false);
-        if (!this.abortController?.signal.aborted) {
-          console.log('SSE stream ended, reconnecting in 2s...');
-          setTimeout(() => this.connectToEvents(), 2000);
-        }
-      })
-      .catch((err) => {
-        this.setSseConnected(false);
-        if (err.name !== 'AbortError') {
-          console.error('SSE connection error, reconnecting in 5s...');
-          setTimeout(() => this.connectToEvents(), 5000);
-        }
-      });
+    this.wsClient.connect(token);
   }
 
   disconnectFromEvents(): void {
-    if (this.abortController) {
-      this.abortController.abort();
-      this.abortController = null;
-    }
-    this.setSseConnected(false);
+    this.wsClient.disconnect();
   }
 
   onMessage(callback: (message: Message) => void): () => void {
-    this.messageListeners.push(callback);
-    return () => {
-      const index = this.messageListeners.indexOf(callback);
-      if (index > -1) this.messageListeners.splice(index, 1);
-    };
+    return this.wsClient.onMessage(callback);
   }
 
   onStatus(callback: (event: StatusEvent) => void): () => void {
-    this.statusListeners.push(callback);
-    return () => {
-      const index = this.statusListeners.indexOf(callback);
-      if (index > -1) this.statusListeners.splice(index, 1);
-    };
+    return this.wsClient.onStatus(callback);
+  }
+
+  onStep(callback: (event: StepEvent) => void): () => void {
+    return this.wsClient.onStep(callback);
+  }
+
+  onExecutionUpdate(callback: (event: ExecutionUpdateEvent) => void): () => void {
+    return this.wsClient.onExecutionUpdate(callback);
   }
 
   private chatStreamController: AbortController | null = null;

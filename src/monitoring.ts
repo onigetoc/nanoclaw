@@ -58,6 +58,7 @@ class MonitoringService {
   private startTime = Date.now();
   private logsDir: string;
   private onStepCallback: ((executionId: string, chatJid: string, step: ExecutionStep) => void) | null = null;
+  private onExecutionUpdateCallback: ((execution: AgentExecution) => void) | null = null;
 
   constructor(logsDir: string) {
     this.logsDir = logsDir;
@@ -98,6 +99,11 @@ class MonitoringService {
     };
 
     this.executions.set(id, execution);
+
+    // Notify listener for real-time UI updates
+    if (this.onExecutionUpdateCallback) {
+      this.onExecutionUpdateCallback(execution);
+    }
     
     logger.info({
       executionId: id,
@@ -174,6 +180,13 @@ class MonitoringService {
   }
 
   /**
+   * Register a callback for execution status changes (started, completed, error).
+   */
+  onExecutionUpdate(callback: (execution: AgentExecution) => void): void {
+    this.onExecutionUpdateCallback = callback;
+  }
+
+  /**
    * Update execution status
    */
   updateExecution(id: string, updates: Partial<AgentExecution>): void {
@@ -189,6 +202,11 @@ class MonitoringService {
         this.recentExecutions.pop();
       }
       this.executions.delete(id);
+
+      // Notify listener for real-time UI updates
+      if (this.onExecutionUpdateCallback) {
+        this.onExecutionUpdateCallback(execution);
+      }
 
       // Log completion
       if (updates.status === 'completed') {
