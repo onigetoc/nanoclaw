@@ -34,7 +34,7 @@ export const wsConnections: Map<string, Set<WsClient>> = new Map();
 const MAX_CONNECTIONS_PER_TOKEN = 50;
 const AUTH_TIMEOUT_MS = 10_000; // 10s to authenticate before being kicked
 const HEARTBEAT_INTERVAL_MS = 30_000; // Ping every 30s
-const PONG_TIMEOUT_MS = 10_000; // Close if no pong within 10s
+const PONG_TIMEOUT_MS = 35_000; // Allow generous pong window (browsers throttle background tabs)
 
 // ---------------------------------------------------------------------------
 // Helpers

@@ -44,6 +44,28 @@ registerCommand('restart', async (ctx: CommandContext): Promise<CommandResponse>
 });
 
 /**
+ * /shutdown - Stop EureClaw completely (no auto-restart)
+ * Use for emergencies, security issues, or when you need the server fully stopped.
+ */
+registerCommand('shutdown', async (ctx: CommandContext): Promise<CommandResponse> => {
+  if (!ctx.group) {
+    return {
+      reply: '⛔ This command is only available in registered chats.',
+    };
+  }
+
+  logger.warn(
+    { chatJid: ctx.chatJid, user: ctx.senderName },
+    'Shutdown command received — stopping server permanently',
+  );
+
+  return {
+    reply: '🛑 Shutting down EureClaw. Server will NOT auto-restart. Use start-eureclaw to start again.',
+    action: 'shutdown',
+  };
+});
+
+/**
  * /sleep [duration] - Put bot to sleep
  * Examples:
  *   /sleep          - Sleep indefinitely (until /awake)
@@ -517,6 +539,7 @@ registerCommand('help', async (ctx: CommandContext): Promise<CommandResponse> =>
     '/agent <name> [message] - Switch to any agent\n\n' +
     '**System Control:**\n' +
     '/restart - Restart the bot\n' +
+    '/shutdown - Stop the server completely (no auto-restart)\n' +
     '/status - Check bot status\n\n' +
     '**Sleep Mode:**\n' +
     '/sleep [duration] - Pause all activity\n' +

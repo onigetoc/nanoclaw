@@ -194,3 +194,13 @@ What to do next
 - Vague descriptions ("fix the bug")
 - Duplicate information across files
 - Notes in code comments that should be in docs
+
+
+## Git & GitHub
+
+**RÈGLE ABSOLUE:**
+- Ne JAMAIS faire `git checkout` vers une autre branche sans que Gino le demande explicitement
+- Pour un backup GitHub: commit + push depuis la branche courante, point final. Ne pas switcher de branche.
+- `git checkout` change les fichiers sur le disque — ça casse le travail en cours
+- Gino préfère travailler sur main et commit quand il est prêt
+- Si on crée une branche backup, rester dessus après le push

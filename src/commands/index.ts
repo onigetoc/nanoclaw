@@ -17,7 +17,7 @@ export interface CommandContext {
 
 export interface CommandResponse {
   reply?: string;
-  action?: 'restart' | 'sleep' | 'awake' | 'none';
+  action?: 'restart' | 'shutdown' | 'sleep' | 'awake' | 'none';
   data?: any; // Can include OpenCode-specific data like { opencodeCommand: 'new', forceNewSession: true }
 }
 

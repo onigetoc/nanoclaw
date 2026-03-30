@@ -68,7 +68,12 @@ export default function AdminPage({
           active = [exec, ...active.filter((e) => e.id !== exec.id)];
         }
 
-        return { ...prev, active, recent };
+        // Keep system.activeAgents in sync so Overview updates live
+        const system = prev.system
+          ? { ...prev.system, activeAgents: active.length }
+          : prev.system;
+
+        return { ...prev, active, recent, system };
       });
     });
 
@@ -135,7 +140,7 @@ export default function AdminPage({
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto px-6 py-6">
-          <div className={`mx-auto w-full ${section === 'files' ? 'max-w-7xl' : 'max-w-6xl'}`}>
+          <div className={`mx-auto w-full ${section === 'files' ? 'max-w-full' : 'max-w-5xl'}`}>
             {section === 'overview' && (
               <OverviewSection data={monitoringData} serverOnline={serverOnline} isDark={isDark} />
             )}

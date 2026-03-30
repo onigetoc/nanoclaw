@@ -105,6 +105,7 @@ export async function processWorkspaceMessages(
     workspaceName: workspace.name,
     workspaceFolder: workspace.folder,
     chatJid,
+    agentType: preferences?.agent || 'orchestrator',
     messageCount: missedMessages.length,
     sessionId: sessionId,
   });

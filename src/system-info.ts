@@ -46,18 +46,26 @@ function getPlatformName(platform: string): string {
 // ── Cached system info (shell commands are expensive) ──
 let cachedSystemInfo: SystemInfo | null = null;
 let cachedAt = 0;
-const CACHE_TTL = 60_000; // 60s — this data barely changes
+const CACHE_TTL = 300_000; // 5 min — platform/docker/node versions don't change at runtime
 let inflightPromise: Promise<SystemInfo> | null = null;
 
 /**
- * Get current system information (cached for 60s).
- * All shell checks run in parallel so the first call takes ~3s max instead of 12-20s.
+ * Get current system information.
+ * Returns stale cache immediately if available, refreshes in background when expired.
+ * Only blocks on the very first call (before any cache exists).
  */
 export async function getSystemInfo(): Promise<SystemInfo> {
   if (cachedSystemInfo && Date.now() - cachedAt < CACHE_TTL) {
     return cachedSystemInfo;
   }
-  // Deduplicate concurrent calls while the first one is in-flight
+  // Stale-while-revalidate: return old cache instantly, refresh in background
+  if (cachedSystemInfo) {
+    if (!inflightPromise) {
+      inflightPromise = fetchSystemInfo().finally(() => { inflightPromise = null; });
+    }
+    return cachedSystemInfo;
+  }
+  // First call ever — must wait
   if (inflightPromise) return inflightPromise;
   inflightPromise = fetchSystemInfo();
   try { return await inflightPromise; } finally { inflightPromise = null; }

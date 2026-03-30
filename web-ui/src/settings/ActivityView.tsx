@@ -10,7 +10,7 @@ import {
   Filter,
   Layers,
   Cpu,
-  Hash,
+  Clock,
   Zap,
 } from 'lucide-react';
 import { apiService, type AgentExecution, type ExecutionStep } from '../api';
@@ -318,7 +318,7 @@ function ActivityRow({ exec, isDark }: { exec: AgentExecution; isDark: boolean }
             <div className="grid grid-cols-2 gap-x-4 gap-y-0.5 mb-3">
               <MetadataRow icon={<Layers className="h-3.5 w-3.5" />} label="Agent" value={exec.agentType} isDark={isDark} />
               <MetadataRow icon={<Cpu className="h-3.5 w-3.5" />} label="Model" value={exec.model || '—'} isDark={isDark} mono />
-              <MetadataRow icon={<Hash className="h-3.5 w-3.5" />} label="Duration" value={formatDuration(exec.duration)} isDark={isDark} />
+              <MetadataRow icon={<Clock className="h-3.5 w-3.5" />} label="Duration" value={formatDuration(exec.duration)} isDark={isDark} />
               {exec.sessionId && (
                 <MetadataRow icon={<Zap className="h-3.5 w-3.5" />} label="Session" value={exec.sessionId} isDark={isDark} mono />
               )}

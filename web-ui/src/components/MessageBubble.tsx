@@ -63,7 +63,7 @@ function MessageBubble({ msg, isDark, showThinking = true, onSendCommand }: Mess
         )}
 
         {showThinking && reasoning && (
-          <details className="mb-2 text-xs">
+          <details className="mb-2 text-sm">
             <summary className={`cursor-pointer select-none italic ${isDark ? 'text-zinc-500' : 'text-zinc-400'}`}>Thinking</summary>
             <pre className={`mt-2 whitespace-pre-wrap font-sans leading-relaxed ${isDark ? 'text-zinc-500' : 'text-zinc-400'}`}>{reasoning}</pre>
           </details>

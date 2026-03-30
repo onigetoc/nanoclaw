@@ -409,11 +409,12 @@ function App() {
   }, [state.selectedChat]);
 
   // Auto-scroll when streaming response (not thinking) updates
+  // Only auto-scroll if user hasn't scrolled up (isNearBottom)
   useEffect(() => {
-    if (streamingContent) {
+    if (streamingContent && isNearBottom) {
       messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
     }
-  }, [streamingContent]);
+  }, [streamingContent, isNearBottom]);
 
   // Scroll once when thinking first appears (to show the accordion)
   const thinkingScrolledRef = useRef(false);

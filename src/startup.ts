@@ -410,6 +410,9 @@ export async function main(): Promise<void> {
   initMonitoring(logsDir);
   logger.info('Monitoring service initialized');
 
+  // Pre-warm system info cache so the first /monitoring call is instant
+  import('./system-info.js').then(({ getSystemInfo }) => getSystemInfo()).catch(() => {});
+
   // Wire monitoring step events to SSE broadcast for real-time execution trace
   getMonitoring().onStep((executionId, chatJid, step) => {
     broadcastStep(chatJid, executionId, step);
@@ -675,6 +678,13 @@ export async function main(): Promise<void> {
           setTimeout(() => {
             logger.info('Initiating restart via command');
             process.exit(0);
+          }, 2000);
+        }
+
+        if (commandResult.action === 'shutdown') {
+          setTimeout(() => {
+            logger.warn('Initiating shutdown via command — will NOT auto-restart');
+            process.exit(1);
           }, 2000);
         }
 
