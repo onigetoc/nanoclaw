@@ -33,6 +33,7 @@ import { registerTaskRoutes } from './api-tasks-routes.js';
 import { getProviders, getPopularProviders, clearCache as clearModelsCache } from './models-cache.js';
 import { restartServer as restartOpenCodeServer } from './opencode-server.js';
 import { extractFrontmatterBlock, getFrontmatterValue } from '../shared/frontmatter.js';
+import { getOpenCodeStatus } from './api-opencode-status.js';
 
 const API_PORT = parseInt(process.env.API_PORT || '4300', 10);
 
@@ -154,6 +155,20 @@ fastify.get(
       abortController.abort();
     });
 
+    // Build a reverse lookup: sessionID → chatJid so we can tag deltas
+    // with the workspace they belong to. This lets the frontend filter
+    // streaming content per-chat instead of showing it everywhere.
+    const buildSessionToJidMap = (): Map<string, string> => {
+      const map = new Map<string, string>();
+      const sessions = getSessions(); // { folder: sessionId }
+      const workspaces = getRegisteredWorkspaces(); // { jid: workspace }
+      for (const [jid, ws] of Object.entries(workspaces)) {
+        const sid = sessions[ws.folder];
+        if (sid) map.set(sid, jid);
+      }
+      return map;
+    };
+
     try {
       const resp = await fetch(`${baseURL}/event`, {
         headers: { 'Accept': 'text/event-stream' },
@@ -190,8 +205,21 @@ fastify.get(
               const delta = props.delta || '';
               if (!delta) continue;
 
-              // Send delta with partID — frontend separates thinking vs response
-              reply.raw.write(`data: ${JSON.stringify({ type: 'delta', content: delta, partID: props.partID || '' })}\n\n`);
+              // Resolve chatJid from sessionID so frontend can filter per-chat
+              let chatJid: string | undefined;
+              let workspaceFolder: string | undefined;
+              if (props.sessionID) {
+                const sessionMap = buildSessionToJidMap();
+                chatJid = sessionMap.get(props.sessionID);
+                // Also resolve workspace folder for cross-channel matching
+                if (chatJid) {
+                  const ws = getRegisteredWorkspaces()[chatJid];
+                  if (ws) workspaceFolder = ws.folder;
+                }
+              }
+
+              // Send delta with partID, chatJid and folder — frontend separates thinking vs response
+              reply.raw.write(`data: ${JSON.stringify({ type: 'delta', content: delta, partID: props.partID || '', chatJid: chatJid || '', folder: workspaceFolder || '' })}\n\n`);
             }
           } catch {
             // Ignore malformed SSE lines
@@ -1192,6 +1220,13 @@ fastify.get('/system/info', { preHandler: authenticate }, async (request: Fastif
     logger.error({ err }, 'Failed to get system info');
     reply.code(500).send({ error: 'Failed to get system information' });
   }
+});
+
+/**
+ * OpenCode status: skills, agents, plugins, MCP servers
+ */
+fastify.get('/opencode/status', { preHandler: authenticate }, async () => {
+  return getOpenCodeStatus();
 });
 
 /**

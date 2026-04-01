@@ -206,6 +206,38 @@ export interface MdFileEntry {
   modified?: string;
 }
 
+export interface SkillInfo {
+  name: string;
+  description: string;
+  source: 'project' | 'project-claude' | 'global' | 'global-claude';
+  path: string;
+}
+
+export interface AgentInfo {
+  name: string;
+  description: string;
+  mode: string;
+  source: 'config' | 'file' | 'registry';
+}
+
+export interface PluginInfo {
+  name: string;
+  version?: string;
+}
+
+export interface McpServerInfo {
+  name: string;
+  command?: string;
+  disabled: boolean;
+}
+
+export interface OpenCodeStatus {
+  skills: SkillInfo[];
+  agents: AgentInfo[];
+  plugins: PluginInfo[];
+  mcpServers: McpServerInfo[];
+}
+
 class ApiService {
   private token: string | null = null;
 
@@ -546,6 +578,11 @@ class ApiService {
 
   async getSystemInfo(): Promise<SystemInfo> {
     const result = await this.request<SystemInfo>('/system/info');
+    return result;
+  }
+
+  async getOpenCodeStatus(): Promise<OpenCodeStatus> {
+    const result = await this.request<OpenCodeStatus>('/opencode/status');
     return result;
   }
 
@@ -966,7 +1003,7 @@ class ApiService {
   }
 
   private chatStreamController: AbortController | null = null;
-  private deltaListeners: ((content: string, partID: string) => void)[] = [];
+  private deltaListeners: ((content: string, partID: string, chatJid: string, folder: string) => void)[] = [];
 
   connectToChatStream(sessionId?: string): void {
     const token = this.getToken();
@@ -1002,7 +1039,7 @@ class ApiService {
               try {
                 const data = JSON.parse(line.slice(6));
                 if (data.type === 'delta' && data.content) {
-                  this.deltaListeners.forEach((cb) => cb(data.content, data.partID || ''));
+                  this.deltaListeners.forEach((cb) => cb(data.content, data.partID || '', data.chatJid || '', data.folder || ''));
                 } else if (data.type === 'error') {
                   console.error('Chat stream error:', data.message);
                 }
@@ -1029,7 +1066,7 @@ class ApiService {
     }
   }
 
-  onDelta(callback: (content: string, partID: string) => void): () => void {
+  onDelta(callback: (content: string, partID: string, chatJid: string, folder: string) => void): () => void {
     this.deltaListeners.push(callback);
     return () => {
       const index = this.deltaListeners.indexOf(callback);

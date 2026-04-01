@@ -11,6 +11,7 @@ import ModelsSection from './ModelsSection';
 import ConfigSection from './ConfigSection';
 import ActivityView from './ActivityView';
 import FilesSection from './FilesSection';
+import ToolsSection from './ToolsSection';
 
 interface AdminPageProps {
   onBack: () => void;
@@ -160,6 +161,9 @@ export default function AdminPage({
             )}
             {section === 'files' && (
               <FilesSection isDark={isDark} />
+            )}
+            {section === 'opencode' && (
+              <ToolsSection isDark={isDark} />
             )}
             {section === 'apikeys' && (
               <ApiKeysSection isDark={isDark} />

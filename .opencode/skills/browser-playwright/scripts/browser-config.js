@@ -4,7 +4,7 @@
  * Cookies and sessions accumulate over time — log in once, stay logged in.
  * Uses real Chrome executable with stealth patches.
  */
-import { chromium } from 'playwright';
+import { chromium } from 'rebrowser-playwright';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';

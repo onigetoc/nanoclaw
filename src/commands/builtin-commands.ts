@@ -21,6 +21,7 @@ import { getOpenCodeHost, getOpenCodePort } from '../opencode-server.js';
 import { getMonitoring } from '../monitoring.js';
 import { getModelInfo } from '../opencode-config.js';
 import { getMessagesPage } from '../db.js';
+import { getOpenCodeStatus, formatOpenCodeStatusText } from '../api-opencode-status.js';
 
 /**
  * /restart - Restart EureClaw
@@ -362,6 +363,12 @@ registerCommand('status', async (ctx: CommandContext): Promise<CommandResponse> 
   } else {
     s += `\n💬 No active session\n`;
   }
+
+  // OpenCode ecosystem info
+  try {
+    const ocStatus = getOpenCodeStatus();
+    s += formatOpenCodeStatusText(ocStatus);
+  } catch { /* ignore */ }
 
   return { reply: s };
 });

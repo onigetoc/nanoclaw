@@ -83,6 +83,7 @@ function App() {
   const scrollRafRef = useRef<number | null>(null);
   const loadOlderRef = useRef<() => void>(() => {});
   const streamingMessageIdRef = useRef<string | null>(null);
+  const selectedChatRef = useRef<ChatInfo | null>(null);
 
   const isDark = theme === 'dark';
 
@@ -323,7 +324,13 @@ function App() {
         return next;
       });
 
-      // Track selected chat status for the composer area
+      // Track selected chat status for the composer area.
+      // Only update agentStatus if the event belongs to the selected chat.
+      // broadcastStatus sends events for each linked JID, so a direct
+      // JID comparison is sufficient (web:work will match web:work).
+      const selected = selectedChatRef.current;
+      if (!selected || event.chatJid !== selected.jid) return;
+
       if (event.status === 'done') {
         processingStartRef.current = null;
         setTimeout(() => setAgentStatus(null), 2000);
@@ -354,7 +361,19 @@ function App() {
     // Frontend separates thinking vs response by partID order:
     // - If only 1 partID seen so far → it's thinking (or response if model has no thinking)
     // - Once 2+ partIDs seen → first was thinking, last is response
-    const unsubscribeDelta = apiService.onDelta((content, partID) => {
+    const unsubscribeDelta = apiService.onDelta((content, partID, _chatJid, folder) => {
+      // Filter deltas to only show streaming for the currently selected chat.
+      // Compare by workspace folder — this handles cross-channel matching
+      // (e.g. tg:-xxx and web:work both belong to folder "work").
+      const selected = selectedChatRef.current;
+      if (selected && folder) {
+        const selectedFolder = selected.workspaceInfo?.folder;
+        if (selectedFolder && folder !== selectedFolder) {
+          console.debug('[delta-filter] Skipping delta for folder', folder, '(selected:', selectedFolder, ')');
+          return; // Different workspace — skip this delta
+        }
+      }
+
       const order = streamPartOrderRef.current;
       const texts = streamPartTextsRef.current;
 
@@ -383,6 +402,19 @@ function App() {
     // Also track bot messages to clear streaming content
     const unsubscribeBotMsg = apiService.onMessage((message) => {
       if (message.is_bot_message) {
+        // Only clear streaming if this bot message belongs to the selected chat's workspace.
+        // Use folder comparison since the message may arrive via a linked JID
+        // (e.g. tg:xxx instead of web:xxx for the same workspace).
+        const selected = selectedChatRef.current;
+        const selectedFolder = selected?.workspaceInfo?.folder;
+        if (selected && selectedFolder) {
+          // Derive folder from message's chat_jid
+          const msgFolder = message.chat_jid.startsWith('web:')
+            ? message.chat_jid.slice(4)
+            : undefined;
+          // If we can determine the folder and it doesn't match, skip
+          if (msgFolder && msgFolder !== selectedFolder) return;
+        }
         setStreamingContent('');
         setThinkingContent('');
         streamingMessageIdRef.current = null;
@@ -405,6 +437,7 @@ function App() {
   }, [token]);
 
   useEffect(() => {
+    selectedChatRef.current = state.selectedChat;
     if (state.selectedChat) void loadMessages(state.selectedChat.jid);
   }, [state.selectedChat]);
 
@@ -498,6 +531,12 @@ function App() {
       setHasMoreMessages(false);
       setIsNearBottom(true);
       setShowScrollToBottom(false);
+      // Clear streaming state from previous chat
+      setStreamingContent('');
+      setThinkingContent('');
+      streamingMessageIdRef.current = null;
+      streamPartOrderRef.current = [];
+      streamPartTextsRef.current = new Map();
     }
     // Mark chat as read
     setUnreadChats((prev) => {
@@ -847,8 +886,6 @@ function App() {
                     const hasInternalLeak = !streamingContent && thinkingContent &&
                       streamPartOrderRef.current.length <= 1 &&
                       /<internal>/i.test(thinkingContent);
-                    // Real thinking = 2+ partIDs (first is thinking, rest is response)
-                    const hasRealThinking = streamPartOrderRef.current.length >= 2;
 
                     return (
                     <div className="mb-6">
@@ -864,7 +901,7 @@ function App() {
 
                             {/* Internal thinking indicator — shown when model leaks <internal> tags */}
                             {hasInternalLeak && (
-                              <div className={`flex items-center gap-2 text-xs italic ${isDark ? 'text-zinc-600' : 'text-zinc-400'}`}>
+                              <div className={`flex items-center gap-2 text-sm italic ${isDark ? 'text-zinc-600' : 'text-zinc-400'}`}>
                                 <span>Internal thinking</span>
                                 <span className="flex gap-0.5">
                                   <span className="h-1 w-1 animate-bounce rounded-full bg-zinc-500 [animation-delay:-0.3s]" />
@@ -874,26 +911,22 @@ function App() {
                               </div>
                             )}
 
-                            {/* Thinking accordion — closed by default, clickable to watch live (real thinking only) */}
-                            {settings.showThinking && !hasInternalLeak && thinkingContent && !streamingContent && (
-                              <details className="mb-2 text-xs">
+                            {/* Thinking accordion — single unified block for the entire streaming lifecycle.
+                                Stable key prevents React from recreating it when streamingContent starts,
+                                which would reset open/closed state and cause font size jumps. */}
+                            {settings.showThinking && !hasInternalLeak && thinkingContent && (
+                              <details key="streaming-thinking" className="mb-2 text-sm">
                                 <summary className={`cursor-pointer select-none italic flex items-center gap-2 ${isDark ? 'text-zinc-500' : 'text-zinc-400'}`}>
                                   <span>Thinking</span>
-                                  <span className="flex gap-0.5">
-                                    <span className="h-1 w-1 animate-bounce rounded-full bg-emerald-500 [animation-delay:-0.3s]" />
-                                    <span className="h-1 w-1 animate-bounce rounded-full bg-emerald-500 [animation-delay:-0.15s]" />
-                                    <span className="h-1 w-1 animate-bounce rounded-full bg-emerald-500" />
-                                  </span>
+                                  {!streamingContent && (
+                                    <span className="flex gap-0.5">
+                                      <span className="h-1 w-1 animate-bounce rounded-full bg-emerald-500 [animation-delay:-0.3s]" />
+                                      <span className="h-1 w-1 animate-bounce rounded-full bg-emerald-500 [animation-delay:-0.15s]" />
+                                      <span className="h-1 w-1 animate-bounce rounded-full bg-emerald-500" />
+                                    </span>
+                                  )}
                                 </summary>
-                                <pre className={`mt-2 whitespace-pre-wrap font-sans leading-relaxed ${isDark ? 'text-zinc-500' : 'text-zinc-400'}`}>{thinkingContent.replace(/<internal>[\s\S]*?<\/internal>/g, '').replace(/<internal>[\s\S]*$/g, '').trim()}</pre>
-                              </details>
-                            )}
-
-                            {/* Thinking accordion — shown once response starts streaming (real thinking only) */}
-                            {settings.showThinking && hasRealThinking && thinkingContent && streamingContent && (
-                              <details className="mb-2 text-xs">
-                                <summary className={`cursor-pointer select-none italic ${isDark ? 'text-zinc-500' : 'text-zinc-400'}`}>Thinking</summary>
-                                <pre className={`mt-2 whitespace-pre-wrap font-sans leading-relaxed ${isDark ? 'text-zinc-500' : 'text-zinc-400'}`}>{thinkingContent.replace(/<internal>[\s\S]*?<\/internal>/g, '').replace(/<internal>[\s\S]*$/g, '').trim()}</pre>
+                                <pre className={`mt-2 whitespace-pre-wrap font-sans text-sm leading-relaxed ${isDark ? 'text-zinc-500' : 'text-zinc-400'}`}>{thinkingContent.replace(/<internal>[\s\S]*?<\/internal>/g, '').replace(/<internal>[\s\S]*$/g, '').trim()}</pre>
                               </details>
                             )}
 

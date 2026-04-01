@@ -10,7 +10,12 @@ import {
   SCHEDULER_POLL_INTERVAL,
   TIMEZONE,
 } from './config.js';
-import { ContainerOutput, runContainerAgent, shouldUseDirectMode, writeTasksSnapshot } from './container-runner.js';
+import {
+  ContainerOutput,
+  runContainerAgent,
+  shouldUseDirectMode,
+  writeTasksSnapshot,
+} from './container-runner.js';
 import { runDirectAgent } from './direct-runner.js';
 import {
   getAllTasks,
@@ -31,7 +36,8 @@ import { broadcastStatus } from './api-server.js';
  * Format a scheduled task error into a user-readable message.
  */
 function formatTaskErrorForUser(taskPrompt: string, error: string): string {
-  const shortPrompt = taskPrompt.length > 80 ? taskPrompt.slice(0, 80) + '…' : taskPrompt;
+  const shortPrompt =
+    taskPrompt.length > 80 ? taskPrompt.slice(0, 80) + '…' : taskPrompt;
   return `⚠️ Scheduled task failed: "${shortPrompt}"\n\n\`Error: ${error}\``;
 }
 
@@ -39,7 +45,12 @@ export interface SchedulerDependencies {
   registeredWorkspaces: () => Record<string, RegisteredWorkspace>;
   getSessions: () => Record<string, string>;
   queue: WorkspaceQueue;
-  onProcess: (workspaceJid: string, proc: ChildProcess, containerName: string, workspaceFolder: string) => void;
+  onProcess: (
+    workspaceJid: string,
+    proc: ChildProcess,
+    containerName: string,
+    workspaceFolder: string,
+  ) => void;
   sendMessage: (jid: string, text: string) => Promise<void>;
 }
 
@@ -56,6 +67,21 @@ async function runTask(
     'Running scheduled task',
   );
 
+  // Immediately advance next_run so the scheduler loop doesn't pick it up again
+  // while this run is in progress (prevents double execution).
+  if (task.schedule_type === 'cron') {
+    const interval = CronExpressionParser.parse(task.schedule_value, {
+      tz: TIMEZONE,
+    });
+    const nextRun = interval.next().toISOString();
+    updateTask(task.id, { next_run: nextRun });
+  } else if (task.schedule_type === 'interval') {
+    const ms = parseInt(task.schedule_value, 10);
+    const nextRun = new Date(Date.now() + ms).toISOString();
+    updateTask(task.id, { next_run: nextRun });
+  }
+  // 'once' tasks don't need next_run update here - they'll be set to null after completion
+
   // Start execution trace so scheduled tasks appear in the web UI
   const monitoring = getMonitoring();
   const executionId = monitoring.startExecution({
@@ -65,7 +91,11 @@ async function runTask(
     agentType: 'build',
     messageCount: 1,
   });
-  monitoring.addStep(executionId, 'queue', `Scheduled task: ${task.prompt.slice(0, 80)}…`);
+  monitoring.addStep(
+    executionId,
+    'queue',
+    `Scheduled task: ${task.prompt.slice(0, 80)}…`,
+  );
   broadcastStatus(task.chat_jid, 'processing', `Running scheduled task…`);
 
   const workspaces = deps.registeredWorkspaces();
@@ -78,8 +108,15 @@ async function runTask(
       { taskId: task.id, workspaceFolder: task.workspace_folder },
       'Workspace not found for task',
     );
-    monitoring.addStep(executionId, 'error', `Workspace not found: ${task.workspace_folder}`);
-    monitoring.updateExecution(executionId, { status: 'error', error: `Workspace not found: ${task.workspace_folder}` });
+    monitoring.addStep(
+      executionId,
+      'error',
+      `Workspace not found: ${task.workspace_folder}`,
+    );
+    monitoring.updateExecution(executionId, {
+      status: 'error',
+      error: `Workspace not found: ${task.workspace_folder}`,
+    });
     broadcastStatus(task.chat_jid, 'done');
     logTaskRun({
       task_id: task.id,
@@ -117,7 +154,9 @@ async function runTask(
   // For workspace context mode, use the workspace's current session
   const sessions = deps.getSessions();
   const sessionId =
-    task.context_mode === 'workspace' ? sessions[task.workspace_folder] : undefined;
+    task.context_mode === 'workspace'
+      ? sessions[task.workspace_folder]
+      : undefined;
 
   // Idle timer: writes _close sentinel after IDLE_TIMEOUT of no output,
   // so the container exits instead of hanging at waitForIpcMessage forever.
@@ -126,16 +165,21 @@ async function runTask(
   const resetIdleTimer = () => {
     if (idleTimer) clearTimeout(idleTimer);
     idleTimer = setTimeout(() => {
-      logger.debug({ taskId: task.id }, 'Scheduled task idle timeout, closing container stdin');
+      logger.debug(
+        { taskId: task.id },
+        'Scheduled task idle timeout, closing container stdin',
+      );
       deps.queue.closeStdin(task.chat_jid);
     }, IDLE_TIMEOUT);
   };
 
   try {
     // Use direct mode on Windows/Linux, container mode on macOS
-    const runAgentFn = shouldUseDirectMode() ? runDirectAgent : runContainerAgent;
+    const runAgentFn = shouldUseDirectMode()
+      ? runDirectAgent
+      : runContainerAgent;
     monitoring.addStep(executionId, 'init', 'Starting agent…');
-    
+
     const output = await runAgentFn(
       workspace,
       {
@@ -146,7 +190,13 @@ async function runTask(
         isMain,
         isScheduledTask: true,
       },
-      (proc, containerName) => deps.onProcess(task.chat_jid, proc, containerName, task.workspace_folder),
+      (proc, containerName) =>
+        deps.onProcess(
+          task.chat_jid,
+          proc,
+          containerName,
+          task.workspace_folder,
+        ),
       async (streamedOutput: ContainerOutput) => {
         if (streamedOutput.result) {
           result = streamedOutput.result;
@@ -158,11 +208,20 @@ async function runTask(
           // Update trace with model info if available
           if (streamedOutput.metadata?.modelID) {
             const model = `${streamedOutput.metadata.providerID || 'unknown'}/${streamedOutput.metadata.modelID}`;
-            monitoring.setRealModel(executionId, streamedOutput.metadata.modelID as string, streamedOutput.metadata.providerID as string || 'unknown');
-            monitoring.addStep(executionId, 'response', `Response from ${model}`, {
-              agent: streamedOutput.metadata.agent,
-              tokens: streamedOutput.metadata.tokens,
-            });
+            monitoring.setRealModel(
+              executionId,
+              streamedOutput.metadata.modelID as string,
+              (streamedOutput.metadata.providerID as string) || 'unknown',
+            );
+            monitoring.addStep(
+              executionId,
+              'response',
+              `Response from ${model}`,
+              {
+                agent: streamedOutput.metadata.agent,
+                tokens: streamedOutput.metadata.tokens,
+              },
+            );
           } else {
             monitoring.addStep(executionId, 'response', 'Response received');
           }
@@ -211,12 +270,19 @@ async function runTask(
     try {
       await deps.sendMessage(task.chat_jid, errorMsg);
     } catch (sendErr) {
-      logger.error({ taskId: task.id, sendErr }, 'Failed to send task error to user');
+      logger.error(
+        { taskId: task.id, sendErr },
+        'Failed to send task error to user',
+      );
     }
   }
 
   // Finalize execution trace
-  monitoring.addStep(executionId, 'done', error ? `Failed: ${error}` : 'Completed');
+  monitoring.addStep(
+    executionId,
+    'done',
+    error ? `Failed: ${error}` : 'Completed',
+  );
   monitoring.updateExecution(executionId, {
     status: error ? 'error' : 'completed',
     error: error || undefined,
@@ -287,10 +353,8 @@ export function startSchedulerLoop(deps: SchedulerDependencies): void {
           continue;
         }
 
-        deps.queue.enqueueTask(
-          currentTask.chat_jid,
-          currentTask.id,
-          () => runTask(currentTask, deps),
+        deps.queue.enqueueTask(currentTask.chat_jid, currentTask.id, () =>
+          runTask(currentTask, deps),
         );
       }
     } catch (err) {
@@ -307,7 +371,10 @@ export function startSchedulerLoop(deps: SchedulerDependencies): void {
  * Trigger a task for immediate execution, bypassing the poll interval.
  * Called from the web UI "Run Now" button.
  */
-export function triggerTaskNow(taskId: string): { success: boolean; error?: string } {
+export function triggerTaskNow(taskId: string): {
+  success: boolean;
+  error?: string;
+} {
   if (!schedulerDeps) {
     return { success: false, error: 'Scheduler not initialized' };
   }
@@ -328,7 +395,9 @@ export function triggerTaskNow(taskId: string): { success: boolean; error?: stri
   // Immediately advance next_run so the scheduler loop doesn't pick it up again
   // while this manual run is in progress (prevents double execution).
   if (task.schedule_type === 'cron') {
-    const interval = CronExpressionParser.parse(task.schedule_value, { tz: TIMEZONE });
+    const interval = CronExpressionParser.parse(task.schedule_value, {
+      tz: TIMEZONE,
+    });
     const nextRun = interval.next().toISOString();
     updateTask(taskId, { next_run: nextRun });
   } else if (task.schedule_type === 'interval') {
@@ -341,11 +410,7 @@ export function triggerTaskNow(taskId: string): { success: boolean; error?: stri
   }
 
   const deps = schedulerDeps;
-  deps.queue.enqueueTask(
-    task.chat_jid,
-    task.id,
-    () => runTask(task, deps),
-  );
+  deps.queue.enqueueTask(task.chat_jid, task.id, () => runTask(task, deps));
 
   return { success: true };
 }

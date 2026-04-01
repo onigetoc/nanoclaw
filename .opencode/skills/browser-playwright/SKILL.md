@@ -94,6 +94,15 @@ Without Docker or WSL, browser automation is severely limited on Windows:
 - Do NOT attempt to browse Twitter, Google Search, Reddit, or any site requiring authentication
 - If the user asks to browse a site that requires login, explain the limitation and suggest alternatives (web search skill, API access, etc.)
 
+## CRITICAL: Search Requests
+
+If the user asks to "search Google" or "search for X":
+1. Try navigating to Google and performing the search with the browser commands
+2. If Google blocks you (CAPTCHA, bot detection), tell the user immediately: "Google blocked the automated browser. I'll search using my built-in web search instead."
+3. Then use the `webfetch` tool with a DuckDuckGo URL like: `https://duckduckgo.com/html/?q=your+search+terms`
+4. Do NOT loop trying different approaches. Try browser once, if blocked, use webfetch, done.
+5. Do NOT look for a tool called `remote_web_search` — it does not exist in your toolset. Use `webfetch` instead.
+
 ## CRITICAL: Failure Handling
 
 - If the browser daemon fails to start after 1 attempt: STOP. Tell the user the browser is not available and suggest they check the setup.

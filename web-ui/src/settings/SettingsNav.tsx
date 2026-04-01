@@ -7,6 +7,7 @@ import {
   Radio,
   Settings,
   Sparkles,
+  Puzzle,
 } from 'lucide-react';
 
 export type SettingsSection =
@@ -15,6 +16,7 @@ export type SettingsSection =
   | 'cron'
   | 'activity'
   | 'files'
+  | 'opencode'
   | 'apikeys'
   | 'models'
   | 'config';
@@ -32,6 +34,7 @@ const NAV_ITEMS: NavItem[] = [
   { id: 'cron', label: 'Cron Jobs', icon: <Clock className="h-4 w-4" />, group: 'Control' },
   { id: 'activity', label: 'Activity', icon: <Activity className="h-4 w-4" />, group: 'Agent' },
   { id: 'files', label: 'Files', icon: <FileText className="h-4 w-4" />, group: 'Agent' },
+  { id: 'opencode', label: 'Tools', icon: <Puzzle className="h-4 w-4" />, group: 'Agent' },
   { id: 'apikeys', label: 'API Keys / Env Vars', icon: <Key className="h-4 w-4" />, group: 'Settings' },
   { id: 'models', label: 'Models', icon: <Sparkles className="h-4 w-4" />, group: 'Settings' },
   { id: 'config', label: 'Config', icon: <Settings className="h-4 w-4" />, group: 'Settings' },
