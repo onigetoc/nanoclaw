@@ -175,7 +175,14 @@ export async function processWorkspaceMessages(
         // Security: redact credentials/PII from agent output
         const { redacted: redactedRaw } = redactOutput(raw, chatJid, isMainWorkspace);
 
-        const text = redactedRaw.replace(/<internal>[\s\S]*?<\/internal>/g, '').trim();
+        // Extract reasoning/thinking from <think> tags before stripping them
+        const thinkMatch = redactedRaw.match(/<think>([\s\S]*?)<\/think>/i);
+        const extractedReasoning = thinkMatch ? thinkMatch[1].trim() : null;
+
+        const text = redactedRaw
+          .replace(/<think>[\s\S]*?<\/think>/gi, '')
+          .replace(/<internal>[\s\S]*?<\/internal>/g, '')
+          .trim();
         logger.info(
           { workspace: workspace.name, model: result.metadata?.modelID, provider: result.metadata?.providerID, agent: result.metadata?.agent },
           `Agent output: ${raw.slice(0, 200)}`,
@@ -190,7 +197,7 @@ export async function processWorkspaceMessages(
           });
         }
         if (text) {
-          const msgMetadata = result.metadata
+          const msgMetadata: Record<string, unknown> = result.metadata
             ? {
                 modelID: result.metadata.modelID,
                 providerID: result.metadata.providerID,
@@ -199,7 +206,13 @@ export async function processWorkspaceMessages(
                 tokens: result.metadata.tokens,
                 cost: result.metadata.cost,
               }
-            : undefined;
+            : {};
+          // Attach extracted reasoning so the web UI can display it
+          // (for web: JIDs the frontend handles this via streaming parts,
+          // but for Telegram/WhatsApp messages we must do it server-side)
+          if (extractedReasoning) {
+            msgMetadata.reasoning = extractedReasoning;
+          }
 
           // For web: JIDs, bypass sendDeduped (which uses WebUIChannel.sendMessage
           // and loses metadata). Instead, check dedup directly and broadcast with

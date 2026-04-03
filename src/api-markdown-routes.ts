@@ -3,7 +3,7 @@
  *
  * Endpoints:
  *   GET  /md/workspaces                              — list workspaces with their browsable folders
- *   GET  /md/workspaces/:workspace/tree              — file tree for a workspace (dna + workspace .md files)
+ *   GET  /md/workspaces/:workspace/tree              — file tree for a workspace (memory + workspace .md files)
  *   GET  /md/workspaces/:workspace/file?path=...     — read a markdown file
  *   PUT  /md/workspaces/:workspace/file?path=...     — save a markdown file
  */
@@ -23,7 +23,7 @@ interface MdFileEntry {
 }
 
 /** Folders we expose inside each workspace */
-const BROWSABLE_FOLDERS = ['dna', 'workspace', 'docs', 'logs', 'uploads', 'downloads', 'conversations', 'tasks', 'skills'];
+const BROWSABLE_FOLDERS = ['memory', 'workspace', 'docs', 'logs', 'uploads', 'downloads', 'conversations', 'tasks', 'skills'];
 
 /** Allowed file extensions for reading/writing */
 const ALLOWED_EXTENSIONS = new Set(['.md', '.txt', '.json', '.yaml', '.yml', '.csv', '.log', '.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.svg', '.html', '.js', '.ts']);

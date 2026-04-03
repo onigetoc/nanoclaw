@@ -11,9 +11,9 @@ export interface Settings {
   autoScroll: boolean;
   /** Enable sound effects */
   soundEffects: boolean;
-  /** Show thinking/reasoning accordion in chat messages (default: true) */
+  /** Show the reasoning accordion in chat messages (default: true) */
   showThinking: boolean;
-  /** Persist LLM thinking/reasoning to DB for later review (default: true) */
+  /** Persist LLM reasoning to DB for later review (default: true) */
   saveThinking: boolean;
 }
 

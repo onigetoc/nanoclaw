@@ -39,7 +39,7 @@ EureClaw uses a hybrid memory system combining SQLite and markdown files for opt
 
 Each workspace has its own memory:
 
-- `workspaces/{name}/dna/MEMORY.md` - Long-term memory for this workspace
+- `workspaces/{name}/memory/MEMORY.md` - Long-term memory for this workspace
 - `workspaces/{name}/conversations/` - Archived conversations
 - SQLite database (shared) - Recent messages for all workspaces
 
@@ -48,7 +48,7 @@ Each workspace has its own memory:
 Shared across all workspaces:
 
 - `workspaces/templates/MEMORY.tpl.md` - Template for new workspaces
-- `workspaces/global/dna/AGENTS.md` - Global instructions
+- `workspaces/global/memory/AGENTS.md` - Global instructions
 
 ## How It Works
 
@@ -127,7 +127,7 @@ if (containerInput.isMain) {
 
 ### Agent doesn't remember conversations
 
-1. Check if MEMORY.md exists: `workspaces/main/dna/MEMORY.md`
+1. Check if MEMORY.md exists: `workspaces/main/memory/MEMORY.md`
 2. Check SQLite has messages: `sqlite3 store/messages.db "SELECT COUNT(*) FROM messages;"`
 3. Check agent logs for "Loaded MEMORY.md" and "Loaded X recent messages"
 
@@ -159,7 +159,7 @@ Each workspace follows this structure:
 
 ```
 workspaces/{name}/
-├── dna/           ← Personality files (AGENTS.md, IDENTITY.md, MEMORY.md, SOUL.md, TOOLS.md, USER.md, GUIDELINES.md)
+├── memory/        ← Personality files (AGENTS.md, IDENTITY.md, MEMORY.md, SOUL.md, TOOLS.md, USER.md, GUIDELINES.md)
 ├── workspace/     ← Agent-generated content
 │   ├── screenshots/
 │   ├── reports/
@@ -218,7 +218,7 @@ Total context size: ~5-10K tokens
 
 - Implementation: `container/agent-runner/src/index.ts`
 - Database functions: `src/db.ts`
-- Documentation: `workspaces/main/dna/AGENTS.md`
+- Documentation: `workspaces/main/memory/AGENTS.md`
 - Architecture decision: `workspaces/main/workspace/decisions.md`
 
 ---

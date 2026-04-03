@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Migration script: Move group files to new dna/ and workspace/ structure
+ * Migration script: Move group files to new memory/ and workspace/ structure
  * 
  * Run: bun scripts/migrate-group-structure.js
  */
@@ -21,14 +21,14 @@ function migrateGroup(groupName) {
   console.log(`\n📁 Migrating ${groupName}...`);
   
   // Create new structure
-  const dnaDir = path.join(groupDir, 'dna');
+  const memoryDir = path.join(groupDir, 'memory');
   const workspaceDir = path.join(groupDir, 'workspace');
   const screenshotsDir = path.join(workspaceDir, 'screenshots');
   const reportsDir = path.join(workspaceDir, 'reports');
   const tasksDir = path.join(workspaceDir, 'tasks');
   const downloadsDir = path.join(workspaceDir, 'downloads');
   
-  fs.mkdirSync(dnaDir, { recursive: true });
+  fs.mkdirSync(memoryDir, { recursive: true });
   fs.mkdirSync(screenshotsDir, { recursive: true });
   fs.mkdirSync(reportsDir, { recursive: true });
   fs.mkdirSync(tasksDir, { recursive: true });
@@ -49,14 +49,14 @@ function migrateGroup(groupName) {
     
     const ext = path.extname(file).toLowerCase();
     
-    // Move DNA files to dna/
+    // Move memory files to memory/
     if (DNA_FILES.includes(file)) {
-      const destPath = path.join(dnaDir, file);
+      const destPath = path.join(memoryDir, file);
       if (!fs.existsSync(destPath)) {
         fs.renameSync(filePath, destPath);
-        console.log(`  ✓ ${file} → dna/`);
+        console.log(`  ✓ ${file} → memory/`);
       } else {
-        console.log(`  ⚠ ${file} already exists in dna/, skipping`);
+        console.log(`  ⚠ ${file} already exists in memory/, skipping`);
       }
       continue;
     }
@@ -144,7 +144,7 @@ for (const group of groups) {
 
 console.log('\n✅ Migration complete!');
 console.log('\nNew structure:');
-console.log('  groups/{name}/dna/           ← Personality files');
+console.log('  groups/{name}/memory/        ← Personality files');
 console.log('  groups/{name}/workspace/     ← Agent-generated content');
 console.log('  groups/{name}/uploads/       ← User uploads');
 console.log('  groups/{name}/logs/          ← Execution logs');

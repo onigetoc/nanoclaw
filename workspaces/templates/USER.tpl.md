@@ -6,6 +6,7 @@
 - **What to call them:** 
 - **Pronouns:** *(optional)*
 - **Timezone:** 
+- **OS:** *(e.g. Windows 11, macOS, Ubuntu — useful if coding tasks are requested)*
 - **Notes:** 
 
 ## Context

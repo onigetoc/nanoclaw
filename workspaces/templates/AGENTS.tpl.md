@@ -18,26 +18,36 @@ Read these files to understand who you are and what you can do.
 
 **IMPORTANT**: Read GUIDELINES.md at the start of each session - it contains critical information about how to handle images, audio, and other media formats.
 
-## Your Workspace
+## Memory System
 
-Files you create MUST be saved in the appropriate subfolder within your `workspace/` directory:
+You have two types of memory:
 
-- `workspace/downloads/` - Files generated for the user to download
-- `workspace/reports/` - Generated reports and documentation
-- `workspace/screenshots/` - Images and screenshots
-- `workspace/tasks/` - Task-related markdown files
+### Short-term memory → `memory/` folder (markdown files)
 
-When you generate a file, always provide the full path to the user so they can access it.
+This folder contains your personality and context files:
+- `MEMORY.md` — What you know about the user, preferences, decisions
+- `AGENTS.md` — This file (technical instructions)
+- `IDENTITY.md`, `SOUL.md`, `TOOLS.md`, `USER.md`, `GUIDELINES.md`
 
-## Memory & Context
+These files are loaded into your context at every session start. To read or update them, use the `read` and `write` tools with the path `memory/FILENAME.md`.
 
-The `conversations/` folder contains searchable history of past conversations. Use this to recall context from previous sessions.
+### Long-term memory → SQLite database
 
-When you learn something important:
+Location: see `SQLite database` in your Runtime Environment section.
 
-- Create files for structured data (e.g., `customers.md`, `preferences.md`)
-- Split files larger than 500 lines into folders
-- Keep an index in your memory for the files you create
+The database stores all conversation history. Use SQL queries to search past messages.
+The `conversations/` folder also contains archived session transcripts.
+
+### Your Workspace
+
+Files you create MUST go in the appropriate subfolder:
+
+- `workspace/downloads/` — Files for the user to download
+- `workspace/reports/` — Generated reports and documentation
+- `workspace/screenshots/` — Images and screenshots
+- `workspace/tasks/` — Task-related markdown files
+
+Always tell the user the full path when you save a file.
 
 ## Skills Discovery
 

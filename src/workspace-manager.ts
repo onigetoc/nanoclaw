@@ -16,7 +16,7 @@ import type { AvailableWorkspace } from './container-runner.js';
  * 
  * New structure:
  * workspaces/{name}/
- * ├── dna/           ← Personality files (AGENTS.md, IDENTITY.md, etc.)
+ * ├── memory/        ← Personality files (AGENTS.md, IDENTITY.md, etc.)
  * ├── workspace/     ← Agent-generated content
  * │   ├── screenshots/
  * │   ├── reports/
@@ -34,7 +34,7 @@ export function registerWorkspace(jid: string, workspace: RegisteredWorkspace): 
   const workspaceDir = path.join(WORKSPACES_DIR, workspace.folder);
   
   // Create folder structure
-  fs.mkdirSync(path.join(workspaceDir, 'dna'), { recursive: true });
+  fs.mkdirSync(path.join(workspaceDir, 'memory'), { recursive: true });
   fs.mkdirSync(path.join(workspaceDir, 'workspace', 'screenshots'), { recursive: true });
   fs.mkdirSync(path.join(workspaceDir, 'workspace', 'reports'), { recursive: true });
   fs.mkdirSync(path.join(workspaceDir, 'workspace', 'tasks'), { recursive: true });
@@ -52,15 +52,15 @@ export function registerWorkspace(jid: string, workspace: RegisteredWorkspace): 
 }
 
 /**
- * Copy template files from workspaces/templates/ into a new workspace's dna/ folder.
+ * Copy template files from workspaces/templates/ into a new workspace's memory/ folder.
  * Renames .tpl.md → .md and substitutes {{ASSISTANT_NAME}}.
- * Skips if the workspace already has .md files in dna/ (not a fresh workspace).
+ * Skips if the workspace already has .md files in memory/ (not a fresh workspace).
  */
 export function copyTemplatesToWorkspace(workspaceDir: string): void {
-  const dnaDir = path.join(workspaceDir, 'dna');
-  fs.mkdirSync(dnaDir, { recursive: true });
+  const memoryDir = path.join(workspaceDir, 'memory');
+  fs.mkdirSync(memoryDir, { recursive: true });
   
-  const existingFiles = fs.readdirSync(dnaDir);
+  const existingFiles = fs.readdirSync(memoryDir);
   const hasMdFiles = existingFiles.some(
     (f) => f.endsWith('.md') && !f.endsWith('.tpl.md'),
   );
@@ -87,12 +87,12 @@ export function copyTemplatesToWorkspace(workspaceDir: string): void {
     }
 
     const outputName = tplFile.replace('.tpl.md', '.md');
-    fs.writeFileSync(path.join(dnaDir, outputName), content, 'utf-8');
+    fs.writeFileSync(path.join(memoryDir, outputName), content, 'utf-8');
   }
 
   logger.info(
-    { workspaceDir, dnaDir, templateCount: templates.length },
-    'Copied templates to new workspace dna/',
+    { workspaceDir, memoryDir, templateCount: templates.length },
+    'Copied templates to new workspace memory/',
   );
 }
 

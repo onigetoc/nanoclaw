@@ -12,7 +12,7 @@ interface CacheEntry<T> { data: T; timestamp: number }
 
 /** Folder labels for display */
 const FOLDER_LABELS: Record<string, string> = {
-  dna: '🧬 DNA', workspace: '📁 Workspace', docs: '📄 Docs',
+  memory: '🧠 Memory', workspace: '📁 Workspace', docs: '📄 Docs',
   logs: '📋 Logs', uploads: '📤 Uploads', downloads: '📥 Downloads',
   conversations: '💬 Conversations', tasks: '✅ Tasks', skills: '🛠️ Skills',
 };
@@ -25,7 +25,7 @@ const fileCache = new Map<string, CacheEntry<{ content: string; modified: string
 let cachedWorkspaces: CacheEntry<WorkspaceInfo[]> | null = null;
 let cachedSelectedWorkspace = '';
 let cachedSelectedFile: string | null = null;
-let cachedExpandedFolders: Set<string> = new Set(['dna']);
+let cachedExpandedFolders: Set<string> = new Set(['memory']);
 
 function getCached<T>(cache: Map<string, CacheEntry<T>>, key: string, ttl: number): T | null {
   const entry = cache.get(key);
@@ -109,7 +109,7 @@ export default function FilesSection({ isDark }: FilesSectionProps) {
       const data = await apiService.getMdTree(workspace);
       treeCache.set(workspace, { data: data.tree, timestamp: Date.now() });
       setTree(data.tree);
-      if (!cachedExpandedFolders.size) setExpandedFolders(new Set(['dna']));
+      if (!cachedExpandedFolders.size) setExpandedFolders(new Set(['memory']));
     } catch {
       setError('Failed to load file tree');
     } finally {

@@ -93,7 +93,7 @@ This compiles TypeScript to JavaScript in `container/agent-runner/dist/`.
 
 ### Step 3: Document
 
-Update `workspaces/global/dna/TOOLS.md` with usage examples:
+Update `workspaces/global/memory/TOOLS.md` with usage examples:
 
 ```markdown
 ## Tool Name

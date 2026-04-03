@@ -329,7 +329,7 @@ Key files:
 - `src/container-runner.ts` - Spawns streaming agent containers with OpenCode SDK
 - `src/task-scheduler.ts` - Runs scheduled tasks
 - `src/db.ts` - SQLite operations (messages, workspaces, sessions, state)
-- `workspaces/*/dna/AGENTS.md` - Per-workspace memory and context
+- `workspaces/*/memory/AGENTS.md` - Per-workspace memory and context
 - `workspaces/*/workspace/` - Agent-generated content (screenshots, reports, downloads)
 
 ## Environment Variables

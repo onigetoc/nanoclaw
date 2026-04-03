@@ -1,9 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { apiService, type OpenCodeStatus, type SkillInfo, type AgentInfo } from '../api';
 
 interface ToolsSectionProps {
   isDark: boolean;
 }
+
+type ToolsTab = 'agents' | 'skills' | 'mcp' | 'plugins';
 
 function Badge({ label, color, isDark }: { label: string; color: string; isDark: boolean }) {
   const colors: Record<string, string> = {
@@ -43,40 +45,303 @@ function agentSourceLabel(source: AgentInfo['source']): { label: string; color: 
   }
 }
 
-function SectionCard({ title, count, isDark, children }: {
-  title: string; count: number; isDark: boolean; children: React.ReactNode;
+/* ------------------------------------------------------------------ */
+/* Toggle Switch                                                       */
+/* ------------------------------------------------------------------ */
+
+function ToggleSwitch({
+  enabled,
+  onToggle,
+  isDark,
+  busy,
+}: {
+  enabled: boolean;
+  onToggle: () => void;
+  isDark: boolean;
+  busy?: boolean;
 }) {
   return (
-    <div className={`rounded-xl border p-5 ${isDark ? 'border-zinc-800 bg-zinc-900/50' : 'border-zinc-200 bg-white'}`}>
-      <div className="mb-3 flex items-center justify-between">
-        <h3 className={`text-sm font-semibold ${isDark ? 'text-zinc-200' : 'text-zinc-800'}`}>{title}</h3>
-        <span className={`text-xs ${isDark ? 'text-zinc-500' : 'text-zinc-400'}`}>{count} total</span>
-      </div>
-      {children}
+    <button
+      type="button"
+      role="switch"
+      aria-checked={enabled}
+      disabled={busy}
+      onClick={onToggle}
+      className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full transition-colors duration-200 ${
+        busy ? 'opacity-50 cursor-wait' : ''
+      } ${enabled
+        ? 'bg-emerald-500'
+        : isDark ? 'bg-zinc-600' : 'bg-zinc-300'
+      }`}
+    >
+      <span
+        className={`inline-block h-3.5 w-3.5 rounded-full bg-white shadow transition-transform duration-200 ${
+          enabled ? 'translate-x-[18px]' : 'translate-x-[3px]'
+        }`}
+      />
+    </button>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Tab Bar                                                             */
+/* ------------------------------------------------------------------ */
+
+function TabBar({
+  current,
+  onChange,
+  isDark,
+  counts,
+}: {
+  current: ToolsTab;
+  onChange: (tab: ToolsTab) => void;
+  isDark: boolean;
+  counts: Record<ToolsTab, number>;
+}) {
+  const tabs: { key: ToolsTab; label: string; emoji: string }[] = [
+    { key: 'agents', label: 'Agents', emoji: '🤖' },
+    { key: 'skills', label: 'Skills', emoji: '🛠' },
+    { key: 'mcp', label: 'MCP', emoji: '🔗' },
+    { key: 'plugins', label: 'Plugins', emoji: '🔌' },
+  ];
+
+  return (
+    <div
+      className="inline-flex rounded-lg overflow-hidden border"
+      style={{ borderColor: isDark ? '#3f3f46' : '#d4d4d8' }}
+    >
+      {tabs.map(({ key, label, emoji }) => {
+        const selected = current === key;
+        return (
+          <button
+            key={key}
+            type="button"
+            onClick={() => onChange(key)}
+            className={`px-3 py-1.5 text-xs font-medium transition flex items-center gap-1.5 ${
+              selected
+                ? isDark
+                  ? 'bg-zinc-700 text-zinc-100'
+                  : 'bg-zinc-200 text-zinc-800'
+                : isDark
+                  ? 'bg-zinc-800/60 text-zinc-400 hover:bg-zinc-800'
+                  : 'bg-zinc-50 text-zinc-500 hover:bg-zinc-100'
+            }`}
+          >
+            <span>{emoji}</span>
+            {label}
+            <span
+              className={`text-[10px] px-1.5 py-0.5 rounded-full font-semibold ${
+                isDark ? 'bg-zinc-600/50 text-zinc-300' : 'bg-zinc-300/60 text-zinc-600'
+              }`}
+            >
+              {counts[key]}
+            </span>
+          </button>
+        );
+      })}
     </div>
   );
 }
+
+/* ------------------------------------------------------------------ */
+/* Tab Content Panels                                                  */
+/* ------------------------------------------------------------------ */
+
+function EmptyRow({ msg, isDark }: { msg: string; isDark: boolean }) {
+  return (
+    <div className={`py-8 text-center text-xs ${isDark ? 'text-zinc-600' : 'text-zinc-400'}`}>
+      {msg}
+    </div>
+  );
+}
+
+function AgentsPanel({ agents, isDark }: { agents: AgentInfo[]; isDark: boolean }) {
+  if (agents.length === 0) return <EmptyRow msg="No agents found" isDark={isDark} />;
+  return (
+    <div className="space-y-1.5">
+      {agents.map((ag) => {
+        const mode = agentModeLabel(ag.mode);
+        const src = agentSourceLabel(ag.source);
+        return (
+          <div
+            key={ag.name}
+            className={`flex items-center justify-between rounded-lg px-3 py-2 ${
+              isDark ? 'bg-zinc-800/50' : 'bg-zinc-50'
+            }`}
+          >
+            <div className="min-w-0 flex-1">
+              <span className={`text-sm font-medium ${isDark ? 'text-zinc-200' : 'text-zinc-800'}`}>
+                {ag.name}
+              </span>
+              <p className={`truncate text-xs ${isDark ? 'text-zinc-500' : 'text-zinc-400'}`}>
+                {ag.description}
+              </p>
+            </div>
+            <div className="flex gap-1.5 shrink-0 ml-2">
+              <Badge label={mode.label} color={mode.color} isDark={isDark} />
+              <Badge label={src.label} color={src.color} isDark={isDark} />
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function SkillsPanel({ skills, isDark }: { skills: SkillInfo[]; isDark: boolean }) {
+  if (skills.length === 0) return <EmptyRow msg="No skills discovered" isDark={isDark} />;
+  return (
+    <div className="space-y-1.5">
+      {skills.map((sk) => {
+        const src = sourceLabel(sk.source);
+        return (
+          <div
+            key={sk.name}
+            className={`flex items-center justify-between rounded-lg px-3 py-2 ${
+              isDark ? 'bg-zinc-800/50' : 'bg-zinc-50'
+            }`}
+          >
+            <div className="min-w-0 flex-1">
+              <span className={`text-sm font-medium ${isDark ? 'text-zinc-200' : 'text-zinc-800'}`}>
+                {sk.name}
+              </span>
+              <p className={`truncate text-xs ${isDark ? 'text-zinc-500' : 'text-zinc-400'}`}>
+                {sk.description}
+              </p>
+            </div>
+            <Badge label={src.label} color={src.color} isDark={isDark} />
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function McpPanel({
+  servers,
+  isDark,
+  onToggle,
+  busyServers,
+}: {
+  servers: OpenCodeStatus['mcpServers'];
+  isDark: boolean;
+  onToggle: (name: string, enabled: boolean) => void;
+  busyServers: Set<string>;
+}) {
+  if (servers.length === 0) return <EmptyRow msg="No MCP servers configured" isDark={isDark} />;
+  return (
+    <div className="space-y-1.5">
+      {servers.map((m) => (
+        <div
+          key={m.name}
+          className={`flex items-center justify-between rounded-lg px-3 py-2 ${
+            isDark ? 'bg-zinc-800/50' : 'bg-zinc-50'
+          }`}
+        >
+          <div className="min-w-0 flex-1">
+            <span className={`text-sm font-medium ${isDark ? 'text-zinc-200' : 'text-zinc-800'}`}>
+              {m.name}
+            </span>
+            {m.command && (
+              <p className={`truncate text-xs ${isDark ? 'text-zinc-500' : 'text-zinc-400'}`}>
+                {m.command}
+              </p>
+            )}
+          </div>
+          <div className="flex items-center gap-2 shrink-0 ml-2">
+            <span className={`text-[10px] ${
+              m.disabled
+                ? isDark ? 'text-rose-400' : 'text-rose-500'
+                : isDark ? 'text-emerald-400' : 'text-emerald-600'
+            }`}>
+              {m.disabled ? 'Off' : 'On'}
+            </span>
+            <ToggleSwitch
+              enabled={!m.disabled}
+              onToggle={() => onToggle(m.name, m.disabled)}
+              isDark={isDark}
+              busy={busyServers.has(m.name)}
+            />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function PluginsPanel({ plugins, isDark }: { plugins: OpenCodeStatus['plugins']; isDark: boolean }) {
+  if (plugins.length === 0) return <EmptyRow msg="No plugins installed" isDark={isDark} />;
+  return (
+    <div className="space-y-1.5">
+      {plugins.map((p) => (
+        <div
+          key={p.name}
+          className={`flex items-center justify-between rounded-lg px-3 py-2 ${
+            isDark ? 'bg-zinc-800/50' : 'bg-zinc-50'
+          }`}
+        >
+          <span className={`text-sm font-medium ${isDark ? 'text-zinc-200' : 'text-zinc-800'}`}>
+            {p.name}
+          </span>
+          {p.version && <Badge label={`v${p.version}`} color="zinc" isDark={isDark} />}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Main Component                                                      */
+/* ------------------------------------------------------------------ */
 
 export default function ToolsSection({ isDark }: ToolsSectionProps) {
   const [status, setStatus] = useState<OpenCodeStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<ToolsTab>('agents');
+  const [busyServers, setBusyServers] = useState<Set<string>>(new Set());
+
+  const loadStatus = useCallback(async () => {
+    try {
+      const data = await apiService.getOpenCodeStatus();
+      setStatus(data);
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
-    let cancelled = false;
-    async function load() {
-      try {
-        const data = await apiService.getOpenCodeStatus();
-        if (!cancelled) { setStatus(data); setError(null); }
-      } catch (err) {
-        if (!cancelled) setError(err instanceof Error ? err.message : 'Failed to load');
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
+    void loadStatus();
+  }, [loadStatus]);
+
+  const handleMcpToggle = useCallback(async (name: string, currentlyDisabled: boolean) => {
+    setBusyServers((prev) => new Set(prev).add(name));
+    try {
+      await apiService.toggleMcpServer(name, currentlyDisabled); // enable if currently disabled
+      // Optimistic update
+      setStatus((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          mcpServers: prev.mcpServers.map((m) =>
+            m.name === name ? { ...m, disabled: !currentlyDisabled } : m
+          ),
+        };
+      });
+    } catch (err) {
+      // Reload on error to get real state
+      void loadStatus();
+    } finally {
+      setBusyServers((prev) => {
+        const next = new Set(prev);
+        next.delete(name);
+        return next;
+      });
     }
-    void load();
-    return () => { cancelled = true; };
-  }, []);
+  }, [loadStatus]);
 
   if (loading) {
     return (
@@ -94,88 +359,37 @@ export default function ToolsSection({ isDark }: ToolsSectionProps) {
     );
   }
 
-  const emptyRow = (msg: string) => (
-    <div className={`py-3 text-center text-xs ${isDark ? 'text-zinc-600' : 'text-zinc-400'}`}>{msg}</div>
-  );
+  const counts: Record<ToolsTab, number> = {
+    agents: status.agents.length,
+    skills: status.skills.length,
+    mcp: status.mcpServers.length,
+    plugins: status.plugins.length,
+  };
 
   return (
-    <div className="space-y-6">
-      {/* Skills */}
-      <SectionCard title="🛠 Skills" count={status.skills.length} isDark={isDark}>
-        {status.skills.length === 0 ? emptyRow('No skills discovered') : (
-          <div className="space-y-1.5">
-            {status.skills.map((sk) => {
-              const src = sourceLabel(sk.source);
-              return (
-                <div key={sk.name} className={`flex items-center justify-between rounded-lg px-3 py-2 ${isDark ? 'bg-zinc-800/50' : 'bg-zinc-50'}`}>
-                  <div className="min-w-0 flex-1">
-                    <span className={`text-sm font-medium ${isDark ? 'text-zinc-200' : 'text-zinc-800'}`}>{sk.name}</span>
-                    <p className={`truncate text-xs ${isDark ? 'text-zinc-500' : 'text-zinc-400'}`}>{sk.description}</p>
-                  </div>
-                  <Badge label={src.label} color={src.color} isDark={isDark} />
-                </div>
-              );
-            })}
-          </div>
+    <div className="flex flex-col h-full">
+      {/* Sticky header with tab bar */}
+      <div
+        className={`sticky top-0 z-10 pb-4 ${
+          isDark ? 'bg-zinc-950' : 'bg-zinc-100'
+        }`}
+      >
+        <TabBar current={activeTab} onChange={setActiveTab} isDark={isDark} counts={counts} />
+      </div>
+
+      {/* Scrollable content */}
+      <div className="flex-1 overflow-y-auto min-h-0">
+        {activeTab === 'agents' && <AgentsPanel agents={status.agents} isDark={isDark} />}
+        {activeTab === 'skills' && <SkillsPanel skills={status.skills} isDark={isDark} />}
+        {activeTab === 'mcp' && (
+          <McpPanel
+            servers={status.mcpServers}
+            isDark={isDark}
+            onToggle={handleMcpToggle}
+            busyServers={busyServers}
+          />
         )}
-      </SectionCard>
-
-      {/* Agents */}
-      <SectionCard title="🤖 Agents" count={status.agents.length} isDark={isDark}>
-        {status.agents.length === 0 ? emptyRow('No agents found') : (
-          <div className="space-y-1.5">
-            {status.agents.map((ag) => {
-              const mode = agentModeLabel(ag.mode);
-              const src = agentSourceLabel(ag.source);
-              return (
-                <div key={ag.name} className={`flex items-center justify-between rounded-lg px-3 py-2 ${isDark ? 'bg-zinc-800/50' : 'bg-zinc-50'}`}>
-                  <div className="min-w-0 flex-1">
-                    <span className={`text-sm font-medium ${isDark ? 'text-zinc-200' : 'text-zinc-800'}`}>{ag.name}</span>
-                    <p className={`truncate text-xs ${isDark ? 'text-zinc-500' : 'text-zinc-400'}`}>{ag.description}</p>
-                  </div>
-                  <div className="flex gap-1.5">
-                    <Badge label={mode.label} color={mode.color} isDark={isDark} />
-                    <Badge label={src.label} color={src.color} isDark={isDark} />
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </SectionCard>
-
-      {/* Plugins & MCP side by side */}
-      <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-        {/* Plugins */}
-        <SectionCard title="🔌 Plugins" count={status.plugins.length} isDark={isDark}>
-          {status.plugins.length === 0 ? emptyRow('No plugins installed') : (
-            <div className="space-y-1.5">
-              {status.plugins.map((p) => (
-                <div key={p.name} className={`flex items-center justify-between rounded-lg px-3 py-2 ${isDark ? 'bg-zinc-800/50' : 'bg-zinc-50'}`}>
-                  <span className={`text-sm font-medium ${isDark ? 'text-zinc-200' : 'text-zinc-800'}`}>{p.name}</span>
-                  {p.version && <Badge label={`v${p.version}`} color="zinc" isDark={isDark} />}
-                </div>
-              ))}
-            </div>
-          )}
-        </SectionCard>
-
-        {/* MCP Servers */}
-        <SectionCard title="🔗 MCP Servers" count={status.mcpServers.length} isDark={isDark}>
-          {status.mcpServers.length === 0 ? emptyRow('No MCP servers configured') : (
-            <div className="space-y-1.5">
-              {status.mcpServers.map((m) => (
-                <div key={m.name} className={`flex items-center justify-between rounded-lg px-3 py-2 ${isDark ? 'bg-zinc-800/50' : 'bg-zinc-50'}`}>
-                  <div className="min-w-0 flex-1">
-                    <span className={`text-sm font-medium ${isDark ? 'text-zinc-200' : 'text-zinc-800'}`}>{m.name}</span>
-                    {m.command && <p className={`truncate text-xs ${isDark ? 'text-zinc-500' : 'text-zinc-400'}`}>{m.command}</p>}
-                  </div>
-                  <Badge label={m.disabled ? 'Disabled' : 'Active'} color={m.disabled ? 'rose' : 'emerald'} isDark={isDark} />
-                </div>
-              ))}
-            </div>
-          )}
-        </SectionCard>
+        {activeTab === 'plugins' && <PluginsPanel plugins={status.plugins} isDark={isDark} />}
       </div>
     </div>
   );

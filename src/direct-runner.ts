@@ -48,7 +48,7 @@ function parseAgentStatus(line: string): string | null {
 }
 
 export interface AgentStepEvent {
-  phase: 'init' | 'context' | 'model' | 'fallback' | 'response' | 'error' | 'done';
+  phase: 'init' | 'context' | 'model' | 'fallback' | 'response' | 'error' | 'done' | 'tool';
   message: string;
   metadata?: Record<string, unknown>;
 }
@@ -146,6 +146,36 @@ function parseAgentStep(line: string): AgentStepEvent | null {
   if (line.includes('Query completed successfully')) {
     return { phase: 'done', message: 'Query completed' };
   }
+
+  // ─── Tool events from event-logger (stderr) ─────────────────────
+  // These are emitted by EventLogger.handleToolEvent via this.log()
+  const toolPatterns: Array<{ pattern: RegExp; extract: (m: RegExpMatchArray) => AgentStepEvent }> = [
+    { pattern: /📖 Reading: (.+)/, extract: (m) => ({ phase: 'tool', message: `📖 Reading: ${m[1]}`, metadata: { tool: 'read' } }) },
+    { pattern: /✍️ Writing: (.+)/, extract: (m) => ({ phase: 'tool', message: `✍️ Writing: ${m[1]}`, metadata: { tool: 'write' } }) },
+    { pattern: /✏️ Editing: (.+)/, extract: (m) => ({ phase: 'tool', message: `✏️ Editing: ${m[1]}`, metadata: { tool: 'edit' } }) },
+    { pattern: /🖥️ Running: (.+)/, extract: (m) => ({ phase: 'tool', message: `🖥️ Running: ${m[1]}`, metadata: { tool: 'bash' } }) },
+    { pattern: /🔎 Glob: (.+)/, extract: (m) => ({ phase: 'tool', message: `🔎 Glob: ${m[1]}`, metadata: { tool: 'glob' } }) },
+    { pattern: /🔎 Grep: (.+)/, extract: (m) => ({ phase: 'tool', message: `🔎 Grep: ${m[1]}`, metadata: { tool: 'grep' } }) },
+    { pattern: /📂 Listing: (.+)/, extract: (m) => ({ phase: 'tool', message: `📂 Listing: ${m[1]}`, metadata: { tool: 'list' } }) },
+    { pattern: /🌐 Fetching: (.+)/, extract: (m) => ({ phase: 'tool', message: `🌐 Fetching: ${m[1]}`, metadata: { tool: 'webfetch' } }) },
+    { pattern: /🔍 Web search: (.+)/, extract: (m) => ({ phase: 'tool', message: `🔍 Web search: ${m[1]}`, metadata: { tool: 'websearch' } }) },
+    { pattern: /🤖 Delegating to agent: (.+)/, extract: (m) => ({ phase: 'tool', message: `🤖 Sub-agent: ${m[1]}`, metadata: { tool: 'task', agent: m[1] } }) },
+    { pattern: /🔧 MCP tool: (.+)/, extract: (m) => ({ phase: 'tool', message: `🔧 MCP: ${m[1]}`, metadata: { tool: `mcp:${m[1]}` } }) },
+    { pattern: /🔧 Tool: (.+)/, extract: (m) => ({ phase: 'tool', message: `🔧 ${m[1]}`, metadata: { tool: m[1] } }) },
+    { pattern: /☑️ (Updating|Reading) todo/, extract: (m) => ({ phase: 'tool', message: `☑️ ${m[0]}`, metadata: { tool: 'todo' } }) },
+    { pattern: /💬 Assistant response updated/, extract: () => ({ phase: 'response', message: 'Assistant response updated' }) },
+    { pattern: /🟢 Session created/, extract: () => ({ phase: 'init', message: 'Session created' }) },
+    { pattern: /💤 Agent idle/, extract: () => ({ phase: 'done', message: 'Agent idle' }) },
+    { pattern: /🔴 Session error: (.+)/, extract: (m) => ({ phase: 'error', message: `Session error: ${m[1]}` }) },
+    { pattern: /📄 File edited: (.+)/, extract: (m) => ({ phase: 'tool', message: `📄 File edited: ${m[1]}`, metadata: { tool: 'file_edit' } }) },
+    { pattern: /⚙️ Command: (.+)/, extract: (m) => ({ phase: 'tool', message: `⚙️ Command: ${m[1]}`, metadata: { tool: 'command' } }) },
+  ];
+
+  for (const { pattern, extract } of toolPatterns) {
+    const match = line.match(pattern);
+    if (match) return extract(match);
+  }
+
   return null;
 }
 
@@ -313,6 +343,11 @@ export async function runDirectAgent(
           if (onStatus) {
             const status = parseAgentStatus(line);
             if (status) onStatus(status);
+          }
+          // Parse agent-runner logs for tool/step events
+          if (onStep) {
+            const step = parseAgentStep(line);
+            if (step) onStep(step);
           }
         }
       }

@@ -4,10 +4,12 @@
     "small": "opencode/big-pickle",
     "primaryFallbacks": [
       "google/gemini-3.1-flash-lite-preview",
-      "google/gemini-2.5-flash-lite"
+      "opencode/big-pickle",
+      "openrouter/stepfun/step-3.5-flash:free"
     ],
     "smallFallbacks": [
       "opencode/big-pickle",
+      "openrouter/stepfun/step-3.5-flash:free",
       "opencode/minimax-m2.5-free",
       "opencode/glm-5-free"
     ],

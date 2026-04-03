@@ -77,8 +77,8 @@ export default function ConfigSection({ settings, onUpdate, onReset, isDark }: C
             Developer
           </h3>
           <ToggleRow label="Debug Panel" description="Show agent metadata sidebar in chat" checked={settings.debugPanel} onChange={(v) => onUpdate('debugPanel', v)} isDark={isDark} />
-          <ToggleRow label="Show Thinking" description="Display LLM reasoning accordion in chat messages" checked={settings.showThinking} onChange={(v) => onUpdate('showThinking', v)} isDark={isDark} />
-          <ToggleRow label="Save Thinking" description="Persist LLM reasoning to DB for review and debugging" checked={settings.saveThinking} onChange={(v) => onUpdate('saveThinking', v)} isDark={isDark} />
+          <ToggleRow label="Show Thinking" description="Display LLM thinking accordion in chat messages" checked={settings.showThinking} onChange={(v) => onUpdate('showThinking', v)} isDark={isDark} />
+          <ToggleRow label="Save Thinking" description="Persist LLM thinking to DB for review and debugging" checked={settings.saveThinking} onChange={(v) => onUpdate('saveThinking', v)} isDark={isDark} />
         </div>
 
         <div className={`border-t ${isDark ? 'border-zinc-800' : 'border-zinc-100'}`} />

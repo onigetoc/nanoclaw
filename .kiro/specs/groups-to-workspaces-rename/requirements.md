@@ -22,7 +22,7 @@ Refactoring massif du projet EureClaw pour renommer le concept de "group" en "wo
 - **Task_Scheduler** : Le module `src/task-scheduler.ts` qui exécute les tâches planifiées.
 - **Web_UI** : L'interface web dans `web-ui/`.
 - **Agent_Runner** : Le code dans `container/agent-runner/src/` qui s'exécute à l'intérieur des containers.
-- **DNA_Files** : Les fichiers de personnalité (AGENTS.md, IDENTITY.md, etc.) dans le sous-dossier `dna/` de chaque workspace.
+- **Memory_Files** : Les fichiers de personnalité (AGENTS.md, IDENTITY.md, etc.) dans le sous-dossier `memory/` de chaque workspace.
 - **Template_Files** : Les fichiers modèles dans `workspaces/templates/` (anciennement `groups/templates/`).
 
 ## Exigences
@@ -193,7 +193,7 @@ Refactoring massif du projet EureClaw pour renommer le concept de "group" en "wo
 1. THE Refactoring_Engine SHALL mettre à jour `README.md` pour référencer `workspaces/` au lieu de `groups/`
 2. THE Refactoring_Engine SHALL mettre à jour `AGENTS.md` pour référencer `workspaces/` au lieu de `groups/`
 3. THE Refactoring_Engine SHALL mettre à jour `.kiro/structure.md` pour référencer `workspaces/` au lieu de `groups/`
-4. THE Refactoring_Engine SHALL mettre à jour `groups/global/dna/DOCUMENTATION.md` (déplacé vers `workspaces/global/dna/DOCUMENTATION.md`)
+4. THE Refactoring_Engine SHALL mettre à jour `groups/global/memory/DOCUMENTATION.md` (déplacé vers `workspaces/global/memory/DOCUMENTATION.md`)
 5. THE Refactoring_Engine SHALL mettre à jour tous les fichiers `.md` dans les dossiers `.opencode/`, `.kiro/steering/`, et `docs/`
 6. WHEN un fichier de documentation référence `groups/{name}/`, THE Refactoring_Engine SHALL le remplacer par `workspaces/{name}/`
 

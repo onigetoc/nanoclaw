@@ -102,12 +102,27 @@ export const SUSPICIOUS_HEX = /(?:[0-9a-fA-F]{40,})/g;
 // ─── Credential patterns (for output redaction) ─────────────────────────────
 
 export const CREDENTIAL_PATTERNS: { pattern: RegExp; replacement: string; description: string }[] = [
+  // Platform tokens
+  { pattern: /\b\d{8,10}:[A-Za-z0-9_-]{35,}/g, replacement: '[REDACTED: bot token]', description: 'Telegram bot token' },
+  { pattern: /xoxb-[A-Za-z0-9-]+/g, replacement: '[REDACTED]', description: 'Slack bot token' },
+  { pattern: /xoxp-[A-Za-z0-9-]+/g, replacement: '[REDACTED]', description: 'Slack user token' },
+  { pattern: /xapp-[A-Za-z0-9-]+/g, replacement: '[REDACTED]', description: 'Slack app token' },
+  { pattern: /\b[A-Za-z0-9]{24}\.[A-Za-z0-9_-]{6}\.[A-Za-z0-9_-]{27,}/g, replacement: '[REDACTED]', description: 'Discord bot token' },
+
+  // Cloud & AI provider keys
   { pattern: /ghp_[A-Za-z0-9_]{36,}/g, replacement: '[REDACTED]', description: 'GitHub token' },
+  { pattern: /gho_[A-Za-z0-9_]{36,}/g, replacement: '[REDACTED]', description: 'GitHub OAuth token' },
+  { pattern: /github_pat_[A-Za-z0-9_]{22,}/g, replacement: '[REDACTED]', description: 'GitHub fine-grained PAT' },
   { pattern: /sk-[A-Za-z0-9]{20,}/g, replacement: '[REDACTED]', description: 'API key (sk-)' },
+  { pattern: /sk-ant-[A-Za-z0-9-]{20,}/g, replacement: '[REDACTED]', description: 'Anthropic API key' },
+  { pattern: /AIza[A-Za-z0-9_-]{35}/g, replacement: '[REDACTED]', description: 'Google API key' },
+  { pattern: /gsk_[A-Za-z0-9]{20,}/g, replacement: '[REDACTED]', description: 'Groq API key' },
   { pattern: /Bearer\s+[A-Za-z0-9\-._~+/]+=*/gi, replacement: 'Bearer [REDACTED]', description: 'Bearer token' },
   { pattern: /AKIA[A-Z0-9]{16}/g, replacement: '[REDACTED]', description: 'AWS access key' },
   { pattern: /-----BEGIN\s+[\w\s]*PRIVATE KEY-----[\s\S]*?-----END\s+[\w\s]*PRIVATE KEY-----/g, replacement: '[REDACTED: private key]', description: 'Private key block' },
-  { pattern: /(token|key|API_KEY|password|secret)\s*[=:]\s*\S+/gi, replacement: '$1=[REDACTED]', description: 'Key-value secret' },
+
+  // Generic key-value secrets (keep last — broadest match)
+  { pattern: /(token|key|API_KEY|password|secret|credential|api_secret|client_secret)\s*[=:]\s*["']?\S+["']?/gi, replacement: '$1=[REDACTED]', description: 'Key-value secret' },
 ];
 
 // PII patterns (applied only for non-main groups)

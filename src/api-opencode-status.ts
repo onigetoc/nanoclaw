@@ -327,6 +327,56 @@ export function getOpenCodeStatus(): OpenCodeStatus {
 }
 
 /**
+ * Toggle MCP server enabled/disabled state in opencode.json
+ */
+export function toggleMcpServer(serverName: string, enabled: boolean): { success: boolean; error?: string } {
+  const configPath = path.join(process.cwd(), 'opencode.json');
+  try {
+    let config: Record<string, unknown> = {};
+    if (fs.existsSync(configPath)) {
+      config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+    }
+
+    // Ensure mcp section exists
+    if (!config.mcp || typeof config.mcp !== 'object') {
+      config.mcp = {};
+    }
+    const mcp = config.mcp as Record<string, unknown>;
+
+    // Check if server exists in opencode.json mcp section
+    if (mcp[serverName] && typeof mcp[serverName] === 'object') {
+      (mcp[serverName] as Record<string, unknown>).disabled = !enabled;
+      fs.writeFileSync(configPath, JSON.stringify(config, null, 2) + '\n', 'utf-8');
+      logger.info({ serverName, enabled }, 'Toggled MCP server in opencode.json');
+      return { success: true };
+    }
+
+    // Check .mcp.json
+    const mcpJsonPath = path.join(process.cwd(), '.mcp.json');
+    if (fs.existsSync(mcpJsonPath)) {
+      const mcpConfig = JSON.parse(fs.readFileSync(mcpJsonPath, 'utf-8'));
+      const mcpServers = mcpConfig.mcpServers || mcpConfig;
+      if (mcpServers[serverName] && typeof mcpServers[serverName] === 'object') {
+        mcpServers[serverName].disabled = !enabled;
+        if (mcpConfig.mcpServers) {
+          mcpConfig.mcpServers = mcpServers;
+        }
+        fs.writeFileSync(mcpJsonPath, JSON.stringify(mcpConfig, null, 2) + '\n', 'utf-8');
+        logger.info({ serverName, enabled }, 'Toggled MCP server in .mcp.json');
+        return { success: true };
+      }
+    }
+
+    // Server not found in any config — add it to opencode.json mcp section as disabled
+    // This shouldn't normally happen, but handle gracefully
+    return { success: false, error: `MCP server "${serverName}" not found in any config file` };
+  } catch (err) {
+    logger.error({ err, serverName }, 'Failed to toggle MCP server');
+    return { success: false, error: err instanceof Error ? err.message : 'Unknown error' };
+  }
+}
+
+/**
  * Format OpenCode status as text (for /status command in chat)
  */
 export function formatOpenCodeStatusText(status: OpenCodeStatus): string {

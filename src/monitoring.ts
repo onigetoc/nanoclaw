@@ -11,7 +11,7 @@ import { getModelInfo } from './opencode-config.js';
 
 export interface ExecutionStep {
   timestamp: string;
-  phase: 'queue' | 'init' | 'context' | 'model' | 'fallback' | 'response' | 'error' | 'done';
+  phase: 'queue' | 'init' | 'context' | 'model' | 'fallback' | 'response' | 'error' | 'done' | 'tool';
   message: string;
   durationMs?: number;
   metadata?: Record<string, unknown>;

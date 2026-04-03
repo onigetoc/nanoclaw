@@ -324,9 +324,9 @@ server.tool(
 );
 ```
 
-### Security Skill (`workspaces/global/dna/SECURITY.md`)
+### Security Skill (`workspaces/global/memory/SECURITY.md`)
 
-A markdown file loaded into the agent's context alongside other DNA files. Contains:
+A markdown file loaded into the agent's context alongside other memory files. Contains:
 - Instructions to refuse prompt extraction, instruction override, impersonation
 - Safe refusal patterns (polite, no detection mechanism revealed)
 - Instruction to use `<security-flag>reason</security-flag>` when detecting manipulation

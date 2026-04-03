@@ -297,13 +297,13 @@ CREATE TABLE scheduled_tasks (
 ```
 workspaces/
 ├── global/
-│   └── dna/
+│   └── memory/
 │       ├── AGENTS.md
 │       ├── DOCUMENTATION.md
 │       ├── SECURITY.md
 │       └── ...
 ├── main/
-│   ├── dna/
+│   ├── memory/
 │   ├── workspace/          ← NE PAS RENOMMER (singulier)
 │   │   ├── screenshots/
 │   │   ├── reports/
@@ -317,7 +317,7 @@ workspaces/
 │   ├── IDENTITY.tpl.md
 │   └── ...
 └── {other-workspace}/
-    ├── dna/
+    ├── memory/
     ├── workspace/          ← NE PAS RENOMMER (singulier)
     └── ...
 ```

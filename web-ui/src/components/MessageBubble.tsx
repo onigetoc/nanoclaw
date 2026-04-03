@@ -64,8 +64,8 @@ function MessageBubble({ msg, isDark, showThinking = true, onSendCommand }: Mess
 
         {showThinking && reasoning && (
           <details className="mb-2 text-sm">
-            <summary className={`cursor-pointer select-none italic ${isDark ? 'text-zinc-500' : 'text-zinc-400'}`}>Thinking</summary>
-            <pre className={`mt-2 whitespace-pre-wrap font-sans leading-relaxed ${isDark ? 'text-zinc-500' : 'text-zinc-400'}`}>{reasoning}</pre>
+            <summary className={`cursor-pointer select-none italic text-zinc-400`}>Thinking</summary>
+            <pre className={`mt-2 whitespace-pre-wrap font-sans leading-relaxed text-zinc-400`}>{reasoning}</pre>
           </details>
         )}
 
@@ -74,8 +74,8 @@ function MessageBubble({ msg, isDark, showThinking = true, onSendCommand }: Mess
         )}
 
         {sources.length > 0 && (
-          <details className="mb-2 text-xs">
-            <summary className={`cursor-pointer select-none ${isDark ? 'text-zinc-500' : 'text-zinc-400'}`}>Sources ({sources.length})</summary>
+          <details className="mb-2 text-sm">
+            <summary className={`cursor-pointer select-none text-zinc-400`}>Sources ({sources.length})</summary>
             <div className="mt-2 space-y-1">
               {sources.map((source) => (
                 <a

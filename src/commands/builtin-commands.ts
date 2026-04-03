@@ -217,14 +217,15 @@ registerCommand('status', async (ctx: CommandContext): Promise<CommandResponse> 
   const sessionId = folder ? sessions[folder] : undefined;
 
   // Token stats from recent bot messages in this chat
-  let tokenStats = { totalUsed: 0, totalCached: 0, totalCost: 0, responses: 0, lastInput: 0, lastModelID: '' };
+  let tokenStats = { totalOutput: 0, totalReasoning: 0, totalCost: 0, responses: 0, lastInput: 0, lastModelID: '' };
   if (ctx.chatJid) {
     try {
       const { messages } = getMessagesPage(ctx.chatJid, 100);
       const botMsgs = messages.filter(m => m.is_bot_message && m.metadata?.tokens);
       for (const m of botMsgs) {
         const t = m.metadata!.tokens!;
-        tokenStats.totalUsed += t.input + t.output + (t.reasoning || 0);
+        tokenStats.totalOutput += t.output;
+        tokenStats.totalReasoning += t.reasoning || 0;
         tokenStats.totalCost += m.metadata!.cost ?? 0;
         tokenStats.responses++;
       }
@@ -344,7 +345,10 @@ registerCommand('status', async (ctx: CommandContext): Promise<CommandResponse> 
     }
     s += `├ ID: ${sessionId.slice(0, 12)}…\n`;
     s += `├ Responses: ${tokenStats.responses}\n`;
-    s += `├ Tokens used: ${tokenStats.totalUsed.toLocaleString()}\n`;
+    s += `├ Output: ${tokenStats.totalOutput.toLocaleString()} tokens\n`;
+    if (tokenStats.totalReasoning > 0) {
+      s += `├ Reasoning: ${tokenStats.totalReasoning.toLocaleString()} tokens\n`;
+    }
     if (tokenStats.totalCost > 0) {
       s += `├ Cost: $${tokenStats.totalCost.toFixed(4)}\n`;
     }

@@ -89,13 +89,13 @@ export function hasMainGroup(): boolean;
 /**
  * Initialize the main group folder structure and files.
  * Creates:
- * - workspaces/main/dna/
+ * - workspaces/main/memory/
  * - workspaces/main/workspace/ (screenshots, reports, tasks, downloads)
  * - workspaces/main/uploads/
  * - workspaces/main/logs/
  * - workspaces/main/conversations/
- * - workspaces/main/dna/AGENTS.md
- * - workspaces/global/dna/AGENTS.md (if not exists)
+ * - workspaces/main/memory/AGENTS.md
+ * - workspaces/global/memory/AGENTS.md (if not exists)
  * 
  * @param groupFolder - The folder name (always 'main' for auto-registration)
  */
@@ -233,7 +233,7 @@ CREATE TABLE registered_groups (
 ```
 workspaces/
 ├── main/
-│   ├── dna/
+│   ├── memory/
 │   │   └── AGENTS.md
 │   ├── workspace/
 │   │   ├── screenshots/
@@ -244,13 +244,13 @@ workspaces/
 │   ├── logs/
 │   └── conversations/
 └── global/
-    └── dna/
+    └── memory/
         └── AGENTS.md
 ```
 
 ### File Templates
 
-**workspaces/main/dna/AGENTS.md**:
+**workspaces/main/memory/AGENTS.md**:
 
 ```markdown
 # Memory for Main Chat
@@ -270,7 +270,7 @@ This is your personal chat memory. You can store information here that you want 
 [Information about your projects]
 ```
 
-**workspaces/global/dna/AGENTS.md** (if not exists):
+**workspaces/global/memory/AGENTS.md** (if not exists):
 
 ```markdown
 # Global Memory
@@ -318,12 +318,12 @@ Folder initialization happens synchronously during auto-registration, before the
 ### Property 3: Folder structure is created during auto-registration
 
 *For any* auto-registration event, the following folders and files should exist after registration completes:
-- `workspaces/main/dna/`
+- `workspaces/main/memory/`
 - `workspaces/main/workspace/`
 - `workspaces/main/uploads/`
 - `workspaces/main/logs/`
 - `workspaces/main/conversations/`
-- `workspaces/main/dna/AGENTS.md`
+- `workspaces/main/memory/AGENTS.md`
 
 **Validates: Requirements 1.6**
 
@@ -365,13 +365,13 @@ Folder initialization happens synchronously during auto-registration, before the
 
 ### Property 10: Main AGENTS.md is created with template
 
-*For any* auto-registration event, the file `workspaces/main/dna/AGENTS.md` should exist and contain the default template content for personal chat memory.
+*For any* auto-registration event, the file `workspaces/main/memory/AGENTS.md` should exist and contain the default template content for personal chat memory.
 
 **Validates: Requirements 5.4**
 
 ### Property 11: Global AGENTS.md is created if missing
 
-*For any* auto-registration event, if `workspaces/global/dna/AGENTS.md` does not exist, it should be created with the default template content for global memory.
+*For any* auto-registration event, if `workspaces/global/memory/AGENTS.md` does not exist, it should be created with the default template content for global memory.
 
 **Validates: Requirements 5.5**
 

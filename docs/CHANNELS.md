@@ -15,7 +15,7 @@ In EureClaw, a "workspace" is any chat or conversation where the bot is present:
 - **Main workspace** - Your primary control channel (usually your self-chat or DM with the bot)
 
 Each workspace has:
-- Its own memory files in `workspaces/{name}/dna/` (AGENTS.md, SOUL.md, IDENTITY.md, etc.)
+- Its own memory files in `workspaces/{name}/memory/` (AGENTS.md, SOUL.md, IDENTITY.md, etc.)
 - Its own workspace folder in `workspaces/{name}/workspace/` for generated content
 - Isolated context (what happens in one workspace doesn't affect others)
 - Its own scheduled tasks

@@ -41,6 +41,7 @@ const PHASE_CONFIG: Record<string, { icon: string; color: string; darkColor: str
   response: { icon: '✅', color: 'text-emerald-600', darkColor: 'text-emerald-400' },
   error: { icon: '❌', color: 'text-rose-600', darkColor: 'text-rose-400' },
   done: { icon: '🏁', color: 'text-emerald-600', darkColor: 'text-emerald-400' },
+  tool: { icon: '🔧', color: 'text-purple-600', darkColor: 'text-purple-400' },
 };
 
 // ---------------------------------------------------------------------------

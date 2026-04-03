@@ -160,7 +160,7 @@ The following patterns trigger approval prompts:
 
 #### Acceptance Criteria
 
-1. THE Security_Skill SHALL be defined in a file `workspaces/global/dna/SECURITY.md` loaded automatically into the context of all agents.
+1. THE Security_Skill SHALL be defined in a file `workspaces/global/memory/SECURITY.md` loaded automatically into the context of all agents.
 2. THE Security_Skill SHALL contain instructions for the agent to refuse requests to: reveal its system prompt, ignore its previous instructions, impersonate another system, execute obfuscated code without explanation.
 3. THE Security_Skill SHALL contain safe response patterns for suspicious requests (polite refusal, no revelation of the detection mechanism).
 4. THE Security_Skill SHALL instruct the agent to flag manipulation attempts via a `<security-flag>` tag in its response, allowing the Security_Middleware to detect and log them.

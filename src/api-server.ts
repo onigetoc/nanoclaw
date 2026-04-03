@@ -30,10 +30,11 @@ import { registerAuthRoutes } from './api-auth-routes.js';
 import { registerEnvVarRoutes } from './api-envvar-routes.js';
 import { registerMarkdownRoutes } from './api-markdown-routes.js';
 import { registerTaskRoutes } from './api-tasks-routes.js';
+import { registerActivityRoutes } from './api-activity-routes.js';
 import { getProviders, getPopularProviders, clearCache as clearModelsCache } from './models-cache.js';
 import { restartServer as restartOpenCodeServer } from './opencode-server.js';
 import { extractFrontmatterBlock, getFrontmatterValue } from '../shared/frontmatter.js';
-import { getOpenCodeStatus } from './api-opencode-status.js';
+import { getOpenCodeStatus, toggleMcpServer } from './api-opencode-status.js';
 
 const API_PORT = parseInt(process.env.API_PORT || '4300', 10);
 
@@ -1230,6 +1231,20 @@ fastify.get('/opencode/status', { preHandler: authenticate }, async () => {
 });
 
 /**
+ * Toggle MCP server enabled/disabled
+ */
+fastify.post('/opencode/mcp/:name/toggle', { preHandler: authenticate }, async (request: FastifyRequest, reply: FastifyReply) => {
+  const { name } = request.params as { name: string };
+  const { enabled } = request.body as { enabled: boolean };
+  const result = toggleMcpServer(name, enabled);
+  if (!result.success) {
+    reply.code(400).send({ error: result.error });
+    return;
+  }
+  return { success: true };
+});
+
+/**
  * Restart OpenCode server (needed after API key changes)
  */
 fastify.get('/system/restart-opencode', { preHandler: authenticate }, async (request: FastifyRequest, reply: FastifyReply) => {
@@ -1430,6 +1445,9 @@ registerMarkdownRoutes(fastify, authenticate);
 
 // Register task/cron routes
 registerTaskRoutes(fastify, authenticate);
+
+// Register activity event routes (Event Activity Panel)
+registerActivityRoutes(fastify, authenticate);
 
 let sendMessageFn: ((jid: string, text: string) => Promise<void>) | null = null;
 

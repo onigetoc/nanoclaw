@@ -233,11 +233,11 @@ Refactoring bottom-up du concept "group" → "workspace" à travers tout le proj
     - Mettre à jour `README.md` pour référencer `workspaces/`
     - Mettre à jour `AGENTS.md` pour référencer `workspaces/`
     - Mettre à jour `.kiro/structure.md` pour référencer `workspaces/`
-    - Mettre à jour `workspaces/global/dna/DOCUMENTATION.md`
+    - Mettre à jour `workspaces/global/memory/DOCUMENTATION.md`
     - Mettre à jour les fichiers `.md` dans `.opencode/`, `.kiro/steering/`, et `docs/`
     - _Requirements: 14.1, 14.2, 14.3, 14.4, 14.5, 14.6_
 
-  - [x] 12.3 Mettre à jour les templates DNA
+  - [x] 12.3 Mettre à jour les templates memory
     - Vérifier que les templates sont dans `workspaces/templates/`
     - Remplacer "group" par "workspace" dans le contenu des templates
     - _Requirements: 15.1, 15.2, 15.3_

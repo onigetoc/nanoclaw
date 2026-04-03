@@ -52,7 +52,7 @@ A personal opencode assistant accessible via WhatsApp, with persistent memory pe
 │  │                                                                │   │
 │  │  Working directory: /workspace/group (mounted from host)       │   │
 │  │  Volume mounts:                                                │   │
-│  │    • workspaces/{name}/ → /workspace/group (includes dna/, workspace/)│   │
+│  │    • workspaces/{name}/ → /workspace/group (includes memory/, workspace/)│   │
 │  │    • workspaces/global/ → /workspace/global/ (non-main only)        │   │
 │  │    • data/sessions/{workspace}/.opencode/ → /home/node/.opencode/      │   │
 │  │    • Additional dirs → /workspace/extra/*                      │   │
@@ -141,12 +141,12 @@ eureclaw/
 │
 ├── workspaces/
 │   ├── global/                    # Global memory (all workspaces read this)
-│   │   └── dna/                   # Global DNA files
+│   │   └── memory/                 # Global memory files
 │   │       └── AGENTS.md          # Global instructions
 │   ├── templates/                 # Templates for new workspaces
 │   │   └── *.tpl.md               # Template files
 │   ├── main/                      # Self-chat (main control channel)
-│   │   ├── dna/                   # DNA files (AGENTS.md, SOUL.md, etc.)
+│   │   ├── memory/                 # Memory files (AGENTS.md, SOUL.md, etc.)
 │   │   ├── workspace/             # Agent-generated content
 │   │   │   ├── screenshots/
 │   │   │   ├── reports/
@@ -156,7 +156,7 @@ eureclaw/
 │   │   ├── logs/                  # Task execution logs
 │   │   └── conversations/         # Archived conversations
 │   └── {Workspace Name}/              # Per-workspace folders (created on registration)
-│       ├── dna/                   # Workspace-specific DNA files
+│       ├── memory/                 # Workspace-specific memory files
 │       ├── workspace/             # Agent-generated content
 │       ├── uploads/               # User uploads
 │       ├── logs/                  # Task logs for this workspace
@@ -284,19 +284,19 @@ EureClaw uses a hierarchical memory system based on AGENTS.md files.
 
 | Level | Location | Read By | Written By | Purpose |
 |-------|----------|---------|------------|---------|
-| **Global** | `workspaces/global/dna/AGENTS.md` | All workspaces | Main only | Preferences, facts, context shared across all conversations |
-| **Workspace DNA** | `workspaces/{name}/dna/AGENTS.md` | That workspace | That workspace | Workspace-specific context, conversation memory |
+| **Global** | `workspaces/global/memory/AGENTS.md` | All workspaces | Main only | Preferences, facts, context shared across all conversations |
+| **Workspace Memory** | `workspaces/{name}/memory/AGENTS.md` | That workspace | That workspace | Workspace-specific context, conversation memory |
 | **Workspace Content** | `workspaces/{name}/workspace/*.md` | That workspace | That workspace | Notes, research, documents created during conversation |
 
 ### How Memory Works
 
 1. **Agent Context Loading**
    - Agent runs with `cwd` set to `workspaces/{workspace-name}/`
-   - DNA files are loaded from `dna/` subfolder (AGENTS.md, IDENTITY.md, SOUL.md, etc.)
-   - Global memory is loaded from `workspaces/global/dna/AGENTS.md`
+   - Memory files are loaded from `memory/` subfolder (AGENTS.md, IDENTITY.md, SOUL.md, etc.)
+   - Global memory is loaded from `workspaces/global/memory/AGENTS.md`
 
 2. **Writing Memory**
-   - When user says "remember this", agent writes to `dna/MEMORY.md`
+   - When user says "remember this", agent writes to `memory/MEMORY.md`
    - When user says "remember this globally" (main channel only), agent writes to global memory
    - Agent creates files in `workspace/` folder (reports, tasks, downloads, etc.)
 

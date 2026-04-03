@@ -92,7 +92,8 @@ export interface ExecutionStep {
     | 'fallback'
     | 'response'
     | 'error'
-    | 'done';
+    | 'done'
+    | 'tool';
   message: string;
   durationMs?: number;
   metadata?: Record<string, unknown>;
@@ -236,6 +237,35 @@ export interface OpenCodeStatus {
   agents: AgentInfo[];
   plugins: PluginInfo[];
   mcpServers: McpServerInfo[];
+}
+
+// ── Activity Event Panel types ───────────────────────────────────────────────
+
+export interface ActivityEvent {
+  ts: number;
+  type: string;
+  properties: Record<string, unknown>;
+  icon: string;
+  label: string;
+  category: 'session' | 'tool' | 'file' | 'command' | 'error' | 'message' | 'other';
+  chatJid?: string;
+  folder?: string;
+}
+
+export interface ActivityFile {
+  filename: string;
+  size: number;
+  modified: string;
+}
+
+export interface ActivityStatsData {
+  totalEvents: number;
+  duration: number;
+  filesEdited: string[];
+  commandsRun: number;
+  errors: number;
+  toolsUsed: Map<string, number>;
+  isActive: boolean;
 }
 
 class ApiService {
@@ -586,6 +616,13 @@ class ApiService {
     return result;
   }
 
+  async toggleMcpServer(name: string, enabled: boolean): Promise<void> {
+    await this.request<{ success: boolean }>(`/opencode/mcp/${encodeURIComponent(name)}/toggle`, {
+      method: 'POST',
+      body: JSON.stringify({ enabled }),
+    });
+  }
+
   async getAuthProviders(): Promise<ProviderInfo[]> {
     const result = await this.request<{ providers: ProviderInfo[] }>(
       '/auth/providers',
@@ -882,6 +919,88 @@ class ApiService {
     return this.getFileBlobByRelativeUrl(
       `/files/${encodeURIComponent(workspaceFolder)}/${encodeURIComponent(fileId)}`,
     );
+  }
+
+  // ── Activity Event Panel ─────────────────────────────────────────────────
+
+  private activityStreamController: AbortController | null = null;
+  private activityEventListeners: Set<(event: ActivityEvent) => void> = new Set();
+
+  async getActivityFiles(jid: string): Promise<ActivityFile[]> {
+    const data = await this.request<{ files: ActivityFile[] }>(`/chats/${encodeURIComponent(jid)}/activity`);
+    return data.files;
+  }
+
+  async getActivityEvents(
+    jid: string,
+    filename: string,
+    options?: { limit?: number; since?: number },
+  ): Promise<ActivityEvent[]> {
+    const params = new URLSearchParams();
+    if (options?.limit) params.set('limit', String(options.limit));
+    if (options?.since) params.set('since', String(options.since));
+    const qs = params.toString();
+    const url = `/chats/${encodeURIComponent(jid)}/activity/${encodeURIComponent(filename)}${qs ? `?${qs}` : ''}`;
+    const data = await this.request<{ events: ActivityEvent[] }>(url);
+    return data.events;
+  }
+
+  connectToActivityStream(jid: string): void {
+    const token = this.getToken();
+    if (!token) return;
+
+    this.disconnectFromActivityStream();
+
+    this.activityStreamController = new AbortController();
+    const url = `${API_BASE}/chats/${encodeURIComponent(jid)}/activity/stream`;
+
+    fetch(url, {
+      headers: { Authorization: `Bearer ${token}` },
+      signal: this.activityStreamController.signal,
+    })
+      .then(async (response) => {
+        if (!response.body) return;
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || '';
+
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              try {
+                const data = JSON.parse(line.slice(6)) as ActivityEvent;
+                for (const cb of this.activityEventListeners) cb(data);
+              } catch { /* ignore malformed */ }
+            }
+          }
+        }
+        this.activityStreamController = null;
+      })
+      .catch((err) => {
+        if (err.name !== 'AbortError') {
+          console.error('Activity stream error:', err);
+        }
+        this.activityStreamController = null;
+      });
+  }
+
+  disconnectFromActivityStream(): void {
+    if (this.activityStreamController) {
+      this.activityStreamController.abort();
+      this.activityStreamController = null;
+    }
+  }
+
+  onActivityEvent(callback: (event: ActivityEvent) => void): () => void {
+    this.activityEventListeners.add(callback);
+    return () => { this.activityEventListeners.delete(callback); };
   }
 
   private wsClient: WebSocketClient;

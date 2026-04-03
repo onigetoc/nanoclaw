@@ -6,7 +6,7 @@ import os from 'os';
 import path from 'path';
 import fs from 'fs';
 
-import { ASSISTANT_NAME, DATA_DIR, TELEGRAM_ONLY, MAIN_WORKSPACE_FOLDER } from './config.js';
+import { ASSISTANT_NAME, DATA_DIR, TELEGRAM_ONLY, MAIN_WORKSPACE_FOLDER, WORKSPACES_DIR } from './config.js';
 import { readEnvFile } from './env.js';
 import './channels/index.js'; // Triggers self-registration of all channels
 import { getRegisteredChannelNames, getChannelFactory } from './channels/registry.js';
@@ -16,12 +16,13 @@ import {
   storeMessage,
   storeChatMetadata,
   storeMessageDirect,
+  setRegisteredWorkspace,
 } from './db.js';
 import { WorkspaceQueue } from './workspace-queue.js';
 import { startIpcWatcher } from './ipc.js';
 import { findChannel, formatOutbound, sendDeduped } from './router.js';
 import { startSchedulerLoop, triggerTaskNow } from './task-scheduler.js';
-import { NewMessage, Channel } from './types.js';
+import { NewMessage, Channel, RegisteredWorkspace } from './types.js';
 import { logger } from './logger.js';
 import { attemptAutoRegistration } from './auto-registration.js';
 import { scanInput, checkRateLimit, isSecurityEnabled } from './security/index.js';
@@ -57,6 +58,7 @@ import {
   registerWorkspace,
   getAvailableWorkspaces,
   isPrivateChat,
+  copyTemplatesToWorkspace,
 } from './workspace-manager.js';
 import {
   startApiServer,
@@ -218,6 +220,58 @@ export function ensureContainerSystemRunning(): void {
     console.log('   Docker not detected. For better security, install Docker:');
     console.log('   - Windows: https://docs.docker.com/desktop/install/windows-install/');
     console.log('   - Linux: https://docs.docker.com/engine/install/\n');
+  }
+}
+
+/**
+ * Ensure the main workspace exists for fresh EureClaw installs.
+ * Creates the folder structure and memory files from templates so the Web UI
+ * has an immediate entry point without needing Telegram/WhatsApp first.
+ * Uses 'main' — the same workspace Telegram auto-registration targets.
+ */
+function ensureMainWorkspace(): void {
+  const folder = MAIN_WORKSPACE_FOLDER; // 'main'
+  const dir = path.join(WORKSPACES_DIR, folder);
+  const memoryDir = path.join(dir, 'memory');
+
+  // Skip if already bootstrapped
+  if (fs.existsSync(memoryDir) && fs.readdirSync(memoryDir).some(f => f.endsWith('.md'))) {
+    return;
+  }
+
+  // Create full workspace structure
+  const subdirs = [
+    'memory',
+    path.join('workspace', 'screenshots'),
+    path.join('workspace', 'reports'),
+    path.join('workspace', 'tasks'),
+    path.join('workspace', 'downloads'),
+    'uploads',
+    'logs',
+    'conversations',
+  ];
+  for (const sub of subdirs) {
+    fs.mkdirSync(path.join(dir, sub), { recursive: true });
+  }
+
+  // Copy memory templates
+  copyTemplatesToWorkspace(dir);
+
+  // Register web: JID so the Web UI picks it up immediately
+  const webJid = `web:${folder}`;
+  const workspaceConfig: RegisteredWorkspace = {
+    name: 'Main',
+    folder,
+    trigger: `@${ASSISTANT_NAME}`,
+    added_at: new Date().toISOString(),
+    requiresTrigger: false,
+  };
+
+  try {
+    setRegisteredWorkspace(webJid, workspaceConfig);
+    logger.info({ folder }, 'Main workspace bootstrapped for Web UI');
+  } catch {
+    // Already exists — that's fine
   }
 }
 
@@ -426,6 +480,11 @@ export async function main(): Promise<void> {
   loadState();
   loadSleepState();
   logger.info({ isSleeping: isSleeping() }, 'Sleep state loaded');
+
+  // Ensure a default workspace exists for fresh installs.
+  // This gives the Web UI an immediate entry point without needing
+  // Telegram or WhatsApp configured first.
+  ensureMainWorkspace();
 
   let channels: Channel[] = [];
   const queue = new WorkspaceQueue();

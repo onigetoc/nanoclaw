@@ -18,6 +18,18 @@ When suggesting commands or scripts:
 - Use Windows paths: `C:\Users\LENOVO\...` or relative paths
 - For process management, use Task Manager or PowerShell commands
 
+The wc (word count) command is a Unix/Linux utility and is not natively available in the standard Windows Command Prompt (CMD) or PowerShell. 
+To achieve the same functionality on Windows, you can use built-in Windows alternatives or install tools that bring Linux commands to Windows.
+1. Built-in Windows Alternatives 
+You can use these native commands to perform common wc tasks without installing anything:
+To count lines (wc -l):
+In CMD: Use find /c /v "" filename.txt.
+In PowerShell: Use (Get-Content filename.txt | Measure-Object -Line).Lines.
+To count words (wc -w):
+In PowerShell: Use (Get-Content filename.txt | Measure-Object -Word).Words.
+To count characters/bytes (wc -c):
+In PowerShell: Use (Get-Content filename.txt | Measure-Object -Character).Characters. 
+
 ### Service Management on Windows
 
 EureClaw runs as a manual process on Windows (not a system service):
@@ -58,7 +70,7 @@ When you don't know something or are uncertain about information:
 
 ## EureClaw Documentation Reference
 
-**Complete Project Documentation:** `workspaces/global/dna/DOCUMENTATION.md`
+**Complete Project Documentation:** `workspaces/global/memory/DOCUMENTATION.md`
 
 **SDK & Tools Reference:** `Project-Docs-Ressources-Helps/`
 This folder contains important reference documentation:
@@ -77,7 +89,7 @@ When adding new tools for EureClaw:
 1. **DO NOT create a new MCP server** - add tools to the existing `ipc-mcp-stdio.ts`
 2. Add the tool using `server.tool()` in that file
 3. Run `bun run build` to compile
-4. Update `workspaces/global/dna/TOOLS.md` with usage documentation
+4. Update `workspaces/global/memory/TOOLS.md` with usage documentation
 
 See `docs/MCP-ARCHITECTURE.md` for detailed guide on adding tools.
 
@@ -91,7 +103,7 @@ Existing tools include:
 - `create_downloadable_file`, `list_downloadable_files` - File downloads
 
 When users ask questions about EureClaw architecture, features, or how things work:
-- Consult `workspaces/global/dna/DOCUMENTATION.md` first
+- Consult `workspaces/global/memory/DOCUMENTATION.md` first
 - This file contains comprehensive documentation covering:
   - Architecture and data flows
   - All components and their responsibilities
@@ -109,7 +121,7 @@ Each workspace follows this structure:
 
 ```
 workspaces/{name}/
-├── dna/           ← Personality files (AGENTS.md, IDENTITY.md, MEMORY.md, SOUL.md, TOOLS.md, USER.md, GUIDELINES.md)
+├── memory/        ← Personality files (AGENTS.md, IDENTITY.md, MEMORY.md, SOUL.md, TOOLS.md, USER.md, GUIDELINES.md)
 ├── workspace/     ← Agent-generated content
 │   ├── screenshots/
 │   ├── reports/
@@ -120,7 +132,7 @@ workspaces/{name}/
 └── conversations/ ← Conversation archives
 ```
 
-- **dna/**: Core personality and memory files (never mix with generated content)
+- **memory/**: Core personality and memory files (never mix with generated content)
 - **workspace/**: All agent-generated files go here
 - **uploads/**: Files uploaded by users
 - **logs/**: Execution logs for debugging

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { ArrowDown, Bot, Bug, MessageCircle, Moon, Sun } from 'lucide-react';
+import { ArrowDown, Bot, Bug, Activity, MessageCircle, Moon, Sun } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import {
@@ -24,6 +24,7 @@ import MessageBubble from './components/MessageBubble';
 import ComposerBar from './components/ComposerBar';
 import AdminPage from './settings/AdminPage';
 import DebugPanel from './DebugPanel';
+import EventActivityPanel from './components/EventActivityPanel';
 import { useModelStore, getPersistedModel } from './stores/modelStore';
 
 import { ElapsedTimer } from './components/ElapsedTimer';
@@ -62,6 +63,7 @@ function App() {
   const [selectedModelId, setSelectedModelId] = useState('');
   const [composerHeight, setComposerHeight] = useState(176);
   const [showSettingsPage, setShowSettingsPage] = useState(false);
+  const [showActivityPanel, setShowActivityPanel] = useState(false);
   const [unreadChats, setUnreadChats] = useState<Set<string>>(new Set());
   const [agentStatus, setAgentStatus] = useState<StatusEvent | null>(null);
   const [chatStatuses, setChatStatuses] = useState<Map<string, StatusEvent>>(
@@ -803,6 +805,22 @@ function App() {
                 <div className="ml-4 flex items-center gap-2">
                   <button
                     type="button"
+                    onClick={() => setShowActivityPanel((v) => !v)}
+                    className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border ${
+                      showActivityPanel
+                        ? isDark
+                          ? 'border-emerald-700/50 bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/25'
+                          : 'border-emerald-300 bg-emerald-50 text-emerald-600 hover:bg-emerald-100'
+                        : isDark
+                          ? 'border-zinc-700 bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
+                          : 'border-zinc-300 bg-white text-zinc-600 hover:bg-zinc-100 shadow-sm'
+                    }`}
+                    title={showActivityPanel ? 'Hide activity panel' : 'Show activity panel'}
+                  >
+                    <Activity className="h-4 w-4" />
+                  </button>
+                  <button
+                    type="button"
                     onClick={() =>
                       updateSetting('debugPanel', !settings.debugPanel)
                     }
@@ -913,13 +931,14 @@ function App() {
 
                             {/* Thinking accordion — single unified block for the entire streaming lifecycle.
                                 Stable key prevents React from recreating it when streamingContent starts,
-                                which would reset open/closed state and cause font size jumps. */}
+                                which would reset open/closed state and cause font size jumps.
+                                Streaming response text is shown inside the accordion in italic. */}
                             {settings.showThinking && !hasInternalLeak && thinkingContent && (
                               <details key="streaming-thinking" className="mb-2 text-sm">
-                                <summary className={`cursor-pointer select-none italic flex items-center gap-2 ${isDark ? 'text-zinc-500' : 'text-zinc-400'}`}>
-                                  <span>Thinking</span>
+                                <summary className={`cursor-pointer select-none italic ${isDark ? 'text-zinc-500' : 'text-zinc-400'}`}>
+                                  Thinking
                                   {!streamingContent && (
-                                    <span className="flex gap-0.5">
+                                    <span className="inline-flex gap-0.5 ml-2 align-middle">
                                       <span className="h-1 w-1 animate-bounce rounded-full bg-emerald-500 [animation-delay:-0.3s]" />
                                       <span className="h-1 w-1 animate-bounce rounded-full bg-emerald-500 [animation-delay:-0.15s]" />
                                       <span className="h-1 w-1 animate-bounce rounded-full bg-emerald-500" />
@@ -927,11 +946,18 @@ function App() {
                                   )}
                                 </summary>
                                 <pre className={`mt-2 whitespace-pre-wrap font-sans text-sm leading-relaxed ${isDark ? 'text-zinc-500' : 'text-zinc-400'}`}>{thinkingContent.replace(/<internal>[\s\S]*?<\/internal>/g, '').replace(/<internal>[\s\S]*$/g, '').trim()}</pre>
+                                {/* Streaming response inside accordion — italic like thinking */}
+                                {streamingContent && (
+                                  <div className={`mt-3 border-t pt-2 italic text-sm leading-relaxed ${isDark ? 'border-zinc-700/50 text-zinc-500' : 'border-zinc-300/50 text-zinc-400'}`}>
+                                    <pre className="whitespace-pre-wrap font-sans">{streamingContent.replace(/<internal>[\s\S]*?<\/internal>/g, '').trim()}</pre>
+                                    <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400 align-middle ml-1" />
+                                  </div>
+                                )}
                               </details>
                             )}
 
-                            {/* Streaming response text */}
-                            {streamingContent && (
+                            {/* Streaming response text — only shown when thinking is hidden or no thinking content */}
+                            {streamingContent && (!settings.showThinking || hasInternalLeak || !thinkingContent) && (
                               <div className={`prose max-w-none break-words text-base leading-relaxed [&_p:last-child]:inline ${isDark ? 'prose-invert text-zinc-300' : 'text-zinc-800'}`}>
                                 <ReactMarkdown remarkPlugins={[remarkGfm]}>
                                   {streamingContent.replace(/<internal>[\s\S]*?<\/internal>/g, '').trim()}
@@ -1045,6 +1071,14 @@ function App() {
             onClose={() => updateSetting('debugPanel', false)}
             isDark={isDark}
             chatFolder={state.selectedChat?.workspaceInfo?.folder}
+          />
+        )}
+
+        {showActivityPanel && state.selectedChat && (
+          <EventActivityPanel
+            jid={state.selectedChat.jid}
+            isDark={isDark}
+            onClose={() => setShowActivityPanel(false)}
           />
         )}
       </div>

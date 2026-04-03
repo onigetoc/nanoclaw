@@ -2,8 +2,6 @@
 inclusion: auto
 ---
 
-TU ES SOUS WINDOWS ALORS FAIT DES COMMANDE WINDOWS (PAS DE COMMANDE LINUX OU MAC)
-
 # Coding Standards
 
 ## File Size Limit
@@ -23,7 +21,6 @@ Always use `bun` instead of `npm` for all commands:
 
 - Alway do the build `bun run build` for me, do not ask me to do it. this way you can see yourself if there's an error.
 - Let me do the `bun run dev` or `bun start` because you have the tendency to do multiple of these and you open to many server or process.
-
 
 
 ## Code Organization
