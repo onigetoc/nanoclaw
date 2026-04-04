@@ -80,6 +80,7 @@ export function useActivityStream(jid: string | null, enabled: boolean) {
   const [error, setError] = useState<string | null>(null);
   const [availableFiles, setAvailableFiles] = useState<ActivityFile[]>([]);
   const [mode, setMode] = useState<'live' | 'history'>('live');
+  const modeRef = useRef<'live' | 'history'>('live');
   const eventsRef = useRef<ActivityEvent[]>([]);
 
   // Load available JSONL files
@@ -90,17 +91,18 @@ export function useActivityStream(jid: string | null, enabled: boolean) {
       .catch(() => setAvailableFiles([]));
   }, [jid, enabled]);
 
-  // SSE connection management
+  // Keep a separate ref for live events so they survive tab switches
+  const liveEventsRef = useRef<ActivityEvent[]>([]);
+
+  // SSE connection management — only depends on jid/enabled, NOT mode
   useEffect(() => {
-    if (!jid || !enabled || mode !== 'live') {
+    if (!jid || !enabled) {
       apiService.disconnectFromActivityStream();
       setIsConnected(false);
       return;
     }
 
-    setEvents([]);
-    eventsRef.current = [];
-    setStats(computeStats([]));
+    // Don't clear live events — keep accumulating
     setError(null);
     setIsConnected(true);
 
@@ -111,9 +113,17 @@ export function useActivityStream(jid: string | null, enabled: boolean) {
         setError(((event as unknown) as Record<string, unknown>).message as string || 'Stream error');
         return;
       }
-      eventsRef.current = [...eventsRef.current, event];
-      setEvents(eventsRef.current);
-      setStats(computeStats(eventsRef.current));
+      // When a new session starts, clear previous live events
+      if (event.type === 'session.created' && liveEventsRef.current.length > 0) {
+        liveEventsRef.current = [];
+      }
+      liveEventsRef.current = [...liveEventsRef.current, event];
+      // Only update visible state if we're in live mode
+      if (modeRef.current === 'live') {
+        eventsRef.current = liveEventsRef.current;
+        setEvents(eventsRef.current);
+        setStats(computeStats(eventsRef.current));
+      }
     });
 
     return () => {
@@ -121,13 +131,14 @@ export function useActivityStream(jid: string | null, enabled: boolean) {
       apiService.disconnectFromActivityStream();
       setIsConnected(false);
     };
-  }, [jid, enabled, mode]);
+  }, [jid, enabled]);
 
   // Load history from a specific JSONL file
   const loadHistory = useCallback(async (filename: string) => {
     if (!jid) return;
     setIsLoading(true);
     setError(null);
+    modeRef.current = 'history';
     setMode('history');
     try {
       const loaded = await apiService.getActivityEvents(jid, filename);
@@ -142,10 +153,12 @@ export function useActivityStream(jid: string | null, enabled: boolean) {
   }, [jid]);
 
   const switchToLive = useCallback(() => {
+    modeRef.current = 'live';
     setMode('live');
-    setEvents([]);
-    eventsRef.current = [];
-    setStats(computeStats([]));
+    // Restore live events instead of clearing them
+    eventsRef.current = liveEventsRef.current;
+    setEvents(eventsRef.current);
+    setStats(computeStats(eventsRef.current));
   }, []);
 
   return {

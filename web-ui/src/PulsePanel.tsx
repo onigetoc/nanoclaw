@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import {
   X,
-  Bug,
+  HeartPulse,
   Cpu,
   Coins,
   Layers,
@@ -12,7 +12,7 @@ import {
 } from 'lucide-react';
 import { apiService, type Message, type MessageMetadata } from './api';
 
-interface DebugPanelProps {
+interface PulsePanelProps {
   messages: Message[];
   onClose: () => void;
   isDark: boolean;
@@ -230,12 +230,12 @@ function MetadataCard({
   );
 }
 
-export default function DebugPanel({
+export default function PulsePanel({
   messages,
   onClose,
   isDark,
   chatFolder,
-}: DebugPanelProps) {
+}: PulsePanelProps) {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [lastMessageCount, setLastMessageCount] = useState(0);
   const [previousSessionId, setPreviousSessionId] = useState<string | null>(null);
@@ -389,10 +389,10 @@ export default function DebugPanel({
         className={`flex h-16 items-center justify-between border-b px-4 ${isDark ? 'border-zinc-800' : 'border-zinc-300'}`}
       >
         <div className="flex items-center gap-2">
-          <Bug
+          <HeartPulse
             className={`h-4 w-4 ${isDark ? 'text-amber-400' : 'text-amber-600'}`}
           />
-          <h2 className="text-sm font-semibold">Debug</h2>
+          <h2 className="text-sm font-semibold">Pulse</h2>
         </div>
         <button
           type="button"
@@ -483,10 +483,10 @@ export default function DebugPanel({
           <div
             className={`flex flex-col items-center justify-center h-full px-4 text-center ${isDark ? 'text-zinc-600' : 'text-zinc-400'}`}
           >
-            <Bug className="mb-2 h-6 w-6" />
+            <HeartPulse className="mb-2 h-6 w-6" />
             <p className="text-xs">No metadata yet</p>
             <p className="mt-1 text-[10px]">
-              Send a message to see agent debug info
+              Send a message to see agent pulse info
             </p>
           </div>
         ) : (

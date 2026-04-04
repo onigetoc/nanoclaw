@@ -33,6 +33,26 @@ export default function ComposerBar({
 }: ComposerBarProps) {
   const [inputValue, setInputValue] = useState('');
   const [attachments, setAttachments] = useState<File[]>([]);
+
+  // Per-workspace draft storage: save/restore input text when switching workspaces
+  const draftsRef = useRef<Map<string, string>>(new Map());
+  const prevJidRef = useRef<string | null>(selectedChatJid);
+
+  useEffect(() => {
+    const prevJid = prevJidRef.current;
+    // Save current draft for the previous workspace
+    if (prevJid && prevJid !== selectedChatJid) {
+      draftsRef.current.set(prevJid, inputValue);
+    }
+    // Restore draft for the new workspace (or empty)
+    if (selectedChatJid) {
+      setInputValue(draftsRef.current.get(selectedChatJid) ?? '');
+    } else {
+      setInputValue('');
+    }
+    prevJidRef.current = selectedChatJid;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedChatJid]);
   const [attachMenuOpen, setAttachMenuOpen] = useState(false);
   const [modeMenuOpen, setModeMenuOpen] = useState(false);
   const [isComposerDragActive, setIsComposerDragActive] = useState(false);

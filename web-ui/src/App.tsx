@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { ArrowDown, Bot, Bug, Activity, MessageCircle, Moon, Sun } from 'lucide-react';
+import { ArrowDown, Bot, HeartPulse, Activity, MessageCircle, Moon, Sun } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import {
@@ -23,7 +23,7 @@ import ChatSidebar from './components/ChatSidebar';
 import MessageBubble from './components/MessageBubble';
 import ComposerBar from './components/ComposerBar';
 import AdminPage from './settings/AdminPage';
-import DebugPanel from './DebugPanel';
+import PulsePanel from './PulsePanel';
 import EventActivityPanel from './components/EventActivityPanel';
 import { useModelStore, getPersistedModel } from './stores/modelStore';
 
@@ -751,9 +751,8 @@ function App() {
     <div
       className={`flex h-screen ${isDark ? 'bg-zinc-950 text-zinc-100' : 'bg-zinc-50 text-zinc-900'}`}
     >
-      {/* Settings page overlay */}
-      {showSettingsPage && (
-        <div className="absolute inset-0 z-50">
+      {/* Settings page overlay — kept mounted to preserve section state */}
+      <div className="absolute inset-0 z-50" style={{ display: showSettingsPage ? undefined : 'none' }}>
           <AdminPage
             onBack={() => setShowSettingsPage(false)}
             isDark={isDark}
@@ -763,7 +762,6 @@ function App() {
             onResetSettings={resetSettings}
           />
         </div>
-      )}
 
       {/* Main chat interface - hidden when settings are open */}
       <div
@@ -835,11 +833,11 @@ function App() {
                     }`}
                     title={
                       settings.debugPanel
-                        ? 'Hide debug panel'
-                        : 'Show debug panel'
+                        ? 'Hide pulse'
+                        : 'Show pulse'
                     }
                   >
-                    <Bug className="h-4 w-4" />
+                    <HeartPulse className="h-4 w-4" />
                   </button>
                   <button
                     type="button"
@@ -1066,7 +1064,7 @@ function App() {
         </main>
 
         {settings.debugPanel && state.selectedChat && (
-          <DebugPanel
+          <PulsePanel
             messages={state.messages}
             onClose={() => updateSetting('debugPanel', false)}
             isDark={isDark}
@@ -1074,12 +1072,14 @@ function App() {
           />
         )}
 
-        {showActivityPanel && state.selectedChat && (
-          <EventActivityPanel
-            jid={state.selectedChat.jid}
-            isDark={isDark}
-            onClose={() => setShowActivityPanel(false)}
-          />
+        {state.selectedChat && (
+          <div style={{ display: showActivityPanel ? undefined : 'none' }}>
+            <EventActivityPanel
+              jid={state.selectedChat.jid}
+              isDark={isDark}
+              onClose={() => setShowActivityPanel(false)}
+            />
+          </div>
         )}
       </div>
     </div>
