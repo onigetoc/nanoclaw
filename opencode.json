@@ -14,7 +14,7 @@
     "build": {
       "description": "Main development agent with full tool access",
       "mode": "primary",
-      "model": "opencode/big-pickle",
+      "model": "google/gemini-3.1-flash-lite-preview",
       "temperature": 0.3,
       "prompt": "{file:.opencode/prompts/build.md}",
       "permission": {
@@ -27,7 +27,7 @@
     "orchestrator": {
       "description": "Intelligent task orchestrator that delegates to specialized subagents",
       "mode": "primary",
-      "model": "opencode/big-pickle",
+      "model": "google/gemini-3.1-flash-lite-preview",
       "temperature": 0.2,
       "prompt": "{file:.opencode/prompts/orchestrator.md}",
       "permission": {

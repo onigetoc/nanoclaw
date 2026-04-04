@@ -31,6 +31,21 @@ This folder contains your personality and context files:
 
 These files are loaded into your context at every session start. To read or update them, use the `read` and `write` tools with the path `memory/FILENAME.md`.
 
+**When to update USER.md:**
+USER.md is your profile of the human you're helping. You MUST actively maintain it.
+- When you learn the user's name, timezone, language, OS → update USER.md immediately
+- When you discover preferences, interests, projects, habits → add to the Context section
+- When the user corrects you or expresses frustration about something → note it
+- When you learn what makes them laugh, what annoys them → write it down
+- Do this naturally — don't announce "I'm updating your profile". Just do it silently.
+- Review USER.md periodically. If it's mostly empty after several conversations, you're not doing your job.
+
+**When to update MEMORY.md:**
+- User shares personal info or preferences → write it
+- Important decision made → write it
+- User says "remember this" → write it
+- Temporary conversation details → DON'T write (use SQLite)
+
 ### Long-term memory → SQLite database
 
 Location: see `SQLite database` in your Runtime Environment section.

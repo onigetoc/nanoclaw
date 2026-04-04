@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import type { LucideIcon } from 'lucide-react';
 import {
   ChevronDown,
   ChevronRight,
@@ -7,11 +8,17 @@ import {
   Loader2,
   RefreshCw,
   Activity,
-  Filter,
   Layers,
   Cpu,
   Clock,
   Zap,
+  Inbox,
+  Rocket,
+  FileText,
+  Crosshair,
+  XCircle,
+  Flag,
+  Wrench,
 } from 'lucide-react';
 import { apiService, type AgentExecution, type ExecutionStep } from '../api';
 
@@ -32,16 +39,16 @@ type FilterMode = 'all' | 'errors' | 'active';
 // Constants
 // ---------------------------------------------------------------------------
 
-const PHASE_CONFIG: Record<string, { icon: string; color: string; darkColor: string }> = {
-  queue: { icon: '📥', color: 'text-zinc-500', darkColor: 'text-zinc-400' },
-  init: { icon: '🚀', color: 'text-blue-600', darkColor: 'text-blue-400' },
-  context: { icon: '📄', color: 'text-indigo-600', darkColor: 'text-indigo-400' },
-  model: { icon: '🎯', color: 'text-amber-600', darkColor: 'text-amber-400' },
-  fallback: { icon: '⚠️', color: 'text-orange-600', darkColor: 'text-orange-400' },
-  response: { icon: '✅', color: 'text-emerald-600', darkColor: 'text-emerald-400' },
-  error: { icon: '❌', color: 'text-rose-600', darkColor: 'text-rose-400' },
-  done: { icon: '🏁', color: 'text-emerald-600', darkColor: 'text-emerald-400' },
-  tool: { icon: '🔧', color: 'text-purple-600', darkColor: 'text-purple-400' },
+const PHASE_CONFIG: Record<string, { Icon: LucideIcon; color: string; darkColor: string }> = {
+  queue:    { Icon: Inbox,        color: 'text-zinc-500',    darkColor: 'text-zinc-400' },
+  init:     { Icon: Rocket,       color: 'text-blue-600',    darkColor: 'text-blue-400' },
+  context:  { Icon: FileText,     color: 'text-indigo-600',  darkColor: 'text-indigo-400' },
+  model:    { Icon: Crosshair,    color: 'text-amber-600',   darkColor: 'text-amber-400' },
+  fallback: { Icon: AlertTriangle, color: 'text-orange-600', darkColor: 'text-orange-400' },
+  response: { Icon: CheckCircle,  color: 'text-emerald-600', darkColor: 'text-emerald-400' },
+  error:    { Icon: XCircle,      color: 'text-rose-600',    darkColor: 'text-rose-400' },
+  done:     { Icon: Flag,         color: 'text-emerald-600', darkColor: 'text-emerald-400' },
+  tool:     { Icon: Wrench,       color: 'text-purple-600',  darkColor: 'text-purple-400' },
 };
 
 // ---------------------------------------------------------------------------
@@ -109,7 +116,9 @@ function StepTimeline({ steps, isDark }: { steps: ExecutionStep[]; isDark: boole
               }}
             />
             <div className="flex items-start gap-2">
-              <span className="text-sm shrink-0">{cfg.icon}</span>
+              <span className={`shrink-0 ${isDark ? cfg.darkColor : cfg.color}`}>
+                <cfg.Icon className="h-4 w-4" />
+              </span>
               <div className="flex-1 min-w-0">
                 <div className={`text-xs ${isDark ? cfg.darkColor : cfg.color}`}>
                   {step.message}
@@ -369,39 +378,42 @@ function FilterToggle({
   errorCount: number;
   activeCount: number;
 }) {
-  const modes: { key: FilterMode; label: string; badge?: number }[] = [
-    { key: 'all', label: 'All' },
-    { key: 'errors', label: 'Errors', badge: errorCount },
-    { key: 'active', label: 'Active', badge: activeCount },
+  const modes: { key: FilterMode; label: string; accent: string; badge?: number }[] = [
+    { key: 'all', label: 'All', accent: 'sky' },
+    { key: 'errors', label: 'Errors', accent: 'rose', badge: errorCount },
+    { key: 'active', label: 'Active', accent: 'amber', badge: activeCount },
   ];
 
+  const accentClasses: Record<string, { dark: string; light: string }> = {
+    sky:   { dark: 'text-sky-400 bg-sky-500/15',     light: 'text-sky-600 bg-sky-50' },
+    rose:  { dark: 'text-rose-400 bg-rose-500/15',   light: 'text-rose-600 bg-rose-50' },
+    amber: { dark: 'text-amber-400 bg-amber-500/15', light: 'text-amber-600 bg-amber-50' },
+  };
+
   return (
-    <div className="inline-flex rounded-lg overflow-hidden border"
-      style={{ borderColor: isDark ? '#3f3f46' : '#d4d4d8' }}
-    >
-      {modes.map(({ key, label, badge }) => {
+    <div className="inline-flex gap-1.5">
+      {modes.map(({ key, label, accent, badge }) => {
         const selected = current === key;
+        const ac = accentClasses[accent];
         return (
           <button
             key={key}
             type="button"
             onClick={() => onChange(key)}
-            className={`px-3 py-1.5 text-xs font-medium transition flex items-center gap-1.5 ${
+            className={`px-3 py-1.5 text-xs font-medium transition-all rounded-lg flex items-center gap-1.5 ${
               selected
-                ? isDark
-                  ? 'bg-zinc-700 text-zinc-100'
-                  : 'bg-zinc-200 text-zinc-800'
+                ? isDark ? ac.dark : ac.light
                 : isDark
-                  ? 'bg-zinc-800/60 text-zinc-400 hover:bg-zinc-800'
-                  : 'bg-zinc-50 text-zinc-500 hover:bg-zinc-100'
+                  ? 'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/50'
+                  : 'text-zinc-500 hover:text-zinc-700 hover:bg-zinc-200/60'
             }`}
           >
             {label}
             {badge != null && badge > 0 && (
               <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-semibold ${
-                key === 'errors'
-                  ? isDark ? 'bg-rose-500/20 text-rose-300' : 'bg-rose-100 text-rose-600'
-                  : isDark ? 'bg-amber-500/20 text-amber-300' : 'bg-amber-100 text-amber-600'
+                selected
+                  ? isDark ? 'bg-white/10' : 'bg-black/10'
+                  : isDark ? 'bg-zinc-800 text-zinc-500' : 'bg-zinc-200 text-zinc-500'
               }`}>
                 {badge}
               </span>
@@ -553,7 +565,6 @@ export default function ActivityView({
 
       {/* Filter toggles */}
       <div className="flex items-center gap-3 mb-4">
-        <Filter className={`h-3.5 w-3.5 ${isDark ? 'text-zinc-500' : 'text-zinc-400'}`} />
         <FilterToggle
           current={filter}
           onChange={setFilter}

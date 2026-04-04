@@ -114,14 +114,14 @@ export default function AdminPage({
   }, []);
 
   return (
-    <div className={`flex h-screen ${isDark ? 'bg-zinc-950 text-zinc-100' : 'bg-zinc-50 text-zinc-900'}`}>
+    <div className={`flex h-screen overflow-hidden ${isDark ? 'bg-zinc-950 text-zinc-100' : 'bg-zinc-50 text-zinc-900'}`}>
       <SettingsNav active={section} onSelect={setSection} onBack={onBack} isDark={isDark} />
 
-      <main className={`flex min-w-0 flex-1 flex-col ${isDark ? 'bg-zinc-900' : 'bg-zinc-100'}`}>
-        {/* Top bar */}
+      <main className={`flex min-w-0 flex-1 flex-col overflow-hidden ${isDark ? 'bg-zinc-900' : 'bg-zinc-100'}`}>
+        {/* Top bar — fixed, never scrolls */}
         <header
-          className={`flex h-16 items-center justify-between border-b px-6 ${
-            isDark ? 'border-zinc-800 bg-zinc-950/90' : 'border-zinc-300 bg-zinc-100/95'
+          className={`shrink-0 flex h-16 items-center justify-between border-b px-6 ${
+            isDark ? 'border-zinc-800 bg-zinc-950/90' : 'border-zinc-300 bg-zinc-200/95'
           }`}
         >
           <div />

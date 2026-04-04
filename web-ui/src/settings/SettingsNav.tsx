@@ -1,5 +1,4 @@
 import {
-  Activity,
   Clock,
   FileText,
   Key,
@@ -7,7 +6,9 @@ import {
   Radio,
   Settings,
   Sparkles,
-  Puzzle,
+  LayoutDashboard,
+  Zap,
+  Wrench,
 } from 'lucide-react';
 
 export type SettingsSection =
@@ -24,21 +25,62 @@ export type SettingsSection =
 interface NavItem {
   id: SettingsSection;
   label: string;
-  icon: React.ReactNode;
+  Icon: React.ComponentType<{ className?: string }>;
+  /** Tailwind color used when active (icon + text + bg tint) */
+  accent: string;
   group: string;
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { id: 'overview', label: 'Overview', icon: <Activity className="h-4 w-4" />, group: 'Control' },
-  { id: 'sessions', label: 'Sessions', icon: <Radio className="h-4 w-4" />, group: 'Control' },
-  { id: 'cron', label: 'Cron Jobs', icon: <Clock className="h-4 w-4" />, group: 'Control' },
-  { id: 'activity', label: 'Activity', icon: <Activity className="h-4 w-4" />, group: 'Agent' },
-  { id: 'files', label: 'Files', icon: <FileText className="h-4 w-4" />, group: 'Agent' },
-  { id: 'opencode', label: 'Tools', icon: <Puzzle className="h-4 w-4" />, group: 'Agent' },
-  { id: 'apikeys', label: 'API Keys / Env Vars', icon: <Key className="h-4 w-4" />, group: 'Settings' },
-  { id: 'models', label: 'Models', icon: <Sparkles className="h-4 w-4" />, group: 'Settings' },
-  { id: 'config', label: 'Config', icon: <Settings className="h-4 w-4" />, group: 'Settings' },
+  // Control
+  { id: 'overview',  label: 'Overview',          Icon: LayoutDashboard, accent: 'emerald',  group: 'Control' },
+  { id: 'sessions',  label: 'Sessions',          Icon: Radio,           accent: 'sky',      group: 'Control' },
+  { id: 'cron',      label: 'Cron Jobs',         Icon: Clock,           accent: 'amber',    group: 'Control' },
+  // Agent
+  { id: 'activity',  label: 'Activity',          Icon: Zap,             accent: 'violet',   group: 'Agent' },
+  { id: 'files',     label: 'Files',             Icon: FileText,        accent: 'amber',    group: 'Agent' },
+  { id: 'opencode',  label: 'Tools',             Icon: Wrench,          accent: 'blue',     group: 'Agent' },
+  // Settings
+  { id: 'apikeys',   label: 'API Keys / Env Vars', Icon: Key,           accent: 'rose',     group: 'Settings' },
+  { id: 'models',    label: 'Models',            Icon: Sparkles,        accent: 'purple',   group: 'Settings' },
+  { id: 'config',    label: 'Config',            Icon: Settings,        accent: 'zinc',     group: 'Settings' },
 ];
+
+/** Active-state classes per accent color: text + icon color, tinted background */
+const ACCENT_CLASSES: Record<string, { dark: string; light: string }> = {
+  emerald: {
+    dark:  'text-emerald-400 bg-emerald-500/10',
+    light: 'text-emerald-600 bg-emerald-50',
+  },
+  sky: {
+    dark:  'text-sky-400 bg-sky-500/10',
+    light: 'text-sky-600 bg-sky-50',
+  },
+  amber: {
+    dark:  'text-amber-400 bg-amber-500/10',
+    light: 'text-amber-600 bg-amber-50',
+  },
+  violet: {
+    dark:  'text-violet-400 bg-violet-500/10',
+    light: 'text-violet-600 bg-violet-50',
+  },
+  blue: {
+    dark:  'text-blue-400 bg-blue-500/10',
+    light: 'text-blue-600 bg-blue-50',
+  },
+  rose: {
+    dark:  'text-rose-400 bg-rose-500/10',
+    light: 'text-rose-600 bg-rose-50',
+  },
+  purple: {
+    dark:  'text-purple-400 bg-purple-500/10',
+    light: 'text-purple-600 bg-purple-50',
+  },
+  zinc: {
+    dark:  'text-zinc-200 bg-zinc-800',
+    light: 'text-zinc-800 bg-white shadow-sm',
+  },
+};
 
 interface SettingsNavProps {
   active: SettingsSection;
@@ -52,7 +94,7 @@ export default function SettingsNav({ active, onSelect, onBack, isDark }: Settin
 
   return (
     <aside
-      className={`flex w-72 shrink-0 flex-col border-r ${
+      className={`relative z-20 flex w-72 shrink-0 flex-col border-r ${
         isDark ? 'border-zinc-800 bg-zinc-950' : 'border-zinc-300 bg-zinc-200'
       }`}
     >
@@ -81,7 +123,7 @@ export default function SettingsNav({ active, onSelect, onBack, isDark }: Settin
         </button>
       </div>
 
-      {/* Nav items */}
+      {/* Nav items — scrollable, content hidden behind header/footer */}
       <nav className="flex-1 overflow-y-auto px-2 py-3">
         {groups.map((group) => (
           <div key={group} className="mb-4">
@@ -94,6 +136,7 @@ export default function SettingsNav({ active, onSelect, onBack, isDark }: Settin
             </div>
             {NAV_ITEMS.filter((i) => i.group === group).map((item) => {
               const isActive = active === item.id;
+              const accent = ACCENT_CLASSES[item.accent] || ACCENT_CLASSES.zinc;
               return (
                 <button
                   key={item.id}
@@ -101,15 +144,13 @@ export default function SettingsNav({ active, onSelect, onBack, isDark }: Settin
                   onClick={() => onSelect(item.id)}
                   className={`mb-0.5 flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition ${
                     isActive
-                      ? isDark
-                        ? 'bg-zinc-800 text-zinc-100 font-medium'
-                        : 'bg-white text-zinc-900 font-medium shadow-sm'
+                      ? `font-medium ${isDark ? accent.dark : accent.light}`
                       : isDark
                         ? 'text-zinc-400 hover:bg-zinc-800/60 hover:text-zinc-200'
-                        : 'text-zinc-700 hover:bg-zinc-100 hover:text-zinc-900'
+                        : 'text-zinc-600 hover:bg-zinc-200/80 hover:text-zinc-900'
                   }`}
                 >
-                  {item.icon}
+                  <item.Icon className="h-4 w-4" />
                   {item.label}
                 </button>
               );

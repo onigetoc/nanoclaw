@@ -1,4 +1,10 @@
 import { useState, useEffect, useCallback } from 'react';
+import {
+  Bot,
+  Wrench,
+  Link,
+  Puzzle,
+} from 'lucide-react';
 import { apiService, type OpenCodeStatus, type SkillInfo, type AgentInfo } from '../api';
 
 interface ToolsSectionProps {
@@ -98,40 +104,45 @@ function TabBar({
   isDark: boolean;
   counts: Record<ToolsTab, number>;
 }) {
-  const tabs: { key: ToolsTab; label: string; emoji: string }[] = [
-    { key: 'agents', label: 'Agents', emoji: '🤖' },
-    { key: 'skills', label: 'Skills', emoji: '🛠' },
-    { key: 'mcp', label: 'MCP', emoji: '🔗' },
-    { key: 'plugins', label: 'Plugins', emoji: '🔌' },
+  const tabs: { key: ToolsTab; label: string; Icon: React.ComponentType<{ className?: string }>; accent: string }[] = [
+    { key: 'agents', label: 'Agents', Icon: Bot, accent: 'emerald' },
+    { key: 'skills', label: 'Skills', Icon: Wrench, accent: 'blue' },
+    { key: 'mcp', label: 'MCP', Icon: Link, accent: 'purple' },
+    { key: 'plugins', label: 'Plugins', Icon: Puzzle, accent: 'amber' },
   ];
 
+  const accentClasses: Record<string, { dark: string; light: string }> = {
+    emerald: { dark: 'text-emerald-400 bg-emerald-500/15', light: 'text-emerald-600 bg-emerald-50' },
+    blue:    { dark: 'text-blue-400 bg-blue-500/15',       light: 'text-blue-600 bg-blue-50' },
+    purple:  { dark: 'text-purple-400 bg-purple-500/15',   light: 'text-purple-600 bg-purple-50' },
+    amber:   { dark: 'text-amber-400 bg-amber-500/15',     light: 'text-amber-600 bg-amber-50' },
+  };
+
   return (
-    <div
-      className="inline-flex rounded-lg overflow-hidden border"
-      style={{ borderColor: isDark ? '#3f3f46' : '#d4d4d8' }}
-    >
-      {tabs.map(({ key, label, emoji }) => {
+    <div className="inline-flex gap-1.5">
+      {tabs.map(({ key, label, Icon, accent }) => {
         const selected = current === key;
+        const ac = accentClasses[accent];
         return (
           <button
             key={key}
             type="button"
             onClick={() => onChange(key)}
-            className={`px-3 py-1.5 text-xs font-medium transition flex items-center gap-1.5 ${
+            className={`px-3 py-1.5 text-xs font-medium transition-all rounded-lg flex items-center gap-1.5 ${
               selected
-                ? isDark
-                  ? 'bg-zinc-700 text-zinc-100'
-                  : 'bg-zinc-200 text-zinc-800'
+                ? isDark ? ac.dark : ac.light
                 : isDark
-                  ? 'bg-zinc-800/60 text-zinc-400 hover:bg-zinc-800'
-                  : 'bg-zinc-50 text-zinc-500 hover:bg-zinc-100'
+                  ? 'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/50'
+                  : 'text-zinc-500 hover:text-zinc-700 hover:bg-zinc-200/60'
             }`}
           >
-            <span>{emoji}</span>
+            <Icon className="h-3.5 w-3.5" />
             {label}
             <span
               className={`text-[10px] px-1.5 py-0.5 rounded-full font-semibold ${
-                isDark ? 'bg-zinc-600/50 text-zinc-300' : 'bg-zinc-300/60 text-zinc-600'
+                selected
+                  ? isDark ? 'bg-white/10' : 'bg-black/10'
+                  : isDark ? 'bg-zinc-800 text-zinc-500' : 'bg-zinc-200 text-zinc-500'
               }`}
             >
               {counts[key]}
@@ -367,18 +378,18 @@ export default function ToolsSection({ isDark }: ToolsSectionProps) {
   };
 
   return (
-    <div className="flex flex-col h-full">
-      {/* Sticky header with tab bar */}
+    <div>
+      {/* Sticky tab bar — pt-6 fills the parent's py-6 gap so content can't peek above */}
       <div
-        className={`sticky top-0 z-10 pb-4 ${
-          isDark ? 'bg-zinc-950' : 'bg-zinc-100'
+        className={`sticky -top-6 z-20 pt-6 pb-4 ${
+          isDark ? 'bg-zinc-900' : 'bg-zinc-100'
         }`}
       >
         <TabBar current={activeTab} onChange={setActiveTab} isDark={isDark} counts={counts} />
       </div>
 
-      {/* Scrollable content */}
-      <div className="flex-1 overflow-y-auto min-h-0">
+      {/* Content */}
+      <div>
         {activeTab === 'agents' && <AgentsPanel agents={status.agents} isDark={isDark} />}
         {activeTab === 'skills' && <SkillsPanel skills={status.skills} isDark={isDark} />}
         {activeTab === 'mcp' && (
