@@ -1,4 +1,5 @@
 import { useRef, useEffect, useCallback, useMemo } from 'react';
+import { ScrollText } from 'lucide-react';
 import type { ActivityEvent } from '../api';
 import EventTimelineItem from './EventTimelineItem';
 
@@ -56,10 +57,11 @@ export default function EventTimeline({ events, isDark }: EventTimelineProps) {
   if (events.length === 0) {
     return (
       <div
-        className={`flex flex-1 items-center justify-center text-sm ${
+        className={`flex flex-1 flex-col items-center justify-center gap-2 text-sm ${
           isDark ? 'text-zinc-500' : 'text-zinc-400'
         }`}
       >
+        <ScrollText className="h-8 w-8" />
         No events yet
       </div>
     );
@@ -69,7 +71,7 @@ export default function EventTimeline({ events, isDark }: EventTimelineProps) {
     <div
       ref={containerRef}
       onScroll={checkAtBottom}
-      className="flex-1 overflow-y-auto"
+      className="min-h-0 flex-1 overflow-y-auto"
     >
       {grouped.map((g, i) => (
         <EventTimelineItem

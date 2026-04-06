@@ -27,7 +27,7 @@ export default function EventActivityPanel({
 
   return (
     <aside
-      className={`flex w-[400px] shrink-0 flex-col border-l ${
+      className={`flex w-[290px] shrink-0 flex-col overflow-hidden border-l ${
         isDark ? 'border-zinc-800 bg-zinc-950' : 'border-zinc-300 bg-zinc-200'
       }`}
     >

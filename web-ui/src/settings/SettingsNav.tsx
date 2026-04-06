@@ -9,6 +9,7 @@ import {
   LayoutDashboard,
   Zap,
   Wrench,
+  BarChart3,
 } from 'lucide-react';
 
 export type SettingsSection =
@@ -20,6 +21,7 @@ export type SettingsSection =
   | 'opencode'
   | 'apikeys'
   | 'models'
+  | 'modelstats'
   | 'config';
 
 interface NavItem {
@@ -43,6 +45,7 @@ const NAV_ITEMS: NavItem[] = [
   // Settings
   { id: 'apikeys',   label: 'API Keys / Env Vars', Icon: Key,           accent: 'rose',     group: 'Settings' },
   { id: 'models',    label: 'Models',            Icon: Sparkles,        accent: 'purple',   group: 'Settings' },
+  { id: 'modelstats', label: 'Model Stats',      Icon: BarChart3,       accent: 'cyan',     group: 'Settings' },
   { id: 'config',    label: 'Config',            Icon: Settings,        accent: 'zinc',     group: 'Settings' },
 ];
 
@@ -75,6 +78,10 @@ const ACCENT_CLASSES: Record<string, { dark: string; light: string }> = {
   purple: {
     dark:  'text-purple-400 bg-purple-500/10',
     light: 'text-purple-600 bg-purple-50',
+  },
+  cyan: {
+    dark:  'text-cyan-400 bg-cyan-500/10',
+    light: 'text-cyan-600 bg-cyan-50',
   },
   zinc: {
     dark:  'text-zinc-200 bg-zinc-800',

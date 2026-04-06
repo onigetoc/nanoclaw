@@ -114,12 +114,38 @@ export function buildEventLabel(
 
     case 'session.created': {
       const info = properties?.info as Record<string, unknown> | undefined;
+      const title = info?.title as string | undefined;
+      const parentID = info?.parentID as string | undefined;
       const agent = info?.agent ?? info?.mode ?? '';
       const model =
         (info?.model as Record<string, unknown>)?.modelID ?? '';
+      // Sub-agent sessions have a parentID and descriptive title
+      if (parentID && title) return `🤖 Sub-agent: ${title}`;
       if (agent && model) return `Session started — ${agent} (${model})`;
       if (agent) return `Session started — ${agent}`;
       return 'Session started';
+    }
+
+    case 'session.status': {
+      const status = properties?.status as Record<string, unknown> | undefined;
+      if (!status) return 'Session status update';
+      const statusType = status.type as string;
+      if (statusType === 'retry') {
+        const attempt = status.attempt as number | undefined;
+        const message = status.message as string | undefined;
+        // Extract the key info from retry messages (quota, rate limit, etc.)
+        const shortMsg = message
+          ? extractRetryReason(message)
+          : 'retrying...';
+        return `⏳ Retry #${attempt ?? '?'}: ${shortMsg}`;
+      }
+      if (statusType === 'busy') return '⏳ Processing...';
+      if (statusType === 'idle') return 'Session idle';
+      if (statusType === 'error') {
+        const msg = status.message as string | undefined;
+        return `Error: ${msg ?? 'unknown'}`;
+      }
+      return `Status: ${statusType}`;
     }
 
     case 'session.idle':
@@ -149,6 +175,25 @@ export function buildEventLabel(
     default:
       return type;
   }
+}
+
+/** Extract a short reason from retry error messages. */
+function extractRetryReason(message: string): string {
+  // Quota exceeded
+  if (message.includes('quota')) {
+    const modelMatch = message.match(/model:\s*(\S+)/);
+    const retryMatch = message.match(/retry in\s*([\d.]+s)/i);
+    const model = modelMatch ? modelMatch[1] : '';
+    const retryIn = retryMatch ? ` (${retryMatch[1]})` : '';
+    return `Quota exceeded${model ? ` — ${model}` : ''}${retryIn}`;
+  }
+  // Rate limit
+  if (message.includes('rate') && message.includes('limit')) {
+    return 'Rate limited';
+  }
+  // Generic — take first line, truncate
+  const firstLine = message.split('\n')[0];
+  return firstLine.length > 80 ? firstLine.slice(0, 77) + '...' : firstLine;
 }
 
 /** Pick the most relevant argument for a tool label. */
@@ -182,9 +227,28 @@ function pickRelevantArg(
       return (args?.url as string) ?? '';
     case 'websearch':
     case 'brave_search':
+    case 'remote_web_search':
       return (args?.query as string) ?? (args?.q as string) ?? '';
-    case 'task':
-      return (args?.agent as string) ?? '';
+    case 'task': {
+      // Sub-agent delegation — show agent type + description
+      const subagent = (args?.subagent_type as string) ?? (args?.agent as string) ?? '';
+      const desc = (args?.description as string) ?? '';
+      if (subagent && desc) {
+        const shortDesc = desc.length > 80 ? desc.slice(0, 77) + '...' : desc;
+        return `@${subagent} — ${shortDesc}`;
+      }
+      if (subagent) return `@${subagent}`;
+      if (desc) return desc.length > 100 ? desc.slice(0, 97) + '...' : desc;
+      return '';
+    }
+    case 'skill': {
+      // Skill invocation — show skill name
+      const skillName = (args?.name as string) ?? (args?.skill as string) ?? '';
+      return skillName;
+    }
+    case 'todowrite':
+    case 'todoread':
+      return (args?.content as string) ?? '';
     default:
       return '';
   }

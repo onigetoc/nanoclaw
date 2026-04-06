@@ -494,11 +494,21 @@ export class EventLogger {
           break;
         case 'websearch':
         case 'brave_search':
+        case 'remote_web_search':
           this.log(`🔍 Web search: ${args?.query || args?.q || '?'}`);
           break;
-        case 'task':
-          this.log(`🤖 Delegating to agent: ${args?.agent || '?'}`);
+        case 'task': {
+          const agentName = args?.subagent_type || args?.agent || '?';
+          const desc = args?.description || '';
+          const label = desc ? `${agentName} — ${desc.slice(0, 80)}${desc.length > 80 ? '...' : ''}` : agentName;
+          this.log(`🤖 Delegating to agent: ${label}`);
           break;
+        }
+        case 'skill': {
+          const skillName = args?.name || args?.skill || '?';
+          this.log(`🧩 Skill: ${skillName}`);
+          break;
+        }
         case 'todowrite':
           this.log(`☑️ Updating todo list`);
           break;

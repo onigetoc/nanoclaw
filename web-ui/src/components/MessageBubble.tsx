@@ -1,7 +1,7 @@
-import { memo } from 'react';
+import { memo, useState, useCallback } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { Bot } from 'lucide-react';
+import { Bot, Copy, ThumbsUp, ThumbsDown, Check } from 'lucide-react';
 import type { Message } from '../api';
 import { getFileIcon, formatFileSize } from '../utils/file-utils';
 import { linkifyMentionsAndCommands, extractReasoning, extractSources, preserveParagraphBreaks } from '../utils/message-utils';
@@ -12,15 +12,33 @@ interface MessageBubbleProps {
   isDark: boolean;
   showThinking?: boolean;
   onSendCommand?: (cmd: string) => void;
+  feedbackRating?: 'up' | 'down' | null;
+  onFeedbackChange?: (messageId: string, rating: 'up' | 'down') => void;
 }
 
-function MessageBubble({ msg, isDark, showThinking = true, onSendCommand }: MessageBubbleProps) {
+function MessageBubble({ msg, isDark, showThinking = true, onSendCommand, feedbackRating, onFeedbackChange }: MessageBubbleProps) {
   const sanitizedContent = sanitizeMessageContent(msg.content);
   const { visibleContent, reasoning: extractedReasoning } = extractReasoning(sanitizedContent);
   // Prefer reasoning stored in metadata (doesn't pollute context tokens)
   const reasoning = (msg.metadata as any)?.reasoning || extractedReasoning;
   const isAssistant = Boolean(msg.is_bot_message);
   const sources = isAssistant ? extractSources(visibleContent) : [];
+
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = useCallback(() => {
+    navigator.clipboard.writeText(visibleContent).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  }, [visibleContent]);
+
+  const handleFeedback = useCallback(
+    (rating: 'up' | 'down') => {
+      onFeedbackChange?.(msg.id, rating);
+    },
+    [msg.id, onFeedbackChange],
+  );
 
   // Extract fallback model notice (e.g. "⚡ _Answered by fallback model: xxx_")
   const fallbackMatch = visibleContent.match(/^⚡\s*_([^_]+)_\s*\n*/);
@@ -165,9 +183,75 @@ function MessageBubble({ msg, isDark, showThinking = true, onSendCommand }: Mess
           </ReactMarkdown>
         </div>
 
-        <div className={`mt-2 text-right text-[11px] ${isAssistant ? (isDark ? 'text-zinc-500' : 'text-zinc-500') : (isDark ? 'text-zinc-500' : 'text-zinc-400')}`}>
+        <div className={`text-right text-[11px] ${isAssistant ? (isDark ? 'text-zinc-500' : 'text-zinc-500') : (isDark ? 'text-zinc-500' : 'text-zinc-400')}`}>
           {formatTime(msg.timestamp)}
         </div>
+
+        {/* Feedback icons — only on bot messages */}
+        {isAssistant && (
+          <div className="mt-2 flex items-center gap-1.5">
+            {/* Copy */}
+            <div className="group relative">
+              <button
+                type="button"
+                onClick={handleCopy}
+                className={`rounded-lg p-2 transition ${
+                  isDark
+                    ? 'text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300'
+                    : 'text-zinc-400 hover:bg-zinc-200 hover:text-zinc-600'
+                }`}
+                aria-label="Copy"
+              >
+                {copied ? <Check className="h-4.5 w-4.5 text-emerald-400" /> : <Copy className="h-4.5 w-4.5" />}
+              </button>
+              <span className="pointer-events-none absolute -top-9 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-md bg-zinc-800 px-2.5 py-1.5 text-xs font-medium text-zinc-200 opacity-0 shadow-lg transition-opacity group-hover:opacity-100">
+                Copy
+              </span>
+            </div>
+
+            {/* Thumbs Up */}
+            <div className="group relative">
+              <button
+                type="button"
+                onClick={() => handleFeedback('up')}
+                className={`rounded-lg p-2 transition ${
+                  feedbackRating === 'up'
+                    ? 'text-emerald-400 bg-emerald-500/10'
+                    : isDark
+                      ? 'text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300'
+                      : 'text-zinc-400 hover:bg-zinc-200 hover:text-zinc-600'
+                }`}
+                aria-label="Good Response"
+              >
+                <ThumbsUp className="h-4.5 w-4.5" />
+              </button>
+              <span className="pointer-events-none absolute -top-9 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-md bg-zinc-800 px-2.5 py-1.5 text-xs font-medium text-zinc-200 opacity-0 shadow-lg transition-opacity group-hover:opacity-100">
+                Good Response
+              </span>
+            </div>
+
+            {/* Thumbs Down */}
+            <div className="group relative">
+              <button
+                type="button"
+                onClick={() => handleFeedback('down')}
+                className={`rounded-lg p-2 transition ${
+                  feedbackRating === 'down'
+                    ? 'text-rose-400 bg-rose-500/10'
+                    : isDark
+                      ? 'text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300'
+                      : 'text-zinc-400 hover:bg-zinc-200 hover:text-zinc-600'
+                }`}
+                aria-label="Bad Response"
+              >
+                <ThumbsDown className="h-4.5 w-4.5" />
+              </button>
+              <span className="pointer-events-none absolute -top-9 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-md bg-zinc-800 px-2.5 py-1.5 text-xs font-medium text-zinc-200 opacity-0 shadow-lg transition-opacity group-hover:opacity-100">
+                Bad Response
+              </span>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -178,6 +262,7 @@ export default memo(MessageBubble, (prev, next) => {
     prev.msg.id === next.msg.id &&
     prev.msg.content === next.msg.content &&
     prev.isDark === next.isDark &&
-    prev.showThinking === next.showThinking
+    prev.showThinking === next.showThinking &&
+    prev.feedbackRating === next.feedbackRating
   );
 });

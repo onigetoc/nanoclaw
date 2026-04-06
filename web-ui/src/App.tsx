@@ -69,6 +69,7 @@ function App() {
   const [chatStatuses, setChatStatuses] = useState<Map<string, StatusEvent>>(
     new Map(),
   );
+  const [feedbackMap, setFeedbackMap] = useState<Record<string, 'up' | 'down'>>({});
   const [streamingContent, setStreamingContent] = useState('');
   const [thinkingContent, setThinkingContent] = useState('');
   const streamPartOrderRef = useRef<string[]>([]);
@@ -191,6 +192,8 @@ function App() {
       setState((s) =>
         s.selectedChat?.jid === chatJid ? { ...s, messages } : s,
       );
+      // Load feedback ratings for this chat
+      apiService.getFeedbackForChat(chatJid).then((fb) => setFeedbackMap(fb)).catch(() => {});
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
           messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
@@ -550,6 +553,35 @@ function App() {
     inputRef.current?.focus();
   };
 
+  const handleFeedback = useCallback(
+    async (messageId: string, rating: 'up' | 'down') => {
+      const chat = state.selectedChat;
+      if (!chat) return;
+      const msg = state.messages.find((m) => m.id === messageId);
+      const modelId = msg?.metadata?.modelID || 'unknown';
+      const providerId = msg?.metadata?.providerID || 'unknown';
+
+      // Optimistic update
+      setFeedbackMap((prev) => {
+        const next = { ...prev };
+        if (next[messageId] === rating) {
+          delete next[messageId]; // toggle off
+        } else {
+          next[messageId] = rating;
+        }
+        return next;
+      });
+
+      try {
+        await apiService.submitFeedback(messageId, chat.jid, modelId, providerId, rating);
+      } catch {
+        // Revert on error
+        apiService.getFeedbackForChat(chat.jid).then((fb) => setFeedbackMap(fb)).catch(() => {});
+      }
+    },
+    [state.selectedChat, state.messages],
+  );
+
   const sendMessage = useCallback(
     async (
       content: string,
@@ -884,6 +916,8 @@ function App() {
                             msg={msg}
                             isDark={isDark}
                             showThinking={settings.showThinking}
+                            feedbackRating={feedbackMap[msg.id] ?? null}
+                            onFeedbackChange={handleFeedback}
                             onSendCommand={(cmd) => {
                               scrollToBottomFast();
                               setTimeout(() => {
@@ -1073,7 +1107,7 @@ function App() {
         )}
 
         {state.selectedChat && (
-          <div style={{ display: showActivityPanel ? undefined : 'none' }}>
+          <div className="flex h-full" style={{ display: showActivityPanel ? undefined : 'none' }}>
             <EventActivityPanel
               jid={state.selectedChat.jid}
               isDark={isDark}

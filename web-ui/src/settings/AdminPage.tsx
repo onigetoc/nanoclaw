@@ -12,6 +12,7 @@ import ConfigSection from './ConfigSection';
 import ActivityView from './ActivityView';
 import FilesSection from './FilesSection';
 import ToolsSection from './ToolsSection';
+import ModelStatsSection from './ModelStatsSection';
 
 interface AdminPageProps {
   onBack: () => void;
@@ -170,6 +171,9 @@ export default function AdminPage({
             )}
             {section === 'models' && (
               <ModelsSection isDark={isDark} />
+            )}
+            {section === 'modelstats' && (
+              <ModelStatsSection isDark={isDark} />
             )}
             {section === 'config' && (
               <ConfigSection

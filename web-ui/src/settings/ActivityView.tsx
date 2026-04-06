@@ -89,24 +89,37 @@ function isActive(exec: AgentExecution): boolean {
 // ---------------------------------------------------------------------------
 
 function StepTimeline({ steps, isDark }: { steps: ExecutionStep[]; isDark: boolean }) {
+  // Group consecutive steps with the same message
+  const grouped: Array<{ step: ExecutionStep; count: number; totalDurationMs: number }> = [];
+  for (const step of steps) {
+    const last = grouped[grouped.length - 1];
+    if (last && last.step.message === step.message && last.step.phase === step.phase) {
+      last.count++;
+      last.step = step; // keep latest timestamp
+      if (step.durationMs) last.totalDurationMs += step.durationMs;
+    } else {
+      grouped.push({ step, count: 1, totalDurationMs: step.durationMs ?? 0 });
+    }
+  }
+
   return (
     <div
       className="relative ml-3 border-l-2 border-dashed pl-4 py-1"
       style={{ borderColor: isDark ? '#3f3f46' : '#d4d4d8' }}
     >
-      {steps.map((step, i) => {
-        const cfg = PHASE_CONFIG[step.phase] || PHASE_CONFIG.init;
-        const isLast = i === steps.length - 1;
+      {grouped.map((g, i) => {
+        const cfg = PHASE_CONFIG[g.step.phase] || PHASE_CONFIG.init;
+        const isLast = i === grouped.length - 1;
         return (
-          <div key={`${step.timestamp}-${i}`} className="relative mb-2 last:mb-0">
+          <div key={`${g.step.timestamp}-${i}`} className="relative mb-2 last:mb-0">
             <div
               className="absolute -left-[1.35rem] top-1 w-2.5 h-2.5 rounded-full border-2"
               style={{
                 borderColor: isDark ? '#52525b' : '#a1a1aa',
                 backgroundColor:
-                  step.phase === 'error'
+                  g.step.phase === 'error'
                     ? '#f43f5e'
-                    : step.phase === 'done'
+                    : g.step.phase === 'done'
                       ? '#10b981'
                       : isLast
                         ? '#f59e0b'
@@ -120,16 +133,28 @@ function StepTimeline({ steps, isDark }: { steps: ExecutionStep[]; isDark: boole
                 <cfg.Icon className="h-4 w-4" />
               </span>
               <div className="flex-1 min-w-0">
-                <div className={`text-xs ${isDark ? cfg.darkColor : cfg.color}`}>
-                  {step.message}
+                <div className={`flex items-center gap-1.5 text-xs ${isDark ? cfg.darkColor : cfg.color}`}>
+                  <span className="truncate">{g.step.message}</span>
+                  {g.count > 1 && (
+                    <span
+                      className={`shrink-0 inline-flex items-center justify-center rounded-full px-1.5 min-w-[1.25rem] h-4 text-[10px] font-semibold leading-none ${
+                        isDark
+                          ? 'bg-zinc-700 text-zinc-300'
+                          : 'bg-zinc-200 text-zinc-600'
+                      }`}
+                      title={`Repeated ${g.count} times`}
+                    >
+                      {g.count}
+                    </span>
+                  )}
                 </div>
                 <div className="flex items-center gap-2 mt-0.5">
-                  <span className={`text-[10px] ${isDark ? 'text-zinc-600' : 'text-zinc-400'}`}>
-                    {formatTime(step.timestamp)}
+                  <span className={`text-[11px] ${isDark ? 'text-zinc-400' : 'text-zinc-500'}`}>
+                    {formatTime(g.step.timestamp)}
                   </span>
-                  {step.durationMs != null && step.durationMs > 0 && (
-                    <span className={`text-[10px] ${isDark ? 'text-zinc-600' : 'text-zinc-400'}`}>
-                      ({formatDuration(step.durationMs)})
+                  {g.totalDurationMs > 0 && (
+                    <span className={`text-[11px] ${isDark ? 'text-zinc-400' : 'text-zinc-500'}`}>
+                      ({formatDuration(g.totalDurationMs)})
                     </span>
                   )}
                 </div>
@@ -166,14 +191,14 @@ function MetadataRow({
     <div className={`flex items-start gap-2 rounded-md px-2 py-1 ${isDark ? 'hover:bg-zinc-800/60' : 'hover:bg-zinc-50'}`}>
       <span className={`mt-0.5 shrink-0 ${isDark ? 'text-zinc-500' : 'text-zinc-400'}`}>{icon}</span>
       <div className="min-w-0 flex-1">
-        <div className={`text-[10px] font-medium uppercase tracking-wider ${isDark ? 'text-zinc-500' : 'text-zinc-400'}`}>
+        <div className={`text-[11px] font-medium uppercase tracking-wider ${isDark ? 'text-zinc-500' : 'text-zinc-400'}`}>
           {label}
         </div>
         <div
-          className={`mt-0.5 text-xs break-all ${mono ? 'font-mono' : ''} ${
+          className={`mt-0.5 text-sm break-all ${mono ? 'font-mono' : ''} ${
             error
               ? isDark ? 'text-rose-300' : 'text-rose-600'
-              : isDark ? 'text-zinc-200' : 'text-zinc-800'
+              : isDark ? 'text-zinc-300' : 'text-zinc-800'
           }`}
         >
           {value}
@@ -279,26 +304,26 @@ function ActivityRow({ exec, isDark }: { exec: AgentExecution; isDark: boolean }
           <div className={`flex-1 min-w-0 ${isDark ? 'text-zinc-200' : 'text-zinc-800'}`}>
             <div className="flex items-center gap-1.5">
               <span className="text-sm font-medium truncate">{exec.workspaceName}</span>
-              <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${
+              <span className={`text-[11px] px-1.5 py-0.5 rounded-full ${
                 isDark ? 'bg-zinc-800 text-zinc-400' : 'bg-zinc-200 text-zinc-500'
               }`}>
                 {exec.agentType}
               </span>
             </div>
             {exec.error && (
-              <div className={`text-[10px] truncate mt-0.5 ${isDark ? 'text-rose-400' : 'text-rose-500'}`}>
+              <div className={`text-[12px] truncate mt-0.5 ${isDark ? 'text-rose-400' : 'text-rose-500'}`}>
                 {exec.error.slice(0, 80)}
               </div>
             )}
           </div>
 
           {/* Model */}
-          <div className={`shrink-0 font-mono text-[11px] ${isDark ? 'text-zinc-500' : 'text-zinc-400'}`}>
+          <div className={`shrink-0 font-mono text-xs leading-normal ${isDark ? 'text-zinc-400' : 'text-zinc-500'}`}>
             {exec.model ? (exec.model.split('/').pop() || exec.model) : '—'}
           </div>
 
           {/* Duration */}
-          <div className={`shrink-0 text-xs w-16 text-right ${isDark ? 'text-zinc-500' : 'text-zinc-400'}`}>
+          <div className={`shrink-0 text-xs w-16 text-right ${isDark ? 'text-zinc-400' : 'text-zinc-500'}`}>
             {active ? (
               <span className="text-amber-400 animate-pulse">running</span>
             ) : (
@@ -307,7 +332,7 @@ function ActivityRow({ exec, isDark }: { exec: AgentExecution; isDark: boolean }
           </div>
 
           {/* Time */}
-          <div className={`shrink-0 text-[11px] w-20 text-right ${isDark ? 'text-zinc-600' : 'text-zinc-400'}`}>
+          <div className={`shrink-0 text-xs w-24 text-right ${isDark ? 'text-zinc-400' : 'text-zinc-500'}`}>
             {formatDate(exec.timestamp)} {formatTime(exec.timestamp)}
           </div>
 

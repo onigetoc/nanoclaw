@@ -31,6 +31,8 @@ import { registerEnvVarRoutes } from './api-envvar-routes.js';
 import { registerMarkdownRoutes } from './api-markdown-routes.js';
 import { registerTaskRoutes } from './api-tasks-routes.js';
 import { registerActivityRoutes } from './api-activity-routes.js';
+import { registerFeedbackRoutes } from './api-feedback-routes.js';
+import { initFeedbackDatabase } from './db-feedback.js';
 import { getProviders, getPopularProviders, clearCache as clearModelsCache } from './models-cache.js';
 import { restartServer as restartOpenCodeServer } from './opencode-server.js';
 import { extractFrontmatterBlock, getFrontmatterValue } from '../shared/frontmatter.js';
@@ -1448,6 +1450,10 @@ registerTaskRoutes(fastify, authenticate);
 
 // Register activity event routes (Event Activity Panel)
 registerActivityRoutes(fastify, authenticate);
+
+// Register feedback routes (thumbs up/down on bot messages)
+initFeedbackDatabase();
+registerFeedbackRoutes(fastify, authenticate);
 
 let sendMessageFn: ((jid: string, text: string) => Promise<void>) | null = null;
 

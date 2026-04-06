@@ -268,6 +268,15 @@ export interface ActivityStatsData {
   isActive: boolean;
 }
 
+export interface ModelStatsEntry {
+  model_id: string;
+  provider_id: string;
+  thumbs_up: number;
+  thumbs_down: number;
+  total: number;
+  score: number;
+}
+
 class ApiService {
   private token: string | null = null;
 
@@ -1191,6 +1200,33 @@ class ApiService {
       const index = this.deltaListeners.indexOf(callback);
       if (index > -1) this.deltaListeners.splice(index, 1);
     };
+  }
+
+  // ── Feedback (thumbs up/down) ──
+
+  async submitFeedback(
+    messageId: string,
+    chatJid: string,
+    modelId: string,
+    providerId: string,
+    rating: 'up' | 'down',
+  ): Promise<{ success: boolean }> {
+    return this.request('/feedback', {
+      method: 'POST',
+      body: JSON.stringify({ messageId, chatJid, modelId, providerId, rating }),
+    });
+  }
+
+  async getFeedbackForChat(chatJid: string): Promise<Record<string, 'up' | 'down'>> {
+    const data = await this.request<{ feedback: Record<string, 'up' | 'down'> }>(
+      `/feedback/chat/${encodeURIComponent(chatJid)}`,
+    );
+    return data.feedback;
+  }
+
+  async getModelStats(): Promise<ModelStatsEntry[]> {
+    const data = await this.request<{ stats: ModelStatsEntry[] }>('/feedback/stats');
+    return data.stats;
   }
 }
 

@@ -160,6 +160,7 @@ function parseAgentStep(line: string): AgentStepEvent | null {
     { pattern: /🌐 Fetching: (.+)/, extract: (m) => ({ phase: 'tool', message: `🌐 Fetching: ${m[1]}`, metadata: { tool: 'webfetch' } }) },
     { pattern: /🔍 Web search: (.+)/, extract: (m) => ({ phase: 'tool', message: `🔍 Web search: ${m[1]}`, metadata: { tool: 'websearch' } }) },
     { pattern: /🤖 Delegating to agent: (.+)/, extract: (m) => ({ phase: 'tool', message: `🤖 Sub-agent: ${m[1]}`, metadata: { tool: 'task', agent: m[1] } }) },
+    { pattern: /🧩 Skill: (.+)/, extract: (m) => ({ phase: 'tool', message: `🧩 Skill: ${m[1]}`, metadata: { tool: 'skill', skill: m[1] } }) },
     { pattern: /🔧 MCP tool: (.+)/, extract: (m) => ({ phase: 'tool', message: `🔧 MCP: ${m[1]}`, metadata: { tool: `mcp:${m[1]}` } }) },
     { pattern: /🔧 Tool: (.+)/, extract: (m) => ({ phase: 'tool', message: `🔧 ${m[1]}`, metadata: { tool: m[1] } }) },
     { pattern: /☑️ (Updating|Reading) todo/, extract: (m) => ({ phase: 'tool', message: `☑️ ${m[0]}`, metadata: { tool: 'todo' } }) },

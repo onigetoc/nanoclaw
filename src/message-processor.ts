@@ -59,6 +59,10 @@ export async function processWorkspaceMessages(
   if (!workspace) return true;
 
   const isMainWorkspace = workspace.folder === MAIN_WORKSPACE_FOLDER;
+  // PII redaction only applies to shared groups (where trigger is required),
+  // not to private/owner workspaces. Public phone numbers, emails from web
+  // searches etc. should not be redacted in private chats.
+  const isPrivateWorkspace = isMainWorkspace || workspace.requiresTrigger === false;
   const sessions = getSessions();
   const sessionId = sessions[workspace.folder];
 
@@ -173,7 +177,7 @@ export async function processWorkspaceMessages(
             : JSON.stringify(result.result);
 
         // Security: redact credentials/PII from agent output
-        const { redacted: redactedRaw } = redactOutput(raw, chatJid, isMainWorkspace);
+        const { redacted: redactedRaw } = redactOutput(raw, chatJid, isPrivateWorkspace);
 
         // Extract reasoning/thinking from <think> tags before stripping them
         const thinkMatch = redactedRaw.match(/<think>([\s\S]*?)<\/think>/i);

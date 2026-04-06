@@ -46,7 +46,7 @@ export interface ActivityFile {
 export const EVENT_ICONS: Record<string, string> = {
   // Session lifecycle
   'session.created': '🟢',
-  'session.status': '📊',
+  'session.status': '⏳',
   'session.idle': '💤',
   'session.compacted': '📦',
   'session.diff': '📝',
@@ -113,6 +113,7 @@ export const ALLOWED_EVENT_TYPES = new Set([
   'session.idle',
   'session.error',
   'session.compacted',
+  'session.status',         // retry/fallback/quota errors — critical for debugging
   'message.part.updated',   // tool-invocation only (filtered at runtime)
   'message.updated',        // assistant only (filtered at runtime)
   'file.edited',
@@ -147,8 +148,8 @@ export const FILTERED_EVENT_TYPES = new Set([
   'global.disposed',
   'project.updated',
   'lsp.updated',
-  'session.status',
   'session.diff',
+  'session.updated',
   'workspace.ready',
   'workspace.failed',
   'worktree.ready',
@@ -157,6 +158,7 @@ export const FILTERED_EVENT_TYPES = new Set([
   'message.part.removed',
   'pty.deleted',
   'mcp.browser.open.failed',
+  'server.heartbeat',
 ]);
 
 // ─── Category mapping ────────────────────────────────────────────────────────
@@ -165,6 +167,7 @@ export const EVENT_CATEGORY_MAP: Record<string, ActivityCategory> = {
   'session.created': 'session',
   'session.idle': 'session',
   'session.compacted': 'session',
+  'session.status': 'session',
   'session.error': 'error',
   'message.part.updated': 'tool',
   'message.updated': 'message',

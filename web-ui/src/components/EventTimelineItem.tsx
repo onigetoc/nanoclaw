@@ -66,6 +66,8 @@ function eventIcon(type: string, isDark: boolean): { Icon: React.ComponentType<{
       return { Icon: Circle, color: isDark ? 'text-zinc-500' : 'text-zinc-400' };
     case 'session.compacted':
       return { Icon: Settings, color: isDark ? 'text-zinc-400' : 'text-zinc-500' };
+    case 'session.status':
+      return { Icon: AlertCircle, color: isDark ? 'text-amber-400' : 'text-amber-500' };
     case 'session.error':
       return { Icon: AlertCircle, color: isDark ? 'text-red-400' : 'text-red-500' };
 
